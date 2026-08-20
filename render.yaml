@@ -2,9 +2,9 @@
 # Docs: https://render.com/docs/blueprint-spec
 #
 # Creates three services from the repo root (monorepo):
-#   - sabacos-server   : Hono API + grammY bot (web service)
-#   - sabacos-web      : Telegram Mini App (static)
-#   - sabacos-admin    : Admin dashboard (static)
+#   - sabacos-server   : Hono API + grammY bot (web service, runtime: node)
+#   - sabacos-web      : Telegram Mini App (static site, runtime: static)
+#   - sabacos-admin    : Admin dashboard (static site, runtime: static)
 
 services:
   # ---------------------------------------------------------------------------
@@ -17,7 +17,7 @@ services:
     healthCheckPath: /health
     buildCommand: npm ci --include=dev
     startCommand: npm run start -w @sabacos/server
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - key: NODE_VERSION
         value: "24"
@@ -45,12 +45,13 @@ services:
   # ---------------------------------------------------------------------------
   # Telegram Mini App (frontend)
   # ---------------------------------------------------------------------------
-  - type: static
+  - type: web
     name: sabacos-web
+    runtime: static
     plan: free
     buildCommand: npm ci --include=dev && npm run build -w @sabacos/web
-    publishPath: apps/sabacos-web/dist
-    autoDeploy: true
+    staticPublishPath: apps/sabacos-web/dist
+    autoDeployTrigger: commit
     routes:
       - type: rewrite
         source: /*
@@ -66,12 +67,13 @@ services:
   # ---------------------------------------------------------------------------
   # Admin dashboard
   # ---------------------------------------------------------------------------
-  - type: static
+  - type: web
     name: sabacos-admin
+    runtime: static
     plan: free
     buildCommand: npm ci --include=dev && npm run build -w @sabacos/admin
-    publishPath: apps/sabacos-admin/dist
-    autoDeploy: true
+    staticPublishPath: apps/sabacos-admin/dist
+    autoDeployTrigger: commit
     routes:
       - type: rewrite
         source: /*
