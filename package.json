@@ -1,0 +1,31 @@
+{
+  "name": "motion-studio",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/sabacos-core",
+    "apps/server",
+    "apps/web",
+    "apps/sabacos-server",
+    "apps/sabacos-web",
+    "apps/sabacos-admin"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:web": "npm run dev -w @motion/web",
+    "dev:server": "npm run dev -w @motion/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run typecheck && npm run build --workspaces --if-present"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "@google/genai@2.17.1": true,
+    "protobufjs@7.6.5": true
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}

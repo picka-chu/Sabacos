@@ -1,0 +1,171 @@
+import { useEffect, useState, type FormEvent } from "react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import type { Category } from "@sabacos/core";
+import { api } from "../lib/api.js";
+import { useAuth } from "../auth.js";
+
+export function CategoriesPage() {
+  const token = useAuth((s) => s.token);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [form, setForm] = useState({ slug: "", nameEn: "", nameAm: "", sortOrder: "0" });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = () => {
+    if (!token) return;
+    api
+      .get<{ categories: Category[] }>("/admin/categories", token)
+      .then((res) => setCategories(res.categories))
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load categories"));
+  };
+
+  useEffect(load, [token]);
+
+  const startEdit = (c: Category) => {
+    setEditingId(c.id);
+    setForm({ slug: c.slug, nameEn: c.nameEn, nameAm: c.nameAm, sortOrder: c.sortOrder.toString() });
+  };
+
+  const reset = () => {
+    setEditingId(null);
+    setForm({ slug: "", nameEn: "", nameAm: "", sortOrder: "0" });
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setBusy(true);
+    setError(null);
+    const body = {
+      slug: form.slug.trim(),
+      nameEn: form.nameEn.trim(),
+      nameAm: form.nameAm.trim(),
+      sortOrder: Number(form.sortOrder) || 0,
+    };
+    try {
+      if (editingId) {
+        await api.patch(`/admin/categories/${editingId}`, body, token);
+      } else {
+        await api.post("/admin/categories", body, token);
+      }
+      reset();
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const del = async (c: Category) => {
+    if (!token) return;
+    if (!window.confirm(`Delete category "${c.nameEn}"?`)) return;
+    try {
+      await api.del(`/admin/categories/${c.id}`, token);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed");
+    }
+  };
+
+  const toggle = async (c: Category) => {
+    if (!token) return;
+    try {
+      await api.patch(`/admin/categories/${c.id}`, { isActive: !c.isActive }, token);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed");
+    }
+  };
+
+  return (
+    <>
+      <div className="page-head">
+        <h1 className="page-title">Categories</h1>
+      </div>
+
+      {error && <div className="card" style={{ color: "var(--danger)", marginBottom: 14 }}>{error}</div>}
+
+      <div className="grid" style={{ gridTemplateColumns: "320px 1fr", alignItems: "start" }}>
+        <form onSubmit={submit} className="card">
+          <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>
+            {editingId ? "Edit category" : "New category"}
+          </h3>
+          <div className="field">
+            <label>Slug</label>
+            <input className="input" value={form.slug} onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))} required pattern="[a-z0-9-]+" placeholder="skincare" />
+          </div>
+          <div className="field">
+            <label>Name (English)</label>
+            <input className="input" value={form.nameEn} onChange={(e) => setForm((f) => ({ ...f, nameEn: e.target.value }))} required />
+          </div>
+          <div className="field">
+            <label>Name (አማርኛ)</label>
+            <input className="input" value={form.nameAm} onChange={(e) => setForm((f) => ({ ...f, nameAm: e.target.value }))} required />
+          </div>
+          <div className="field">
+            <label>Sort order</label>
+            <input className="input" type="number" min="0" value={form.sortOrder} onChange={(e) => setForm((f) => ({ ...f, sortOrder: e.target.value }))} />
+          </div>
+          <div className="row">
+            <button className="btn btn-primary" disabled={busy}>
+              <Plus size={15} />
+              {editingId ? "Save" : "Add"}
+            </button>
+            {editingId && (
+              <button type="button" className="btn btn-outline" onClick={reset}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </form>
+
+        <div className="card" style={{ padding: 0 }}>
+          {categories.length === 0 ? (
+            <div className="empty">No categories yet</div>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Slug</th>
+                  <th>Sort</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categories.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{c.nameEn}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{c.nameAm}</div>
+                    </td>
+                    <td><code>{c.slug}</code></td>
+                    <td>{c.sortOrder}</td>
+                    <td>
+                      <button className={`badge ${c.isActive ? "badge-success" : "badge-warn"}`} onClick={() => toggle(c)}>
+                        {c.isActive ? "Active" : "Hidden"}
+                      </button>
+                    </td>
+                    <td>
+                      <div className="row" style={{ justifyContent: "flex-end" }}>
+                        <button className="btn btn-outline btn-sm" onClick={() => startEdit(c)}>
+                          <Pencil size={14} />
+                        </button>
+                        <button className="btn btn-outline btn-sm" style={{ color: "var(--danger)" }} onClick={() => del(c)}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
