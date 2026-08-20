@@ -1,0 +1,87 @@
+# Render blueprint for Sabacos
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Creates three services from the repo root (monorepo):
+#   - sabacos-server   : Hono API + grammY bot (web service)
+#   - sabacos-web      : Telegram Mini App (static)
+#   - sabacos-admin    : Admin dashboard (static)
+
+services:
+  # ---------------------------------------------------------------------------
+  # API + bot
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: sabacos-server
+    runtime: node
+    plan: free
+    healthCheckPath: /health
+    buildCommand: npm ci --include=dev
+    startCommand: npm run start -w @sabacos/server
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: BOT_TOKEN
+        sync: false
+      - key: CHAPA_PROVIDER_TOKEN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Full public URL of this service: https://sabacos-server.onrender.com
+      - key: WEBHOOK_URL
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: ADMIN_CHANNEL_ID
+        sync: false
+      # Public URLs of the two static sites, e.g. https://sabacos-web.onrender.com
+      - key: WEBAPP_URL
+        sync: false
+      - key: ADMIN_DASHBOARD_URL
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # Telegram Mini App (frontend)
+  # ---------------------------------------------------------------------------
+  - type: static
+    name: sabacos-web
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build -w @sabacos/web
+    publishPath: apps/sabacos-web/dist
+    autoDeploy: true
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      # Set to https://sabacos-server.onrender.com/api/v1 after the server deploys,
+      # then Redeploy (build-time env, inlined by Vite).
+      - key: VITE_API_URL
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # Admin dashboard
+  # ---------------------------------------------------------------------------
+  - type: static
+    name: sabacos-admin
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build -w @sabacos/admin
+    publishPath: apps/sabacos-admin/dist
+    autoDeploy: true
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: VITE_API_URL
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false

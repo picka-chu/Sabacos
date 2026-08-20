@@ -44,6 +44,24 @@ Production deployment targets:
 - **Stock**: `finalize_order_payment()` decrements stock atomically; low-stock alerts surface in the admin dashboard.
 - **Backups**: enable Supabase point-in-time recovery.
 
+## Render (recommended)
+
+A `render.yaml` blueprint at the repo root defines all three services (`sabacos-server` web service, `sabacos-web` + `sabacos-admin` static sites).
+
+1. Push the repo (with `render.yaml`) to GitHub.
+2. Render → **New +** → **Blueprint** → connect the `picka-chu/Sabacos` repo.
+3. For each service, fill the `sync: false` env vars it needs.
+4. After the first deploy, copy the server URL (`https://sabacos-server.onrender.com`) and set:
+   - `sabacos-web` → `VITE_API_URL=https://sabacos-server.onrender.com/api/v1`
+   - `sabacos-server` → `WEBHOOK_URL=https://sabacos-server.onrender.com`
+   - `sabacos-server` → `WEBAPP_URL=https://sabacos-web.onrender.com`
+5. **Redeploy** `sabacos-web` so the build inlines the new `VITE_API_URL`.
+
+Notes:
+- The webhook is registered automatically at startup (when `WEBHOOK_URL` is set), so no manual `setWebhook` is needed.
+- The free plan sleeps after ~15 min idle; the bot will be unresponsive until Render wakes the service, and the first request after waking can be slow. Upgrade to a paid plan for always-on.
+- After the server is up: apply `supabase/migrations/0001_init.sql`, create the `product-images` bucket, and run the seed on Render (Shell tab) with `npm run seed -w @sabacos/server`.
+
 ## Local dev
 
 ```bash
