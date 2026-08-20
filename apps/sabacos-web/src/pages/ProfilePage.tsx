@@ -1,16 +1,84 @@
-import { User, Package, Languages } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Check, Languages, Loader2, MapPin, Package, Pencil, Phone, User } from "lucide-react";
 import { useLocation } from "wouter";
+import { formatETB, type Order } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { Header } from "../components/Header.js";
-import { useShopStore } from "../store.js";
+import { api } from "../api.js";
+import { apiErrorMessage, useShopStore } from "../store.js";
+import { toast } from "../components/Toast.js";
 import { haptic } from "../telegram.js";
 
 export function ProfilePage() {
   const { t, lang, setLang } = useI18n();
   const [, navigate] = useLocation();
   const profile = useShopStore((s) => s.profile);
+  const updateProfile = useShopStore((s) => s.updateProfile);
+
+  const [orders, setOrders] = useState<Order[] | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .get<{ orders: Order[] }>("/orders")
+      .then((res) => setOrders(res.orders))
+      .catch(() => setOrders([]));
+  }, []);
+
+  useEffect(() => {
+    setPhone(profile?.phone ?? "");
+    setAddress(profile?.address ?? "");
+  }, [profile?.phone, profile?.address]);
 
   const initial = (profile?.firstName ?? profile?.username ?? "S").charAt(0).toUpperCase();
+
+  const stats = useMemo(() => {
+    const list = orders ?? [];
+    const spent = list.reduce((sum, o) => sum + o.totalHalala, 0);
+    return { count: list.length, spent };
+  }, [orders]);
+
+  const memberSince = profile?.createdAt
+    ? new Date(profile.createdAt).toLocaleDateString(lang === "am" ? "am-ET" : "en-US", {
+        year: "numeric",
+        month: "short",
+      })
+    : null;
+
+  const startEdit = useCallback(() => {
+    setPhone(profile?.phone ?? "");
+    setAddress(profile?.address ?? "");
+    setErrorMsg(null);
+    setEditing(true);
+  }, [profile?.phone, profile?.address]);
+
+  async function handleSave() {
+    const p = phone.trim();
+    const a = address.trim();
+    if (p.length < 3) {
+      setErrorMsg(t("invalidPhone"));
+      return;
+    }
+    if (a.length < 5) {
+      setErrorMsg(t("invalidAddress"));
+      return;
+    }
+    setSaving(true);
+    setErrorMsg(null);
+    try {
+      await updateProfile(p, a);
+      toast(t("profileUpdated"));
+      setEditing(false);
+    } catch (err) {
+      setErrorMsg(apiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="screen">
@@ -19,28 +87,118 @@ export function ProfilePage() {
       <div className="card" style={{ padding: 20, display: "flex", alignItems: "center", gap: 14 }}>
         <div
           style={{
-            width: 56,
-            height: 56,
+            width: 60,
+            height: 60,
             borderRadius: "50%",
             background: "linear-gradient(135deg, var(--accent), var(--gold))",
             color: "#fff",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 24,
+            fontSize: 26,
             fontWeight: 700,
+            boxShadow: "0 6px 16px rgba(185, 100, 79, 0.35)",
+            flexShrink: 0,
           }}
         >
           {initial}
         </div>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 17 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.2 }}>
             {profile?.firstName ?? profile?.username ?? "Sabacos"}
           </div>
-          <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
+          <div className="muted" style={{ fontSize: 13, marginTop: 3 }}>
             {profile?.username ? `@${profile.username}` : t("telegramUser")}
           </div>
+          {memberSince && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
+              {t("memberSince")} {memberSince}
+            </div>
+          )}
         </div>
+      </div>
+
+      <div className="card" style={{ display: "flex", marginTop: 12 }}>
+        <div style={{ flex: 1, textAlign: "center", padding: "16px 8px" }}>
+          <div style={{ fontSize: 22, fontWeight: 800 }}>{stats.count}</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+            {t("ordersCount", { count: stats.count })}
+          </div>
+        </div>
+        <div style={{ width: 1, background: "var(--line)" }} />
+        <div style={{ flex: 1, textAlign: "center", padding: "16px 8px" }}>
+          <div style={{ fontSize: 22, fontWeight: 800 }}>{formatETB(stats.spent)}</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{t("totalSpent")}</div>
+        </div>
+      </div>
+
+      <div className="section-title">
+        <span>{t("contactInfo")}</span>
+      </div>
+      <div className="card" style={{ padding: editing ? 16 : 18 }}>
+        {editing ? (
+          <div>
+            <div className="field">
+              <label>{t("phone")}</label>
+              <input
+                value={phone}
+                inputMode="tel"
+                placeholder={t("phonePlaceholder")}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>{t("deliveryAddress")}</label>
+              <textarea
+                value={address}
+                placeholder={t("addressPlaceholder")}
+                rows={3}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </div>
+            {errorMsg && (
+              <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--accent-strong)" }}>{errorMsg}</p>
+            )}
+            <div className="flex" style={{ gap: 8, marginTop: 4 }}>
+              <button className="btn btn-primary" style={{ flex: 1 }} disabled={saving} onClick={handleSave}>
+                {saving ? (
+                  <Loader2 size={16} style={{ animation: "spin 1.2s linear infinite" }} />
+                ) : (
+                  <Check size={16} />
+                )}
+                {t("saveChanges")}
+              </button>
+              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setEditing(false)}>
+                {t("cancel")}
+              </button>
+            </div>
+          </div>
+        ) : profile?.phone || profile?.address ? (
+          <div>
+            <div className="flex" style={{ gap: 12, alignItems: "flex-start" }}>
+              <MapPin size={18} className="muted" style={{ marginTop: 2, flexShrink: 0 }} />
+              <div style={{ minWidth: 0 }}>
+                {profile.address && <div style={{ fontSize: 14, lineHeight: 1.5 }}>{profile.address}</div>}
+                {profile.phone && (
+                  <div className="muted" style={{ fontSize: 13, marginTop: 3 }}>{profile.phone}</div>
+                )}
+              </div>
+            </div>
+            <button className="btn btn-ghost" style={{ marginTop: 12 }} onClick={startEdit}>
+              <Pencil size={15} />
+              {t("edit")}
+            </button>
+          </div>
+        ) : (
+          <div style={{ textAlign: "center", padding: "4px 0" }}>
+            <MapPin size={28} className="muted" style={{ marginBottom: 8 }} />
+            <p style={{ margin: "0 0 12px", fontSize: 14, lineHeight: 1.5 }}>{t("addContactInfo")}</p>
+            <button className="btn btn-secondary" onClick={startEdit}>
+              <Phone size={15} />
+              {t("edit")}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="section-title">
@@ -63,20 +221,6 @@ export function ProfilePage() {
         ))}
       </div>
 
-      {profile?.address && (
-        <>
-          <div className="section-title">
-            <span>{t("savedAddress")}</span>
-          </div>
-          <div className="card" style={{ padding: 18 }}>
-            <p style={{ margin: 0, fontSize: 14 }}>{profile.address}</p>
-            {profile.phone && (
-              <p className="muted" style={{ margin: "6px 0 0", fontSize: 14 }}>{profile.phone}</p>
-            )}
-          </div>
-        </>
-      )}
-
       <div className="section-title">
         <span>{t("nav_orders")}</span>
       </div>
@@ -87,11 +231,12 @@ export function ProfilePage() {
       >
         <Package size={20} strokeWidth={1.75} />
         <span style={{ fontWeight: 600, flex: 1 }}>{t("myOrders")}</span>
+        {stats.count > 0 && <span className="badge badge-accent">{stats.count}</span>}
         <span className="muted">→</span>
       </button>
 
       <div className="card" style={{ padding: 18, marginTop: 20, display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <User size={18} strokeWidth={1.5} className="muted" style={{ marginTop: 2 }} />
+        <User size={18} className="muted" style={{ marginTop: 2, flexShrink: 0 }} />
         <p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.5 }}>
           Sabacos · {t("tagline")} · ETB
         </p>

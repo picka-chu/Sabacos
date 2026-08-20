@@ -1,18 +1,19 @@
 :root {
-  --bg: #f6f5f2;
+  --bg: #fff5f9;
   --surface: #ffffff;
-  --surface-2: #f0ede8;
-  --border: #e6e2da;
-  --text: #241f1a;
-  --muted: #8a8378;
-  --accent: #b05744;
-  --accent-dark: #93422f;
-  --gold: #b98d3e;
+  --surface-2: #fceaf4;
+  --border: #eedae8;
+  --text: #2a000c;
+  --muted: #9e6379;
+  --accent: #f88df7;
+  --accent-dark: #c44bc5;
+  --on-accent: #2a000c;
+  --gold: #c44bc5;
   --success: #3e7d4f;
-  --danger: #b3372b;
+  --danger: #c4574a;
   --info: #3f6ea5;
   --radius: 12px;
-  --shadow: 0 1px 3px rgba(36, 31, 26, 0.08);
+  --shadow: 0 1px 3px rgba(42, 0, 12, 0.08);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -50,7 +51,7 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 2px solid rgba(176, 87, 68, 0.35);
+  outline: 2px solid rgba(196, 75, 197, 0.35);
   outline-offset: 1px;
 }
 
@@ -63,8 +64,8 @@ textarea:focus {
 }
 
 .sidebar {
-  background: #211c17;
-  color: #efe9e1;
+  background: #2a000c;
+  color: #ffedf8;
   padding: 20px 14px;
   display: flex;
   flex-direction: column;
@@ -93,18 +94,18 @@ textarea:focus {
   gap: 10px;
   padding: 10px 12px;
   border-radius: 10px;
-  color: #cfc7bb;
+  color: #d9a3d8;
   font-weight: 500;
 }
 
 .nav-link:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(248, 141, 247, 0.1);
   color: #fff;
 }
 
 .nav-link.active {
-  background: rgba(185, 141, 62, 0.18);
-  color: #f5dfae;
+  background: rgba(248, 141, 247, 0.18);
+  color: #ffc9fb;
 }
 
 .sidebar-footer {
@@ -241,7 +242,7 @@ textarea:focus {
 
 .btn-primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .btn-primary:hover {
@@ -453,7 +454,7 @@ textarea:focus {
 
 .timeline .badge.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .thumb-grid {

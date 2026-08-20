@@ -121,6 +121,18 @@ const en = {
   sort_popular: "Popular",
   minOrderHint: "Minimum order is {amount}",
   insufficientStock: "Only {count} available",
+  memberSince: "Member since",
+  contactInfo: "Contact & delivery",
+  contactInfoHint: "Saved so checkout is faster.",
+  addContactInfo: "Add your phone and delivery address",
+  phonePlaceholder: "+251 91 234 5678",
+  addressPlaceholder: "e.g. Bole, Addis Ababa",
+  saveChanges: "Save changes",
+  profileUpdated: "Profile updated",
+  ordersCount: "{count} orders",
+  totalSpent: "Total spent",
+  invalidPhone: "Enter a valid phone number",
+  invalidAddress: "Enter your full delivery address",
 } as const;
 
 export type I18nKey = keyof typeof en;
@@ -250,6 +262,18 @@ const am: Record<I18nKey, string> = {
   sort_popular: "ተወዳጅ",
   minOrderHint: "ዝቅተኛው ትዕዛዝ {amount} ነው",
   insufficientStock: "የሚገኘው {count} ብቻ ነው",
+  memberSince: "አባል ከ",
+  contactInfo: "መገናኛ እና መላኪያ",
+  contactInfoHint: "የተቀመጠ ስለሆነ ማረጋገጥ ፈጣን ነው።",
+  addContactInfo: "ስልክ እና የመላኪያ አድራሻዎን ያክሉ",
+  phonePlaceholder: "+251 91 234 5678",
+  addressPlaceholder: "ለምሳሌ ቦሌ፣ አዲስ አበባ",
+  saveChanges: "ለውጦችን አስቀምጥ",
+  profileUpdated: "መገለፊያዎ ተዘምኗል",
+  ordersCount: "{count} ትዕዛዞች",
+  totalSpent: "ጠቅላላ ወጪ",
+  invalidPhone: "የትክክለኛ ስልክ ቁጥር ያስገቡ",
+  invalidAddress: "ሙሉ የመላኪያ አድራሻዎን ያስገቡ",
 };
 
 export const DEFAULT_LANGUAGE: Language = "en";

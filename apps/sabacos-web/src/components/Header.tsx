@@ -24,8 +24,15 @@ export function Header({ title, showBack = false }: { title?: string; showBack?:
             {title}
           </h1>
         ) : (
-          <span className="brand-mark">
-            <em>S</em>abacos
+          <span className="flex" style={{ gap: 8 }}>
+            <img
+              src="/logo.jpg"
+              alt="Sabacos"
+              style={{ width: 26, height: 26, borderRadius: 8, objectFit: "cover", flexShrink: 0 }}
+            />
+            <span className="brand-mark">
+              <em>S</em>abacos
+            </span>
           </span>
         )}
       </div>

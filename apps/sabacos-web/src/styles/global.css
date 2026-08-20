@@ -1,29 +1,30 @@
 :root {
-  --bg: #faf7f3;
+  --bg: #fff5f9;
   --surface: #ffffff;
-  --surface-2: #f4efe9;
-  --ink: #221c17;
-  --muted: #8c8178;
-  --accent: #b9644f;
-  --accent-strong: #a24f3c;
-  --accent-soft: #f6e9e4;
-  --gold: #b08d57;
+  --surface-2: #fceaf4;
+  --ink: #2a000c;
+  --muted: #9e6379;
+  --accent: #f88df7;
+  --accent-strong: #c44bc5;
+  --accent-soft: #fdebf9;
+  --on-accent: #2a000c;
+  --gold: #c44bc5;
   --success: #5d8c5a;
   --danger: #c4574a;
-  --line: rgba(34, 28, 23, 0.08);
-  --shadow: 0 10px 30px rgba(34, 28, 23, 0.07);
-  --shadow-sm: 0 4px 14px rgba(34, 28, 23, 0.06);
+  --line: rgba(42, 0, 12, 0.1);
+  --shadow: 0 10px 30px rgba(42, 0, 12, 0.08);
+  --shadow-sm: 0 4px 14px rgba(42, 0, 12, 0.06);
   --radius-lg: 22px;
   --radius: 16px;
   --radius-sm: 12px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-serif: Georgia, "Times New Roman", serif;
-  --tg-bg: #faf7f3;
-  --tg-secondary-bg: #f4efe9;
-  --tg-text: #221c17;
-  --tg-hint: #8c8178;
-  --tg-button: #b9644f;
-  --tg-button-text: #ffffff;
+  --tg-bg: #fff5f9;
+  --tg-secondary-bg: #fceaf4;
+  --tg-text: #2a000c;
+  --tg-hint: #9e6379;
+  --tg-button: #f88df7;
+  --tg-button-text: #2a000c;
   --nav-height: 64px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
@@ -31,20 +32,21 @@
 }
 
 [data-theme="dark"] {
-  --bg: #161514;
-  --surface: #21201e;
-  --surface-2: #2a2826;
-  --ink: #f1ece6;
-  --muted: #9b9188;
-  --accent: #d98e7f;
-  --accent-strong: #e09b8c;
-  --accent-soft: #382a26;
-  --gold: #c9a86b;
+  --bg: #2a000c;
+  --surface: #4a0015;
+  --surface-2: #5c0a1f;
+  --ink: #ffedf8;
+  --muted: #9e6379;
+  --accent: #f88df7;
+  --accent-strong: #ff9cf8;
+  --accent-soft: #4a0a22;
+  --on-accent: #2a000c;
+  --gold: #c44bc5;
   --success: #7fae7b;
   --danger: #d4685b;
-  --line: rgba(241, 236, 230, 0.1);
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.3);
+  --line: rgba(255, 237, 248, 0.12);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.35);
   color-scheme: dark;
 }
 
@@ -191,8 +193,8 @@ img {
 
 .btn-primary {
   background: var(--accent);
-  color: #fff;
-  box-shadow: 0 6px 18px rgba(185, 100, 79, 0.35);
+  color: var(--on-accent);
+  box-shadow: 0 6px 18px rgba(196, 75, 197, 0.35);
 }
 
 .btn-primary:disabled {
