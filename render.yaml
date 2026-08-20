@@ -48,7 +48,6 @@ services:
   - type: web
     name: sabacos-web
     runtime: static
-    plan: free
     buildCommand: npm ci --include=dev && npm run build -w @sabacos/web
     staticPublishPath: apps/sabacos-web/dist
     autoDeployTrigger: commit
@@ -70,7 +69,6 @@ services:
   - type: web
     name: sabacos-admin
     runtime: static
-    plan: free
     buildCommand: npm ci --include=dev && npm run build -w @sabacos/admin
     staticPublishPath: apps/sabacos-admin/dist
     autoDeployTrigger: commit
