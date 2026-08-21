@@ -14,7 +14,7 @@ interface ShopState {
   clearCart: () => Promise<void>;
   checkout: (input: { customerName: string; phone: string; address: string; note?: string | null }) => Promise<Order>;
   getOrder: (id: string) => Promise<OrderWithItems | null>;
-  updateProfile: (phone: string, address: string) => Promise<Profile>;
+  updateProfile: (input: { phone?: string; address?: string }) => Promise<Profile>;
   reset: () => void;
 }
 
@@ -70,8 +70,8 @@ export const useShopStore = create<ShopState>((set, get) => ({
     return res.order;
   },
 
-  updateProfile: async (phone, address) => {
-    const res = await api.patch<{ profile: Profile }>("/profile", { phone, address });
+  updateProfile: async (input) => {
+    const res = await api.patch<{ profile: Profile }>("/profile", input);
     set({ profile: res.profile });
     return res.profile;
   },

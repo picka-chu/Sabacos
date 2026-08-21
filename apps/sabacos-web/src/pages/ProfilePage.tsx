@@ -7,7 +7,7 @@ import { Header } from "../components/Header.js";
 import { api } from "../api.js";
 import { apiErrorMessage, useShopStore } from "../store.js";
 import { toast } from "../components/Toast.js";
-import { haptic } from "../telegram.js";
+import { canRequestPhone, haptic, requestPhoneNumber } from "../telegram.js";
 
 export function ProfilePage() {
   const { t, lang, setLang } = useI18n();
@@ -20,6 +20,7 @@ export function ProfilePage() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [saving, setSaving] = useState(false);
+  const [sharingPhone, setSharingPhone] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,7 +71,7 @@ export function ProfilePage() {
     setSaving(true);
     setErrorMsg(null);
     try {
-      await updateProfile(p, a);
+      await updateProfile({ phone: p, address: a });
       toast(t("profileUpdated"));
       setEditing(false);
     } catch (err) {
@@ -80,29 +81,64 @@ export function ProfilePage() {
     }
   }
 
+  async function handleSharePhone() {
+    haptic("light");
+    setSharingPhone(true);
+    try {
+      const number = await requestPhoneNumber();
+      if (!number) {
+        setErrorMsg(t("invalidPhone"));
+        return;
+      }
+      await updateProfile({ phone: number });
+      toast(t("profileUpdated"));
+    } catch (err) {
+      toast(apiErrorMessage(err));
+    } finally {
+      setSharingPhone(false);
+    }
+  }
+
+  const avatar = profile?.photoUrl ? (
+    <img
+      src={profile.photoUrl}
+      alt=""
+      style={{
+        width: 60,
+        height: 60,
+        borderRadius: "50%",
+        objectFit: "cover",
+        flexShrink: 0,
+        boxShadow: "0 6px 16px rgba(196, 75, 197, 0.35)",
+      }}
+    />
+  ) : (
+    <div
+      style={{
+        width: 60,
+        height: 60,
+        borderRadius: "50%",
+        background: "linear-gradient(135deg, var(--accent), var(--gold))",
+        color: "var(--on-accent)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 26,
+        fontWeight: 700,
+        boxShadow: "0 6px 16px rgba(196, 75, 197, 0.35)",
+        flexShrink: 0,
+      }}
+    >
+      {initial}
+    </div>
+  );
+
   return (
     <div className="screen">
       <Header title={t("nav_profile")} showBack />
 
       <div className="card" style={{ padding: 20, display: "flex", alignItems: "center", gap: 14 }}>
-        <div
-          style={{
-            width: 60,
-            height: 60,
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, var(--accent), var(--gold))",
-            color: "#fff",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 26,
-            fontWeight: 700,
-            boxShadow: "0 6px 16px rgba(185, 100, 79, 0.35)",
-            flexShrink: 0,
-          }}
-        >
-          {initial}
-        </div>
+        {avatar}
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.2 }}>
             {profile?.firstName ?? profile?.username ?? "Sabacos"}
@@ -184,19 +220,43 @@ export function ProfilePage() {
                 )}
               </div>
             </div>
-            <button className="btn btn-ghost" style={{ marginTop: 12 }} onClick={startEdit}>
-              <Pencil size={15} />
-              {t("edit")}
-            </button>
+            <div className="flex" style={{ marginTop: 12 }}>
+              <button className="btn btn-ghost" onClick={startEdit}>
+                <Pencil size={15} />
+                {t("edit")}
+              </button>
+              {!profile.phone && canRequestPhone() && (
+                <button className="btn btn-ghost" disabled={sharingPhone} onClick={handleSharePhone}>
+                  {sharingPhone ? (
+                    <Loader2 size={15} style={{ animation: "spin 1.2s linear infinite" }} />
+                  ) : (
+                    <Phone size={15} />
+                  )}
+                  {t("sharePhone")}
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div style={{ textAlign: "center", padding: "4px 0" }}>
             <MapPin size={28} className="muted" style={{ marginBottom: 8 }} />
             <p style={{ margin: "0 0 12px", fontSize: 14, lineHeight: 1.5 }}>{t("addContactInfo")}</p>
-            <button className="btn btn-secondary" onClick={startEdit}>
-              <Phone size={15} />
-              {t("edit")}
-            </button>
+            <div className="flex" style={{ justifyContent: "center", flexWrap: "wrap" }}>
+              <button className="btn btn-secondary" onClick={startEdit}>
+                <Pencil size={15} />
+                {t("edit")}
+              </button>
+              {canRequestPhone() && (
+                <button className="btn btn-secondary" disabled={sharingPhone} onClick={handleSharePhone}>
+                  {sharingPhone ? (
+                    <Loader2 size={15} style={{ animation: "spin 1.2s linear infinite" }} />
+                  ) : (
+                    <Phone size={15} />
+                  )}
+                  {t("sharePhone")}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

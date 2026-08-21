@@ -7,6 +7,7 @@ export interface TelegramWebApp {
       last_name?: string;
       username?: string;
       language_code?: string;
+      photo_url?: string;
     };
     auth_date?: number;
     query_id?: string;
@@ -41,7 +42,9 @@ export interface TelegramWebApp {
     enable: () => void;
     disable: () => void;
   };
-  onEvent: (eventType: string, callback: () => void) => void;
+  onEvent: (eventType: string, callback: (data?: unknown) => void) => void;
+  offEvent?: (eventType: string, callback: (data?: unknown) => void) => void;
+  requestPhone?: () => void;
   HapticFeedback: {
     impactOccurred: (style: string) => void;
     notificationOccurred: (type: string) => void;
@@ -87,4 +90,49 @@ export function haptic(style: "light" | "medium" | "heavy" = "light"): void {
   } catch {
     /* noop */
   }
+}
+
+export function isTelegramSession(): boolean {
+  return Boolean(getTelegramWebApp()?.initData);
+}
+
+export function canRequestPhone(): boolean {
+  const webApp = getTelegramWebApp();
+  return Boolean(webApp && typeof webApp.requestPhone === "function");
+}
+
+export function requestPhoneNumber(): Promise<string | null> {
+  const webApp = getTelegramWebApp();
+  const requestPhone = webApp?.requestPhone;
+  if (!webApp || typeof requestPhone !== "function") {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      try {
+        webApp.offEvent?.("phoneRequested", handler);
+      } catch {
+        /* noop */
+      }
+      resolve(value);
+    };
+    const handler = (data?: unknown) => {
+      const payload = data as { response?: boolean; phoneNumber?: string } | undefined;
+      settle(payload?.response && payload.phoneNumber ? payload.phoneNumber : null);
+    };
+
+    try {
+      webApp.onEvent("phoneRequested", handler);
+      requestPhone();
+    } catch {
+      settle(null);
+      return;
+    }
+
+    setTimeout(() => settle(null), 60_000);
+  });
 }

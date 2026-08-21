@@ -81,6 +81,7 @@ export function parseInitData(initData: string): InitDataPayload | null {
   let firstName: string | null = null;
   let lastName: string | null = null;
   let username: string | null = null;
+  let photoUrl: string | null = null;
 
   if (userRaw) {
     try {
@@ -89,6 +90,7 @@ export function parseInitData(initData: string): InitDataPayload | null {
       if (typeof user.first_name === "string") firstName = user.first_name;
       if (typeof user.last_name === "string") lastName = user.last_name;
       if (typeof user.username === "string") username = user.username;
+      if (typeof user.photo_url === "string") photoUrl = user.photo_url;
     } catch {
       return null;
     }
@@ -110,6 +112,7 @@ export function parseInitData(initData: string): InitDataPayload | null {
     firstName,
     lastName,
     username,
+    photoUrl,
     hash,
     raw: initData,
   });

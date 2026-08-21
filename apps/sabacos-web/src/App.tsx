@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { Route, Switch, useLocation } from "wouter";
+import { Info } from "lucide-react";
 import { api } from "./api.js";
-import { I18nProvider } from "./i18n.js";
-import { applyTelegramTheme, getTelegramWebApp } from "./telegram.js";
+import { I18nProvider, useI18n } from "./i18n.js";
+import { applyTelegramTheme, getTelegramWebApp, isTelegramSession } from "./telegram.js";
 import { BottomNav } from "./components/BottomNav.js";
 import { ToastHost } from "./components/Toast.js";
 import { useShopStore } from "./store.js";
@@ -20,6 +21,8 @@ function Shell() {
   const setProfile = useShopStore((s) => s.setProfile);
   const refreshCart = useShopStore((s) => s.refreshCart);
   const [location] = useLocation();
+  const { t } = useI18n();
+  const inTelegram = isTelegramSession();
 
   useEffect(() => {
     applyTelegramTheme();
@@ -35,6 +38,26 @@ function Shell() {
 
   return (
     <>
+      {!inTelegram && (
+        <div
+          style={{
+            margin: "0 16px",
+            marginTop: "calc(var(--safe-top) + 12px)",
+            padding: "10px 14px",
+            borderRadius: 14,
+            background: "var(--accent-soft)",
+            color: "var(--accent-strong)",
+            fontSize: 13,
+            fontWeight: 500,
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
+          <Info size={16} style={{ flexShrink: 0 }} />
+          {t("previewBanner")}
+        </div>
+      )}
       <Switch>
         <Route path="/" component={HomePage} />
         <Route path="/shop" component={ShopPage} />

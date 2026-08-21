@@ -133,6 +133,8 @@ const en = {
   totalSpent: "Total spent",
   invalidPhone: "Enter a valid phone number",
   invalidAddress: "Enter your full delivery address",
+  previewBanner: "Preview mode — open inside Telegram to order.",
+  sharePhone: "Use my Telegram number",
 } as const;
 
 export type I18nKey = keyof typeof en;
@@ -274,6 +276,8 @@ const am: Record<I18nKey, string> = {
   totalSpent: "ጠቅላላ ወጪ",
   invalidPhone: "የትክክለኛ ስልክ ቁጥር ያስገቡ",
   invalidAddress: "ሙሉ የመላኪያ አድራሻዎን ያስገቡ",
+  previewBanner: "ቅድሚ እይታ — ለማዘዝ በቴሌግራም ውስጥ ይክፈቱ።",
+  sharePhone: "የቴሌግራም ቁጥሬን ተጠቀም",
 };
 
 export const DEFAULT_LANGUAGE: Language = "en";

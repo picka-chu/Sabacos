@@ -6,7 +6,7 @@ import type { AppEnv } from "../env.js";
 import type { UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
 import { getOrdersByProfile, getOrderWithItems } from "../db/orders.js";
-import { saveProfileAddress } from "../db/profiles.js";
+import { saveProfileContact } from "../db/profiles.js";
 import { checkout, CartValidationError } from "../services/checkout.js";
 import { makeSendInvoice, createBot } from "../bot/bot.js";
 
@@ -14,10 +14,14 @@ export const orderRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
 
 orderRoutes.post("/auth/telegram", (c) => c.json({ profile: c.get("profile") }));
 
-const saveProfileSchema = z.object({
-  phone: z.string().trim().min(3).max(30),
-  address: z.string().trim().min(5).max(500),
-});
+const saveProfileSchema = z
+  .object({
+    phone: z.string().trim().min(3).max(30).optional(),
+    address: z.string().trim().min(5).max(500).optional(),
+  })
+  .refine((v) => v.phone !== undefined || v.address !== undefined, {
+    message: "phone or address required",
+  });
 
 orderRoutes.post("/checkout", async (c) => {
   const db = getDb(c.env);
@@ -70,6 +74,9 @@ orderRoutes.patch("/profile", async (c) => {
   const profile = c.get("profile");
   const body = await c.req.json().catch(() => null);
   const input = safeParse(saveProfileSchema, body);
-  const updated = await saveProfileAddress(db, profile.id, input.phone, input.address);
+  const updated = await saveProfileContact(db, profile.id, {
+    phone: input.phone,
+    address: input.address,
+  });
   return c.json({ profile: updated });
 });

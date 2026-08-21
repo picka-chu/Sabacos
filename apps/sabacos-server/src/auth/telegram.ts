@@ -36,6 +36,7 @@ export const requireUser: MiddlewareHandler<{ Bindings: AppEnv } & UserContext> 
     firstName: result.payload.firstName,
     lastName: result.payload.lastName,
     username: result.payload.username,
+    photoUrl: result.payload.photoUrl,
   });
 
   c.set("profile", profile);

@@ -25,6 +25,7 @@ export const profileRowSchema = z
     last_name: z.string().nullable(),
     phone: z.string().nullable(),
     address: z.string().nullable(),
+    photo_url: z.string().nullable(),
     role: z.enum(["customer", "admin"]),
     created_at: z.string(),
     updated_at: z.string(),
@@ -38,6 +39,7 @@ export const profileRowSchema = z
       lastName: r.last_name,
       phone: r.phone,
       address: r.address,
+      photoUrl: r.photo_url,
       role: r.role,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
@@ -294,6 +296,7 @@ export const initDataPayloadSchema = z.object({
   firstName: z.string().nullable().optional(),
   lastName: z.string().nullable().optional(),
   username: z.string().nullable().optional(),
+  photoUrl: z.string().nullable().optional(),
   hash: z.string(),
   raw: z.string(),
 });

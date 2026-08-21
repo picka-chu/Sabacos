@@ -16,7 +16,13 @@ export async function getProfileByTelegramId(db: Db, telegramId: number): Promis
 
 export async function upsertTelegramProfile(
   db: Db,
-  info: { telegramId: number; firstName?: string | null; lastName?: string | null; username?: string | null },
+  info: {
+    telegramId: number;
+    firstName?: string | null;
+    lastName?: string | null;
+    username?: string | null;
+    photoUrl?: string | null;
+  },
 ): Promise<Profile> {
   const existing = await getProfileByTelegramId(db, info.telegramId);
   const row = {
@@ -24,6 +30,7 @@ export async function upsertTelegramProfile(
     first_name: info.firstName ?? existing?.firstName ?? null,
     last_name: info.lastName ?? existing?.lastName ?? null,
     username: info.username ?? existing?.username ?? null,
+    photo_url: info.photoUrl ?? existing?.photoUrl ?? null,
   };
 
   if (existing) {
@@ -55,14 +62,17 @@ export async function getProfileById(db: Db, id: string): Promise<Profile | null
   return profileRowSchema.parse(data);
 }
 
-export async function saveProfileAddress(db: Db, id: string, phone: string, address: string): Promise<Profile> {
-  const { data, error } = await db
-    .from("profiles")
-    .update({ phone, address })
-    .eq("id", id)
-    .select("*")
-    .single();
-  if (error) throw new Error(`saveProfileAddress: ${error.message}`);
+export async function saveProfileContact(
+  db: Db,
+  id: string,
+  input: { phone?: string; address?: string },
+): Promise<Profile> {
+  const patch: Record<string, string> = {};
+  if (input.phone !== undefined) patch.phone = input.phone;
+  if (input.address !== undefined) patch.address = input.address;
+
+  const { data, error } = await db.from("profiles").update(patch).eq("id", id).select("*").single();
+  if (error) throw new Error(`saveProfileContact: ${error.message}`);
   return profileRowSchema.parse(data);
 }
 

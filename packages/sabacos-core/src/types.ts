@@ -37,6 +37,7 @@ export interface Profile {
   lastName: string | null;
   phone: string | null;
   address: string | null;
+  photoUrl: string | null;
   role: ProfileRole;
   createdAt: string;
   updatedAt: string;
