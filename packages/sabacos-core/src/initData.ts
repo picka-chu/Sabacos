@@ -58,6 +58,7 @@ export async function verifyInitDataHash(
   const pairs: string[] = [];
   for (const [key, value] of searchParams.entries()) {
     if (key === "hash") continue;
+    if (key === "signature") continue;
     pairs.push(`${key}=${value}`);
   }
   pairs.sort();
