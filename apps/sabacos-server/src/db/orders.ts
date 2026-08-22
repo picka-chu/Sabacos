@@ -102,7 +102,7 @@ export async function getOrderItems(db: Db, orderId: string): Promise<OrderItem[
     .from("order_items")
     .select("*")
     .eq("order_id", orderId)
-    .order("created_at", { ascending: false });
+    .order("name_en", { ascending: true });
   if (error) throw new Error(`getOrderItems: ${error.message}`);
   return (data ?? []).map((row) => orderItemRowSchema.parse(row));
 }
