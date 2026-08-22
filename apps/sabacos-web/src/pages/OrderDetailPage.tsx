@@ -9,6 +9,7 @@ import {
 } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { PageTitle } from "../components/PageTitle.js";
+import { StatusIcon } from "../components/StatusIcon.js";
 import { api } from "../api.js";
 import { apiErrorMessage } from "../store.js";
 import { toast } from "../components/Toast.js";
@@ -60,7 +61,7 @@ export function OrderDetailPage() {
         <div className="row" style={{ justifyContent: "space-between" }}>
           <strong>{order.orderNo}</strong>
           <span className="badge">
-            <span className={`status-dot status-${order.status}`} />
+            <StatusIcon status={order.status} />
             {translateStatus(lang, order.status)}
           </span>
         </div>
