@@ -8,6 +8,7 @@ import { catalogRoutes } from "./routes/catalog.js";
 import { cartRoutes } from "./routes/cart.js";
 import { orderRoutes } from "./routes/orders.js";
 import { adminRoutes } from "./routes/admin.js";
+import { debugRoutes } from "./routes/debug.js";
 import { requireUser } from "./auth/telegram.js";
 import { requireAdmin } from "./auth/admin.js";
 import { sendError, notFound } from "./errors.js";
@@ -50,6 +51,7 @@ app.post("/webhook", async (c) => {
   return c.json({ ok: true });
 });
 
+app.route("/api/v1/debug", debugRoutes);
 app.route("/api/v1/catalog", catalogRoutes);
 
 app.use("/api/v1/cart/*", requireUser);
