@@ -34,7 +34,11 @@ export const requireUser: MiddlewareHandler<{ Bindings: AppEnv } & UserContext> 
         : result.error === "initData expired"
           ? "Session expired — close and reopen Sabacos"
           : "Malformed Telegram session";
-    console.error(`[auth] request rejected: ${reason}`);
+    console.error(
+      `[auth] request rejected: ${reason} | bytes=${initData.length} | fields=[${initData
+        ? new URLSearchParams(initData).keys().toArray().join(",")
+        : ""}] | hash=${(new URLSearchParams(initData).get("hash") ?? "").slice(0, 10)}…`,
+    );
     throw unauthorized(reason);
   }
 
