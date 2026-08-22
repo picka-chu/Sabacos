@@ -13,7 +13,6 @@ import { getSettings } from "../db/settings.js";
 import { getOrderById, getOrderItems, getOrderWithItems } from "../db/orders.js";
 import { getProductsByIds } from "../db/catalog.js";
 import { getProfileById, upsertTelegramProfile } from "../db/profiles.js";
-import type { SendInvoiceParams } from "../services/checkout.js";
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -201,23 +200,6 @@ export function createBot(env: AppEnv): Bot {
   return bot;
 }
 
-export function makeSendInvoice(env: AppEnv, bot: Bot) {
-  return async (params: SendInvoiceParams): Promise<void> => {
-    const result = await bot.api.sendInvoice(
-      params.chatId,
-      params.title,
-      params.description,
-      params.payload,
-      params.currency,
-      params.prices.map((p) => ({ label: p.label, amount: p.amount })),
-      { provider_token: env.CHAPA_PROVIDER_TOKEN },
-    );
-    if (!result) {
-      throw new Error("sendInvoice failed: no result");
-    }
-  };
-}
-
 function formatOrderLines(order: OrderWithItems): string {
   const lines = order.items
     .map((i) => `• ${i.nameEn} × ${i.qty} — ${formatETB(i.subtotalHalala)}`)
@@ -225,7 +207,7 @@ function formatOrderLines(order: OrderWithItems): string {
   return lines || "—";
 }
 
-function formatAdminOrderAlert(order: OrderWithItems): string {
+export function formatAdminOrderAlert(order: OrderWithItems): string {
   return [
     `🛍 *New paid order*`,
     ``,

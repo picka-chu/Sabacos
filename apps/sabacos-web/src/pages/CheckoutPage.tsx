@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { CheckCircle2, Loader2, AlertCircle, ArrowRight } from "lucide-react";
+import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User } from "lucide-react";
 import { formatETB, t } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { api } from "../api.js";
 import { Header } from "../components/Header.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
+import { canRequestLocation, canRequestPhone, haptic, openExternalLink, requestLocation, requestPhoneNumber } from "../telegram.js";
 
 type Phase = "form" | "pending" | "success" | "failed";
 
@@ -70,17 +71,37 @@ export function CheckoutPage() {
   const handleSubmit = async () => {
     setErrorMsg(null);
     try {
-      const order = await checkout({
+      const { order, checkoutUrl } = await checkout({
         customerName: form.customerName.trim(),
         phone: form.phone.trim(),
         address: form.address.trim(),
         note: form.note.trim() || null,
       });
       setOrderId(order.id);
+      setOrderNo(order.orderNo);
+      openExternalLink(checkoutUrl);
       startPolling(order.id);
     } catch (err) {
       setErrorMsg(apiErrorMessage(err));
       setPhase("failed");
+    }
+  };
+
+  const handleSharePhone = async () => {
+    haptic();
+    const number = await requestPhoneNumber();
+    if (number) setForm((f) => ({ ...f, phone: number }));
+  };
+
+  const handleShareLocation = async () => {
+    haptic();
+    const loc = await requestLocation();
+    if (loc) {
+      const gpsTag = `[GPS: ${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}]`;
+      setForm((f) => ({
+        ...f,
+        address: f.address.includes("[GPS:") ? f.address.replace(/\[GPS:[^\]]+\]/, gpsTag) : `${gpsTag} ${f.address}`.trim(),
+      }));
     }
   };
 
@@ -171,12 +192,19 @@ export function CheckoutPage() {
             </div>
             <div className="field">
               <label>{t("phone")}</label>
-              <input
-                value={form.phone}
-                inputMode="tel"
-                placeholder="+251 91 234 5678"
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              />
+              <div className="row" style={{ gap: 8 }}>
+                <input
+                  value={form.phone}
+                  inputMode="tel"
+                  placeholder="+251 91 234 5678"
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                />
+                {canRequestPhone() && (
+                  <button type="button" className="btn btn-secondary" style={{ flexShrink: 0, padding: "0 12px" }} onClick={handleSharePhone} title={t("sharePhone")}>
+                    <User size={16} />
+                  </button>
+                )}
+              </div>
             </div>
             <div className="field">
               <label>{t("deliveryAddress")}</label>
@@ -186,6 +214,11 @@ export function CheckoutPage() {
                 rows={3}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
               />
+              {canRequestLocation() && (
+                <button type="button" className="btn btn-secondary btn-block" style={{ marginTop: 8 }} onClick={handleShareLocation}>
+                  <MapPin size={16} /> {t("shareLocation")}
+                </button>
+              )}
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>{t("note")}</label>

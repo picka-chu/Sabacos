@@ -5,6 +5,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(8788),
   BOT_TOKEN: z.string().trim().min(1, "BOT_TOKEN is required"),
   CHAPA_PROVIDER_TOKEN: z.string().trim().min(1, "CHAPA_PROVIDER_TOKEN is required (from BotFather)"),
+  CHAPA_SECRET_KEY: z.string().trim().optional(),
+  CHAPA_BASE_URL: z.string().trim().url().optional(),
   SUPABASE_URL: z.string().trim().url("SUPABASE_URL is required"),
   SUPABASE_SERVICE_ROLE_KEY: z.string().trim().min(1, "SUPABASE_SERVICE_ROLE_KEY is required"),
   WEBAPP_URL: z.string().trim().url("WEBAPP_URL is required (the Telegram Mini App URL)"),

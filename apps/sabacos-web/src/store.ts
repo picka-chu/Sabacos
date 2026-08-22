@@ -12,7 +12,10 @@ interface ShopState {
   updateQty: (itemId: string, qty: number) => Promise<CartSummary>;
   removeItem: (itemId: string) => Promise<CartSummary>;
   clearCart: () => Promise<void>;
-  checkout: (input: { customerName: string; phone: string; address: string; note?: string | null }) => Promise<Order>;
+  checkout: (input: { customerName: string; phone: string; address: string; note?: string | null }) => Promise<{
+    order: Order;
+    checkoutUrl: string;
+  }>;
   getOrder: (id: string) => Promise<OrderWithItems | null>;
   updateProfile: (input: { phone?: string; address?: string }) => Promise<Profile>;
   reset: () => void;
@@ -61,8 +64,8 @@ export const useShopStore = create<ShopState>((set, get) => ({
   },
 
   checkout: async (input) => {
-    const res = await api.post<{ order: Order; invoiceSent: boolean }>("/checkout", input);
-    return res.order;
+    const res = await api.post<{ order: Order; checkoutUrl: string }>("/checkout", input);
+    return res;
   },
 
   getOrder: async (id) => {

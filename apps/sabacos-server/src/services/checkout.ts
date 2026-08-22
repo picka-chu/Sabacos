@@ -1,33 +1,26 @@
 import {
-  CURRENCY,
   MIN_ORDER_SUBTOTAL_HALALA,
   formatETB,
   type CartItem,
   type Order,
 } from "@sabacos/core";
-import { badRequest } from "../errors.js";
 import type { Db } from "../db/client.js";
 import { getSettings } from "../db/settings.js";
 import { clearCart, getCart } from "../db/cart.js";
 import { createOrder } from "../db/orders.js";
 import { computeTotals } from "@sabacos/core";
 
-export interface InvoicePriceLine {
-  label: string;
-  amount: number;
-}
-
-export interface SendInvoiceParams {
-  chatId: number;
-  payload: string;
-  title: string;
-  description: string;
-  currency: string;
-  prices: InvoicePriceLine[];
-}
-
 export interface CheckoutDeps {
-  sendInvoice: (params: SendInvoiceParams) => Promise<void>;
+  initializeTransaction: (params: {
+    txRef: string;
+    amountHalala: number;
+    firstName: string;
+    lastName: string | null;
+    phone: string;
+    orderId: string;
+    orderNo: string;
+    shopName: string;
+  }) => Promise<string>;
 }
 
 export interface CheckoutInput {
@@ -39,7 +32,7 @@ export interface CheckoutInput {
 
 export interface CheckoutResult {
   order: Order;
-  invoiceSent: boolean;
+  checkoutUrl: string;
 }
 
 export class CartValidationError extends Error {
@@ -77,7 +70,6 @@ export async function validateCartItems(items: CartItem[]): Promise<void> {
 export async function checkout(
   db: Db,
   profileId: string,
-  chatId: number,
   input: CheckoutInput,
   deps: CheckoutDeps,
 ): Promise<CheckoutResult> {
@@ -119,35 +111,21 @@ export async function checkout(
     })),
   });
 
-  const prices: InvoicePriceLine[] = [
-    ...cart.map((i) => ({
-      label: `${i.product.nameEn} × ${i.qty}`,
-      amount: i.product.priceHalala * i.qty,
-    })),
-  ];
-  if (totals.deliveryFeeHalala > 0) {
-    prices.push({
-      label: "Delivery fee",
-      amount: totals.deliveryFeeHalala,
-    });
-  }
-
-  let invoiceSent = false;
+  let checkoutUrl: string;
   try {
-    await deps.sendInvoice({
-      chatId,
-      payload: order.id,
-      title: `${settings.shopNameEn} — Order ${order.orderNo}`,
-      description: `${cart.length} item(s) · ${formatETB(totals.totalHalala)}`,
-      currency: CURRENCY,
-      prices,
+    checkoutUrl = await deps.initializeTransaction({
+      txRef: order.id,
+      amountHalala: totals.totalHalala,
+      firstName: input.customerName,
+      lastName: null,
+      phone: input.phone,
+      orderId: order.id,
+      orderNo: order.orderNo,
+      shopName: settings.shopNameEn ?? "Sabacos",
     });
-    invoiceSent = true;
+  } finally {
     await clearCart(db, profileId);
-  } catch (err) {
-    await clearCart(db, profileId);
-    throw err;
   }
 
-  return { order, invoiceSent };
+  return { order, checkoutUrl };
 }

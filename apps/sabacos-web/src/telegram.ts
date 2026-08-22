@@ -24,6 +24,7 @@ export interface TelegramWebApp {
   ready: () => void;
   expand: () => void;
   close: () => void;
+  openLink: (url: string) => void;
   setHeaderColor: (color: string) => void;
   setBackgroundColor: (color: string) => void;
   enableClosingConfirmation: () => void;
@@ -45,6 +46,7 @@ export interface TelegramWebApp {
   onEvent: (eventType: string, callback: (data?: unknown) => void) => void;
   offEvent?: (eventType: string, callback: (data?: unknown) => void) => void;
   requestPhone?: () => void;
+  requestLocation?: () => void;
   HapticFeedback: {
     impactOccurred: (style: string) => void;
     notificationOccurred: (type: string) => void;
@@ -118,9 +120,66 @@ export function getInitData(): string {
   return "";
 }
 
+export function canRequestLocation(): boolean {
+  const webApp = getTelegramWebApp();
+  return Boolean(webApp && typeof webApp.requestLocation === "function");
+}
+
+export function requestLocation(): Promise<{ lat: number; lng: number } | null> {
+  const webApp = getTelegramWebApp();
+  const requestLocation = webApp?.requestLocation;
+  if (!webApp || typeof requestLocation !== "function") {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (value: { lat: number; lng: number } | null) => {
+      if (settled) return;
+      settled = true;
+      try {
+        webApp.offEvent?.("locationRequested", handler);
+      } catch {
+        /* noop */
+      }
+      resolve(value);
+    };
+    const handler = (data?: unknown) => {
+      const payload = data as {
+        response?: boolean;
+        location?: { latitude?: number; longitude?: number };
+      } | undefined;
+      if (payload?.response && payload.location?.latitude != null && payload.location.longitude != null) {
+        settle({ lat: payload.location.latitude, lng: payload.location.longitude });
+      } else {
+        settle(null);
+      }
+    };
+
+    try {
+      webApp.onEvent("locationRequested", handler);
+      requestLocation();
+    } catch {
+      settle(null);
+      return;
+    }
+
+    setTimeout(() => settle(null), 60_000);
+  });
+}
+
 export function canRequestPhone(): boolean {
   const webApp = getTelegramWebApp();
   return Boolean(webApp && typeof webApp.requestPhone === "function");
+}
+
+export function openExternalLink(url: string): void {
+  const webApp = getTelegramWebApp();
+  if (typeof webApp?.openLink === "function") {
+    webApp.openLink(url);
+  } else {
+    window.open(url, "_blank", "noopener");
+  }
 }
 
 export function requestPhoneNumber(): Promise<string | null> {
