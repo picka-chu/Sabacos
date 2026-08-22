@@ -36,7 +36,7 @@ export const requireUser: MiddlewareHandler<{ Bindings: AppEnv } & UserContext> 
           : "Malformed Telegram session";
     console.error(
       `[auth] request rejected: ${reason} | bytes=${initData.length} | fields=[${initData
-        ? new URLSearchParams(initData).keys().toArray().join(",")
+        ? Array.from(new URLSearchParams(initData).keys()).join(",")
         : ""}] | hash=${(new URLSearchParams(initData).get("hash") ?? "").slice(0, 10)}…`,
     );
     throw unauthorized(reason);
