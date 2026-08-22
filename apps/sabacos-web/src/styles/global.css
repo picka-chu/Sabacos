@@ -1,5 +1,5 @@
 :root {
-  --bg: #fff5f9;
+  --bg: #ffffff;
   --surface: #ffffff;
   --surface-2: #fceaf4;
   --ink: #2a000c;
@@ -7,6 +7,7 @@
   --accent: #f88df7;
   --accent-strong: #c44bc5;
   --accent-soft: #fdebf9;
+  --accent-glow: rgba(196, 75, 197, 0.35);
   --on-accent: #2a000c;
   --gold: #c44bc5;
   --success: #5d8c5a;
@@ -19,7 +20,7 @@
   --radius-sm: 12px;
   --font-sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-serif: "Playfair Display", Georgia, "Times New Roman", serif;
-  --tg-bg: #fff5f9;
+  --tg-bg: #ffffff;
   --tg-secondary-bg: #fceaf4;
   --tg-text: #2a000c;
   --tg-hint: #9e6379;
@@ -32,21 +33,24 @@
 }
 
 [data-theme="dark"] {
-  --bg: #2a000c;
-  --surface: #4a0015;
-  --surface-2: #5c0a1f;
-  --ink: #ffedf8;
-  --muted: #9e6379;
-  --accent: #f88df7;
-  --accent-strong: #ff9cf8;
-  --accent-soft: #4a0a22;
-  --on-accent: #2a000c;
-  --gold: #c44bc5;
+  /* Neutral Telegram-style darks; applyTelegramTheme() refines these
+     from the client's live themeParams at runtime. */
+  --bg: #1c1c1e;
+  --surface: #2c2c2e;
+  --surface-2: #3a3a3c;
+  --ink: #f2f2f7;
+  --muted: #98989f;
+  --accent: #0a84ff;
+  --accent-strong: #6cb2ff;
+  --accent-soft: rgba(10, 132, 255, 0.16);
+  --accent-glow: rgba(10, 132, 255, 0.35);
+  --on-accent: #ffffff;
+  --gold: #d8a53a;
   --success: #7fae7b;
   --danger: #d4685b;
-  --line: rgba(255, 237, 248, 0.12);
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-  --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.35);
+  --line: rgba(242, 242, 247, 0.14);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.4);
   color-scheme: dark;
 }
 
@@ -195,7 +199,7 @@ img {
 .btn-primary {
   background: var(--accent);
   color: var(--on-accent);
-  box-shadow: 0 6px 18px rgba(196, 75, 197, 0.35);
+  box-shadow: 0 6px 18px var(--accent-glow);
 }
 
 .btn-primary:disabled {

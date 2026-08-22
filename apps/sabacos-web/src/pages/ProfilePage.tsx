@@ -142,7 +142,7 @@ export function ProfilePage() {
         borderRadius: "50%",
         objectFit: "cover",
         flexShrink: 0,
-        boxShadow: "0 6px 16px rgba(196, 75, 197, 0.35)",
+        boxShadow: "0 6px 16px var(--accent-glow)",
       }}
     />
   ) : (
@@ -158,7 +158,7 @@ export function ProfilePage() {
         justifyContent: "center",
         fontSize: 26,
         fontWeight: 700,
-        boxShadow: "0 6px 16px rgba(196, 75, 197, 0.35)",
+        boxShadow: "0 6px 16px var(--accent-glow)",
         flexShrink: 0,
       }}
     >

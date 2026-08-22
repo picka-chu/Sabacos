@@ -155,7 +155,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(196, 75, 197, 0.4);
+  box-shadow: 0 4px 12px var(--accent-glow);
 }
 
 /* Category chips row */

@@ -16,6 +16,7 @@ export interface TelegramWebApp {
   themeParams: {
     bg_color?: string;
     secondary_bg_color?: string;
+    header_bg_color?: string;
     text_color?: string;
     hint_color?: string;
     button_color?: string;
@@ -68,6 +69,41 @@ export function getTelegramWebApp(): TelegramWebApp | null {
 
 export const tg = getTelegramWebApp();
 
+function hexToRgb(hex: string): [number, number, number] {
+  let h = hex.replace("#", "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const n = parseInt(h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function rgba(hex: string, alpha: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function lighten(hex: string, amount: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  const mix = (c: number) => Math.min(255, Math.round(c + (255 - c) * amount));
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+const APP_VARS = [
+  "--bg",
+  "--surface",
+  "--surface-2",
+  "--ink",
+  "--muted",
+  "--accent",
+  "--accent-strong",
+  "--accent-soft",
+  "--accent-glow",
+  "--on-accent",
+];
+
+function isHex(v: string | undefined): v is string {
+  return typeof v === "string" && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v);
+}
+
 export function applyTelegramTheme(): void {
   const root = document.documentElement;
   const webApp = getTelegramWebApp();
@@ -85,11 +121,43 @@ export function applyTelegramTheme(): void {
   if (p.button_color) root.style.setProperty("--tg-button", p.button_color);
   if (p.button_text_color) root.style.setProperty("--tg-button-text", p.button_text_color);
 
+  if (colorScheme === "dark") {
+    // Follow Telegram's dark palette for backgrounds, text and controls.
+    const bg = isHex(p.bg_color) ? p.bg_color : "#1c1c1e";
+    const surface = isHex(p.secondary_bg_color) ? p.secondary_bg_color : "#2c2c2e";
+    const surface2 = isHex(p.header_bg_color) ? p.header_bg_color : surface;
+    const ink = isHex(p.text_color) ? p.text_color : "#f2f2f7";
+    const hint = isHex(p.hint_color) ? p.hint_color : "#98989f";
+    const button = isHex(p.button_color) ? p.button_color : "#0a84ff";
+    const buttonText = isHex(p.button_text_color) ? p.button_text_color : "#ffffff";
+
+    const vars: Record<string, string> = {
+      "--bg": bg,
+      "--surface": surface,
+      "--surface-2": surface2,
+      "--ink": ink,
+      "--muted": hint,
+      "--accent": button,
+      "--accent-strong": lighten(button, 0.25),
+      "--accent-soft": rgba(button, 0.18),
+      "--accent-glow": rgba(button, 0.35),
+      "--on-accent": buttonText,
+    };
+    for (const [k, v] of Object.entries(vars)) {
+      root.style.setProperty(k, v);
+    }
+  } else {
+    // Light mode: white app background with the brand palette from CSS.
+    for (const v of APP_VARS) root.style.removeProperty(v);
+  }
+
   try {
     const headerColor =
-      p.bg_color ?? (colorScheme === "dark" ? "#2a000c" : "#fff5f9");
+      colorScheme === "dark"
+        ? p.secondary_bg_color ?? p.bg_color ?? "#1c1c1e"
+        : p.bg_color ?? "#ffffff";
     webApp.setHeaderColor?.(headerColor);
-    webApp.setBackgroundColor?.(headerColor);
+    webApp.setBackgroundColor?.(colorScheme === "dark" ? p.bg_color ?? "#1c1c1e" : "#ffffff");
   } catch {
     /* older clients */
   }
