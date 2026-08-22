@@ -64,6 +64,9 @@ app.use("/api/v1/admin/*", requireAdmin);
 app.route("/api/v1/admin", adminRoutes);
 
 async function start(): Promise<void> {
+  await bot.init();
+  console.log(`Bot initialized as @${bot.botInfo.username}`);
+
   if (env.WEBHOOK_URL) {
     const url = `${env.WEBHOOK_URL.replace(/\/$/, "")}/webhook`;
     await bot.api.setWebhook(url, env.WEBHOOK_SECRET ? { secret_token: env.WEBHOOK_SECRET } : {});
