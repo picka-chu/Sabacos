@@ -13,8 +13,15 @@ export function HomePage() {
   const [, navigate] = useLocation();
   const { categories, loading: categoriesLoading } = useCategories();
   const featured = useProducts({ featured: true, pageSize: 10 });
+  const latest = useProducts({ pageSize: 8 });
   const addToCart = useShopStore((s) => s.addToCart);
   const profile = useShopStore((s) => s.profile);
+
+  const featuredItems = featured.result?.items ?? [];
+  const latestItems = latest.result?.items ?? [];
+  const showFeatured = featuredItems.length > 0;
+  const items = showFeatured ? featuredItems : latestItems;
+  const productsLoading = showFeatured ? false : featured.loading || latest.loading;
 
   const handleAdd = async (product: import("@sabacos/core").Product) => {
     try {
@@ -63,14 +70,18 @@ export function HomePage() {
       </div>
 
       <div className="section-title">
-        <span>{t("featured")}</span>
+        <span>{showFeatured ? t("featured") : t("newArrivals")}</span>
       </div>
       <div className="product-grid">
-        {featured.loading || !featured.result
-          ? <ProductGridSkeleton count={4} />
-          : featured.result.items.map((p) => (
-              <ProductCard key={p.id} product={p} lang={lang} onAdd={handleAdd} />
-            ))}
+        {productsLoading ? (
+          <ProductGridSkeleton count={4} />
+        ) : items.length > 0 ? (
+          items.map((p) => <ProductCard key={p.id} product={p} lang={lang} onAdd={handleAdd} />)
+        ) : (
+          <p className="muted" style={{ gridColumn: "1 / -1", textAlign: "center", padding: "24px 0", fontSize: 14 }}>
+            {t("emptyCatalog")}
+          </p>
+        )}
       </div>
 
       <button

@@ -92,6 +92,13 @@
   transform: scale(0.98);
 }
 
+@media (hover: hover) {
+  .product-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow);
+  }
+}
+
 .product-card .thumb {
   aspect-ratio: 1;
   overflow: hidden;
@@ -169,26 +176,28 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   position: relative;
-  background: linear-gradient(135deg, var(--accent-soft), var(--surface));
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(248, 141, 247, 0.28), transparent 55%),
+    linear-gradient(135deg, var(--accent-soft), var(--surface));
   border: 1px solid var(--line);
-  padding: 26px 22px;
+  padding: 30px 24px;
 }
 
 .hero .hero-kicker {
-  font-size: 12px;
-  letter-spacing: 0.14em;
+  font-size: 11px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--accent);
-  font-weight: 600;
+  color: var(--accent-strong);
+  font-weight: 700;
 }
 
 .hero h1 {
   font-family: var(--font-serif);
-  font-weight: 600;
-  font-size: 30px;
-  margin: 8px 0 6px;
+  font-weight: 700;
+  font-size: 32px;
+  margin: 10px 0 6px;
   letter-spacing: -0.01em;
-  line-height: 1.1;
+  line-height: 1.12;
 }
 
 .hero p {

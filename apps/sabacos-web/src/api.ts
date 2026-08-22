@@ -1,4 +1,4 @@
-import { getTelegramWebApp } from "./telegram.js";
+import { getInitData } from "./telegram.js";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "/api/v1";
 
@@ -19,7 +19,7 @@ async function request<T>(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  const initData = getTelegramWebApp()?.initData ?? "";
+  const initData = getInitData();
   if (initData) headers["X-Telegram-Init-Data"] = initData;
 
   const res = await fetch(`${API_BASE}${path}`, {

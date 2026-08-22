@@ -93,7 +93,29 @@ export function haptic(style: "light" | "medium" | "heavy" = "light"): void {
 }
 
 export function isTelegramSession(): boolean {
-  return Boolean(getTelegramWebApp()?.initData);
+  return Boolean(getInitData());
+}
+
+export function getInitData(): string {
+  const webApp = getTelegramWebApp();
+  if (webApp?.initData) return webApp.initData;
+
+  // Fallback: Telegram also places signed data in the URL as tgWebAppData=...
+  const hashMatch = window.location.hash.match(/tgWebAppData=([^&]*)/);
+  if (hashMatch?.[1]) {
+    try {
+      return decodeURIComponent(hashMatch[1]);
+    } catch {
+      /* fall through */
+    }
+  }
+  try {
+    const fromSearch = new URLSearchParams(window.location.search).get("tgWebAppData");
+    if (fromSearch) return fromSearch;
+  } catch {
+    /* noop */
+  }
+  return "";
 }
 
 export function canRequestPhone(): boolean {
