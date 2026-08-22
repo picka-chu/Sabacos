@@ -15,18 +15,77 @@ import { getProductsByIds } from "../db/catalog.js";
 import { getProfileById } from "../db/profiles.js";
 import type { SendInvoiceParams } from "../services/checkout.js";
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function mainMenuKeyboard(env: AppEnv): InlineKeyboard {
+  return new InlineKeyboard()
+    .webApp("🛍  Shop Now", env.WEBAPP_URL)
+    .webApp("📦  My Orders", `${env.WEBAPP_URL}/orders`)
+    .row()
+    .text("ℹ️  Help", "show_help");
+}
+
+async function getShopSettings(env: AppEnv) {
+  return getSettings(getDb(env)).catch(() => null);
+}
+
 export function createBot(env: AppEnv): Bot {
   const bot = new Bot(env.BOT_TOKEN);
 
   bot.command("start", async (ctx) => {
-    const settings = await getSettings(getDb(env)).catch(() => null);
+    const settings = await getShopSettings(env);
+    const shopName = settings?.shopNameEn ?? "Sabacos";
+    const firstName = ctx.from?.first_name ? escapeHtml(ctx.from.first_name) : "";
+    await ctx.reply(
+      [
+        `🌸 Welcome to <b>${escapeHtml(shopName)}</b>${firstName ? `, ${firstName}` : ""}!`,
+        "",
+        `Premium cosmetics, delivered to your door — all inside Telegram.`,
+        "",
+        `✨ Curated skincare, makeup & fragrance`,
+        `💳 Secure checkout powered by Chapa`,
+        `🚚 Live order tracking until delivery`,
+      ].join("\n"),
+      { parse_mode: "HTML", reply_markup: mainMenuKeyboard(env) },
+    );
+  });
+
+  bot.command("shop", async (ctx) => {
+    await ctx.reply("🛍  Ready when you are:", {
+      reply_markup: new InlineKeyboard().webApp("🛍  Open the shop", env.WEBAPP_URL),
+    });
+  });
+
+  bot.command("orders", async (ctx) => {
+    await ctx.reply("📦 Your orders, all in one place:", {
+      reply_markup: new InlineKeyboard().webApp("📦  View my orders", `${env.WEBAPP_URL}/orders`),
+    });
+  });
+
+  bot.command("help", async (ctx) => {
+    const settings = await getShopSettings(env);
+    await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
+      reply_markup: mainMenuKeyboard(env),
+    });
+  });
+
+  bot.callbackQuery("show_help", async (ctx) => {
+    const settings = await getShopSettings(env);
+    await ctx.answerCallbackQuery();
+    await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
+      reply_markup: mainMenuKeyboard(env),
+    });
+  });
+
+  // Friendly fallback for any non-command text
+  bot.on("message:text").filter((ctx) => !ctx.message.text.startsWith("/"), async (ctx) => {
+    const settings = await getShopSettings(env);
     const shopName = settings?.shopNameEn ?? "Sabacos";
     await ctx.reply(
-      `Welcome to *${shopName}* 🌸\n\nBrowse our curated cosmetics, add to cart, and pay right here in Telegram — fast and secure.`,
-      {
-        parse_mode: "Markdown",
-        reply_markup: new InlineKeyboard().webApp("🛍  Open Shop", env.WEBAPP_URL),
-      },
+      `I'm the ${escapeHtml(shopName)} assistant 🌸 — I take orders, payments, and questions about deliveries.\n\nTap a button below to get started:`,
+      { reply_markup: mainMenuKeyboard(env) },
     );
   });
 
@@ -169,6 +228,40 @@ function formatAdminOrderAlert(order: OrderWithItems): string {
     `Delivery: ${order.deliveryFeeHalala > 0 ? formatETB(order.deliveryFeeHalala) : "Free"}`,
     `*Total: ${formatETB(order.totalHalala)}*`,
   ].join("\n");
+}
+
+function buildHelpText(shopPhone: string | null): string {
+  return [
+    "🛍  How ordering works",
+    "",
+    '1️⃣  Tap "Shop Now" and browse products',
+    "2️⃣  Add items to your cart",
+    "3️⃣  Tap Checkout and confirm your address",
+    "4️⃣  Pay securely right inside Telegram (via Chapa)",
+    "",
+    "📦  You'll get live status updates as your order is prepared and shipped.",
+    shopPhone ? `\n☎️  Questions? Call us: ${shopPhone}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export async function registerBotDefaults(bot: Bot, env: AppEnv): Promise<void> {
+  await Promise.allSettled([
+    bot.api.setMyCommands([
+      { command: "start", description: "Welcome & main menu 🌸" },
+      { command: "shop", description: "Browse the catalog 🛍" },
+      { command: "orders", description: "View your orders 📦" },
+      { command: "help", description: "How it works ℹ️" },
+    ]),
+    bot.api.setChatMenuButton({
+      menu_button: {
+        type: "web_app",
+        text: "🛍  Shop",
+        web_app: { url: env.WEBAPP_URL },
+      },
+    }),
+  ]);
 }
 
 export async function sendReceipt(ctx: Context, env: AppEnv, order: OrderWithItems): Promise<void> {

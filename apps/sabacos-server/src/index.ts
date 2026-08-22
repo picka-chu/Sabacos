@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { loadEnv } from "./env.js";
 import { getDb } from "./db/client.js";
-import { createBot } from "./bot/bot.js";
+import { createBot, registerBotDefaults } from "./bot/bot.js";
 import { catalogRoutes } from "./routes/catalog.js";
 import { cartRoutes } from "./routes/cart.js";
 import { orderRoutes } from "./routes/orders.js";
@@ -71,6 +71,9 @@ async function start(): Promise<void> {
   } else {
     console.log("WEBHOOK_URL not set; skipping webhook registration. Set it in production.");
   }
+
+  await registerBotDefaults(bot, env);
+  console.log("Bot commands and menu button registered");
 
   serve({ fetch: app.fetch, port: env.PORT }, (info) => {
     console.log(`Sabacos server listening on http://localhost:${info.port}`);
