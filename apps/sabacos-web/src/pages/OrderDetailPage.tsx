@@ -8,7 +8,7 @@ import {
   type OrderStatus,
 } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
-import { Header } from "../components/Header.js";
+import { PageTitle } from "../components/PageTitle.js";
 import { api } from "../api.js";
 import { apiErrorMessage } from "../store.js";
 import { toast } from "../components/Toast.js";
@@ -42,8 +42,7 @@ export function OrderDetailPage() {
   if (loading) {
     return (
       <div className="screen">
-        <Header showBack />
-        <div className="skeleton" style={{ height: 160, borderRadius: 22 }} />
+          <div className="skeleton" style={{ height: 160, borderRadius: 22 }} />
         <div className="skeleton" style={{ height: 60, borderRadius: 16, marginTop: 14 }} />
       </div>
     );
@@ -55,7 +54,7 @@ export function OrderDetailPage() {
 
   return (
     <div className="screen">
-      <Header title={order.orderNo} showBack />
+      <PageTitle title={order.orderNo} />
 
       <div className="card" style={{ padding: 18 }}>
         <div className="row" style={{ justifyContent: "space-between" }}>

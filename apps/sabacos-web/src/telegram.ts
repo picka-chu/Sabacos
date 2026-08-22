@@ -44,6 +44,12 @@ export interface TelegramWebApp {
     enable: () => void;
     disable: () => void;
   };
+  BackButton?: {
+    onClick: (cb: () => void) => void;
+    offClick: (cb: () => void) => void;
+    show: () => void;
+    hide: () => void;
+  };
   onEvent: (eventType: string, callback: (data?: unknown) => void) => void;
   offEvent?: (eventType: string, callback: (data?: unknown) => void) => void;
   requestPhone?: () => void;
@@ -78,6 +84,15 @@ export function applyTelegramTheme(): void {
   if (p.hint_color) root.style.setProperty("--tg-hint", p.hint_color);
   if (p.button_color) root.style.setProperty("--tg-button", p.button_color);
   if (p.button_text_color) root.style.setProperty("--tg-button-text", p.button_text_color);
+
+  try {
+    const headerColor =
+      p.bg_color ?? (colorScheme === "dark" ? "#2a000c" : "#fff5f9");
+    webApp.setHeaderColor?.(headerColor);
+    webApp.setBackgroundColor?.(headerColor);
+  } catch {
+    /* older clients */
+  }
 
   try {
     webApp.ready();

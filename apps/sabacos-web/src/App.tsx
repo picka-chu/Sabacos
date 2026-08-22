@@ -3,7 +3,7 @@ import { Route, Switch, useLocation } from "wouter";
 import { Info } from "lucide-react";
 import { api } from "./api.js";
 import { I18nProvider, useI18n } from "./i18n.js";
-import { applyTelegramTheme, getTelegramWebApp, isTelegramSession } from "./telegram.js";
+import { applyTelegramTheme, getTelegramWebApp, haptic, isTelegramSession } from "./telegram.js";
 import { BottomNav } from "./components/BottomNav.js";
 import { ToastHost } from "./components/Toast.js";
 import { useShopStore } from "./store.js";
@@ -37,6 +37,24 @@ function Shell() {
       .catch(() => setProfileStatus("error"));
     refreshCart().catch(() => {});
   }, [setProfile, setProfileStatus, refreshCart]);
+
+  useEffect(() => {
+    const bb = getTelegramWebApp()?.BackButton;
+    if (!bb) return;
+    const onClick = () => {
+      haptic("light");
+      window.history.back();
+    };
+    bb.onClick(onClick);
+    return () => bb.offClick(onClick);
+  }, []);
+
+  useEffect(() => {
+    const bb = getTelegramWebApp()?.BackButton;
+    if (!bb) return;
+    if (location !== "/") bb.show();
+    else bb.hide();
+  }, [location]);
 
   return (
     <>

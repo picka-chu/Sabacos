@@ -2,7 +2,6 @@ import { useRef, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { formatETB, t } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
-import { Header } from "../components/Header.js";
 import { QuantityStepper } from "../components/QuantityStepper.js";
 import { useProduct } from "../hooks.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
@@ -21,8 +20,7 @@ export function ProductPage() {
   if (loading) {
     return (
       <div className="screen">
-        <Header showBack />
-        <div className="skeleton" style={{ width: "100%", aspectRatio: "1", borderRadius: 22 }} />
+          <div className="skeleton" style={{ width: "100%", aspectRatio: "1", borderRadius: 22 }} />
         <div className="skeleton" style={{ height: 20, width: "70%", marginTop: 20 }} />
         <div className="skeleton" style={{ height: 14, width: "40%", marginTop: 12 }} />
       </div>
@@ -32,8 +30,7 @@ export function ProductPage() {
   if (!product) {
     return (
       <div className="screen">
-        <Header showBack />
-        <div className="empty-state">
+          <div className="empty-state">
           <h3>{t("error")}</h3>
           <p>{t("orderNotFoundHint")}</p>
           <button className="btn btn-secondary" onClick={() => navigate("/")}>
@@ -69,7 +66,6 @@ export function ProductPage() {
 
   return (
     <div className="screen">
-      <Header showBack />
       <div
         className="gallery"
         ref={galleryRef}

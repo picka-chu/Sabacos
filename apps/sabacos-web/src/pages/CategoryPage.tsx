@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { Search, ChevronRight } from "lucide-react";
 import { useI18n } from "../i18n.js";
-import { Header } from "../components/Header.js";
+import { PageTitle } from "../components/PageTitle.js";
 import { ProductCard } from "../components/ProductCard.js";
 import { ProductGridSkeleton } from "../components/Skeletons.js";
 import { useCategories, useProducts } from "../hooks.js";
@@ -74,7 +74,7 @@ export function CategoryPage() {
 
   return (
     <div className="screen">
-      <Header title={t("categories")} showBack />
+      <PageTitle title={t("categories")} />
 
       <section className="hero" style={{ marginTop: 4 }}>
         <div className="hero-kicker">{t("categories")}</div>

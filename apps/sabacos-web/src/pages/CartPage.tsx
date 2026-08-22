@@ -2,7 +2,7 @@ import { Trash2, ShoppingBag } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatETB, t } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
-import { Header } from "../components/Header.js";
+import { PageTitle } from "../components/PageTitle.js";
 import { QuantityStepper } from "../components/QuantityStepper.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
 import { toast } from "../components/Toast.js";
@@ -41,7 +41,7 @@ export function CartPage() {
 
   return (
     <div className="screen">
-      <Header title={t("nav_cart")} showBack />
+      <PageTitle title={t("nav_cart")} />
 
       {cartLoading && items.length === 0 ? (
         <div className="card" style={{ padding: 24 }}>{t("loading")}</div>

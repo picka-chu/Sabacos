@@ -4,7 +4,7 @@ import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User } from "lu
 import { formatETB, t } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { api } from "../api.js";
-import { Header } from "../components/Header.js";
+import { PageTitle } from "../components/PageTitle.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
 import { toast } from "../components/Toast.js";
 import { isTelegramSession, haptic, payInvoice, requestLocation, requestPhoneNumber } from "../telegram.js";
@@ -164,7 +164,7 @@ export function CheckoutPage() {
 
   return (
     <div className="screen">
-      <Header title={t("checkout")} showBack />
+      <PageTitle title={t("checkout")} />
 
       {cart.items.length === 0 && phase === "form" ? (
         <div className="empty-state" style={{ paddingTop: 80 }}>

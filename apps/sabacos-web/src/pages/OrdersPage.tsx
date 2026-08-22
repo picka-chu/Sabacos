@@ -3,7 +3,7 @@ import { Package, ChevronRight } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatETB, translateStatus, type Order } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
-import { Header } from "../components/Header.js";
+import { PageTitle } from "../components/PageTitle.js";
 import { api } from "../api.js";
 import { apiErrorMessage } from "../store.js";
 import { toast } from "../components/Toast.js";
@@ -25,7 +25,7 @@ export function OrdersPage() {
 
   return (
     <div className="screen">
-      <Header title={t("myOrders")} showBack />
+      <PageTitle title={t("myOrders")} />
       {orders === null ? (
         <div className="card" style={{ padding: 24 }}>{t("loading")}</div>
       ) : orders.length === 0 ? (

@@ -3,7 +3,7 @@ import { Check, Loader2, MapPin, Navigation, Package, Pencil, Phone, Settings } 
 import { useLocation } from "wouter";
 import { formatETB, type Order } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
-import { Header } from "../components/Header.js";
+import { PageTitle } from "../components/PageTitle.js";
 import { api } from "../api.js";
 import { apiErrorMessage, useShopStore } from "../store.js";
 import { toast } from "../components/Toast.js";
@@ -169,7 +169,7 @@ export function ProfilePage() {
   if (profileStatus === "loading") {
     return (
       <div className="screen">
-        <Header title={t("nav_profile")} showBack />
+        <PageTitle title={t("nav_profile")} />
         <div className="card profile-skel-row" style={{ padding: 20 }}>
           <div className="skeleton" style={{ width: 60, height: 60, borderRadius: "50%", flexShrink: 0 }} />
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -206,7 +206,7 @@ export function ProfilePage() {
 
   return (
     <div className="screen">
-      <Header title={t("nav_profile")} showBack />
+      <PageTitle title={t("nav_profile")} />
 
       <button
         className={`chip ${""}`}

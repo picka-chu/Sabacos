@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { useSearch, useLocation } from "wouter";
 import { useI18n } from "../i18n.js";
-import { Header } from "../components/Header.js";
+import { PageTitle } from "../components/PageTitle.js";
 import { ProductCard } from "../components/ProductCard.js";
 import { ProductGridSkeleton } from "../components/Skeletons.js";
 import { useCategories } from "../hooks.js";
@@ -117,7 +117,7 @@ export function ShopPage() {
 
   return (
     <div className="screen">
-      <Header title={t("nav_shop")} showBack />
+      <PageTitle title={t("nav_shop")} />
       <div className="flex" style={{ gap: 8, marginBottom: 12 }}>
         <div style={{ position: "relative", flex: 1 }}>
           <Search size={18} style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--muted)" }} />

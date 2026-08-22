@@ -1,7 +1,7 @@
 import { ChevronRight, Languages, LifeBuoy, Info } from "lucide-react";
 import { useLocation } from "wouter";
 import { useI18n } from "../i18n.js";
-import { Header } from "../components/Header.js";
+import { PageTitle } from "../components/PageTitle.js";
 import { haptic } from "../telegram.js";
 
 export function SettingsPage() {
@@ -10,7 +10,7 @@ export function SettingsPage() {
 
   return (
     <div className="screen">
-      <Header title={t("settingsTitle")} showBack />
+      <PageTitle title={t("settingsTitle")} />
 
       <div className="section-title" style={{ marginTop: 16 }}>
         <span>{t("language")}</span>
