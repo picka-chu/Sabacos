@@ -122,14 +122,17 @@ export function applyTelegramTheme(): void {
   if (p.button_text_color) root.style.setProperty("--tg-button-text", p.button_text_color);
 
   if (colorScheme === "dark") {
-    // Follow Telegram's dark palette for backgrounds, text and controls.
+    // Follow Telegram's dark palette for backgrounds and text only;
+    // brand pink stays on buttons, chips and active indicators.
     const bg = isHex(p.bg_color) ? p.bg_color : "#1c1c1e";
     const surface = isHex(p.secondary_bg_color) ? p.secondary_bg_color : "#2c2c2e";
-    const surface2 = isHex(p.header_bg_color) ? p.header_bg_color : surface;
+    const surface2 = isHex(p.header_bg_color)
+      ? p.header_bg_color
+      : isHex(p.secondary_bg_color)
+        ? p.secondary_bg_color
+        : "#3a3a3c";
     const ink = isHex(p.text_color) ? p.text_color : "#f2f2f7";
     const hint = isHex(p.hint_color) ? p.hint_color : "#98989f";
-    const button = isHex(p.button_color) ? p.button_color : "#0a84ff";
-    const buttonText = isHex(p.button_text_color) ? p.button_text_color : "#ffffff";
 
     const vars: Record<string, string> = {
       "--bg": bg,
@@ -137,11 +140,6 @@ export function applyTelegramTheme(): void {
       "--surface-2": surface2,
       "--ink": ink,
       "--muted": hint,
-      "--accent": button,
-      "--accent-strong": lighten(button, 0.25),
-      "--accent-soft": rgba(button, 0.18),
-      "--accent-glow": rgba(button, 0.35),
-      "--on-accent": buttonText,
     };
     for (const [k, v] of Object.entries(vars)) {
       root.style.setProperty(k, v);

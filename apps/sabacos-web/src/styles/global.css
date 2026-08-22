@@ -33,18 +33,18 @@
 }
 
 [data-theme="dark"] {
-  /* Neutral Telegram-style darks; applyTelegramTheme() refines these
-     from the client's live themeParams at runtime. */
+  /* Telegram dark surfaces + text; brand pink stays on accents.
+     applyTelegramTheme() refines bg/surface/ink from live themeParams. */
   --bg: #1c1c1e;
   --surface: #2c2c2e;
   --surface-2: #3a3a3c;
   --ink: #f2f2f7;
   --muted: #98989f;
-  --accent: #0a84ff;
-  --accent-strong: #6cb2ff;
-  --accent-soft: rgba(10, 132, 255, 0.16);
-  --accent-glow: rgba(10, 132, 255, 0.35);
-  --on-accent: #ffffff;
+  --accent: #f88df7;
+  --accent-strong: #ff9cf8;
+  --accent-soft: rgba(248, 141, 247, 0.14);
+  --accent-glow: rgba(248, 141, 247, 0.3);
+  --on-accent: #2a000c;
   --gold: #d8a53a;
   --success: #7fae7b;
   --danger: #d4685b;
