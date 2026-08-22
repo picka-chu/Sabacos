@@ -4,7 +4,7 @@ import { validateInitData, verifyInitDataHash, parseInitData } from "../src/inde
 
 const BOT_TOKEN = "123456:TESTTOKENSTRING";
 
-function buildInitData(opts: { authDate?: number } = {}): string {
+function buildInitData(opts: { authDate?: number; signature?: string } = {}): string {
   const authDate = opts.authDate ?? Math.floor(Date.now() / 1000);
   const user = {
     id: 987654321,
@@ -18,6 +18,7 @@ function buildInitData(opts: { authDate?: number } = {}): string {
     query_id: "AAHd3SAAAAA",
     user: JSON.stringify(user),
   };
+  if (opts.signature !== undefined) pairs.signature = opts.signature;
 
   const dataCheckString = Object.keys(pairs)
     .sort()
@@ -78,13 +79,9 @@ describe("initData validation", () => {
     expect(await verifyInitDataHash(initData, token)).toBe(true);
   });
 
-  it("ignores the Bot API 8.0 signature field when verifying", async () => {
-    const base = buildInitData();
-    const url = new URLSearchParams(base);
-    url.set("signature", "dGVzdCBzaWduYXR1cmUgYmFzZTY0");
-    const withSignature = url.toString();
-
-    expect(await verifyInitDataHash(withSignature, BOT_TOKEN)).toBe(true);
-    expect((await validateInitData(withSignature, BOT_TOKEN)).valid).toBe(true);
+  it("includes the Bot API 8.0 signature field in the data-check-string", async () => {
+    const initData = buildInitData({ signature: "dGVzdCBzaWduYXR1cmUgYmFzZTY0" });
+    expect(await verifyInitDataHash(initData, BOT_TOKEN)).toBe(true);
+    expect((await validateInitData(initData, BOT_TOKEN)).valid).toBe(true);
   });
 });
