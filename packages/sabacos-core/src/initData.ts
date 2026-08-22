@@ -65,6 +65,33 @@ export async function verifyInitDataHash(
 
   const dataCheckString = pairs.join("\n");
 
+  const buildDcs = (exclude: string[]): string => {
+    const p: string[] = [];
+    for (const [key, value] of searchParams.entries()) {
+      if (exclude.includes(key)) continue;
+      p.push(`${key}=${value}`);
+    }
+    p.sort();
+    return p.join("\n");
+  };
+  const webAppKey = new TextEncoder().encode("WebAppData");
+  const widgetKey = new Uint8Array(await crypto.subtle.digest("SHA-256", webAppKey));
+  const secretMini = await hmacSha256(webAppKey, botToken);
+  const dcsA = dataCheckString;
+  const dcsB = buildDcs(["hash"]);
+  const hexOf = async (secret: Uint8Array, data: string) => bytesToHex(await hmacSha256(secret, data));
+  console.log(
+    "[initdata-candidates]",
+    JSON.stringify({
+      provided: hash.slice(0, 12),
+      mini_exclSig: (await hexOf(secretMini, dcsA)).slice(0, 12),
+      mini_inclSig: (await hexOf(secretMini, dcsB)).slice(0, 12),
+      widget_exclSig: (await hexOf(widgetKey, dcsA)).slice(0, 12),
+      widget_inclSig: (await hexOf(widgetKey, dcsB)).slice(0, 12),
+      botTokenLast4: botToken.slice(-4),
+    }),
+  );
+
   const secretKey = await hmacSha256(new TextEncoder().encode("WebAppData"), botToken);
   const calculated = await hmacSha256(secretKey, dataCheckString);
   const calculatedHex = bytesToHex(calculated);
