@@ -82,12 +82,18 @@ export function CheckoutPage() {
       setOrderNo(order.orderNo);
       startPolling(order.id);
       const status = await payInvoice(invoiceUrl);
-      if (status === "failed") {
+      if (status === "paid") {
+        // Telegram confirmed the charge — show the success page immediately.
+        if (pollRef.current) clearInterval(pollRef.current);
+        setOrderTotal(order.totalHalala);
+        haptic("heavy");
+        setPhase("success");
+      } else if (status === "failed") {
         if (pollRef.current) clearInterval(pollRef.current);
         setErrorMsg(t("paymentFailed"));
         setPhase("failed");
       }
-      // paid / cancelled / pending: polling decides the outcome
+      // cancelled / pending / unknown: polling decides the outcome
     } catch (err) {
       setErrorMsg(apiErrorMessage(err));
       setPhase("failed");
@@ -134,6 +140,9 @@ export function CheckoutPage() {
           </div>
           <button className="btn btn-primary btn-block" style={{ marginTop: 20 }} onClick={() => navigate("/orders")}>
             {t("viewOrder")} <ArrowRight size={16} />
+          </button>
+          <button className="btn btn-ghost btn-block" style={{ marginTop: 4 }} onClick={() => navigate("/")}>
+            {t("startShopping")}
           </button>
         </div>
       </div>
