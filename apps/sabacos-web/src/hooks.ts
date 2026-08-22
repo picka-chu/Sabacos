@@ -36,6 +36,7 @@ export function useProducts(params: {
   categorySlug?: string | null;
   featured?: boolean;
   search?: string;
+  sort?: "newest" | "price_asc" | "price_desc";
   page?: number;
   pageSize?: number;
 }): {
@@ -53,13 +54,14 @@ export function useProducts(params: {
     if (params.categorySlug) qs.set("category", params.categorySlug);
     if (params.featured) qs.set("featured", "true");
     if (params.search) qs.set("q", params.search);
+    if (params.sort && params.sort !== "newest") qs.set("sort", params.sort);
     if (params.page) qs.set("page", String(params.page));
     if (params.pageSize) qs.set("pageSize", String(params.pageSize));
     api
       .get<ProductPageResult>(`/catalog/products?${qs.toString()}`)
       .then(setResult)
       .finally(() => setLoading(false));
-  }, [params.categoryId, params.categorySlug, params.featured, params.search, params.page, params.pageSize]);
+  }, [params.categoryId, params.categorySlug, params.featured, params.search, params.sort, params.page, params.pageSize]);
 
   useEffect(reload, [reload]);
 

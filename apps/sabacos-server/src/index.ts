@@ -11,7 +11,6 @@ import { adminRoutes } from "./routes/admin.js";
 import { requireUser } from "./auth/telegram.js";
 import { requireAdmin } from "./auth/admin.js";
 import { sendError, notFound } from "./errors.js";
-import { webhookRoutes } from "./routes/webhooks.js";
 
 const env = loadEnv();
 const db = getDb(env);
@@ -50,8 +49,6 @@ app.post("/webhook", async (c) => {
   await bot.handleUpdate(update);
   return c.json({ ok: true });
 });
-
-app.route("/api/v1/webhooks", webhookRoutes);
 
 app.route("/api/v1/catalog", catalogRoutes);
 

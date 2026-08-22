@@ -10,17 +10,21 @@ import { clearCart, getCart } from "../db/cart.js";
 import { createOrder } from "../db/orders.js";
 import { computeTotals } from "@sabacos/core";
 
+export interface InvoicePriceLine {
+  label: string;
+  amount: number;
+}
+
+export interface CreateInvoiceLinkParams {
+  payload: string;
+  title: string;
+  description: string;
+  currency: string;
+  prices: InvoicePriceLine[];
+}
+
 export interface CheckoutDeps {
-  initializeTransaction: (params: {
-    txRef: string;
-    amountHalala: number;
-    firstName: string;
-    lastName: string | null;
-    phone: string;
-    orderId: string;
-    orderNo: string;
-    shopName: string;
-  }) => Promise<string>;
+  createInvoiceLink: (params: CreateInvoiceLinkParams) => Promise<string>;
 }
 
 export interface CheckoutInput {
@@ -32,7 +36,7 @@ export interface CheckoutInput {
 
 export interface CheckoutResult {
   order: Order;
-  checkoutUrl: string;
+  invoiceUrl: string;
 }
 
 export class CartValidationError extends Error {
@@ -111,21 +115,28 @@ export async function checkout(
     })),
   });
 
-  let checkoutUrl: string;
+  const prices: InvoicePriceLine[] = [
+    ...cart.map((i) => ({
+      label: `${i.product.nameEn} × ${i.qty}`,
+      amount: i.product.priceHalala * i.qty,
+    })),
+  ];
+  if (totals.deliveryFeeHalala > 0) {
+    prices.push({ label: "Delivery fee", amount: totals.deliveryFeeHalala });
+  }
+
+  let invoiceUrl: string;
   try {
-    checkoutUrl = await deps.initializeTransaction({
-      txRef: order.id,
-      amountHalala: totals.totalHalala,
-      firstName: input.customerName,
-      lastName: null,
-      phone: input.phone,
-      orderId: order.id,
-      orderNo: order.orderNo,
-      shopName: settings.shopNameEn ?? "Sabacos",
+    invoiceUrl = await deps.createInvoiceLink({
+      payload: order.id,
+      title: `${settings.shopNameEn ?? "Sabacos"} — Order ${order.orderNo}`,
+      description: `${cart.length} item(s) · ${formatETB(totals.totalHalala)}`,
+      currency: "ETB",
+      prices,
     });
   } finally {
     await clearCart(db, profileId);
   }
 
-  return { order, checkoutUrl };
+  return { order, invoiceUrl };
 }

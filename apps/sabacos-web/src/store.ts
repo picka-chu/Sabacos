@@ -4,9 +4,11 @@ import { api, ApiError } from "./api.js";
 
 interface ShopState {
   profile: Profile | null;
+  profileStatus: "loading" | "ready" | "error";
   cart: CartSummary;
   cartLoading: boolean;
   setProfile: (profile: Profile) => void;
+  setProfileStatus: (status: "loading" | "ready" | "error") => void;
   refreshCart: () => Promise<CartSummary>;
   addToCart: (product: Product, qty?: number) => Promise<CartSummary>;
   updateQty: (itemId: string, qty: number) => Promise<CartSummary>;
@@ -14,7 +16,7 @@ interface ShopState {
   clearCart: () => Promise<void>;
   checkout: (input: { customerName: string; phone: string; address: string; note?: string | null }) => Promise<{
     order: Order;
-    checkoutUrl: string;
+    invoiceUrl: string;
   }>;
   getOrder: (id: string) => Promise<OrderWithItems | null>;
   updateProfile: (input: { phone?: string; address?: string }) => Promise<Profile>;
@@ -23,10 +25,13 @@ interface ShopState {
 
 export const useShopStore = create<ShopState>((set, get) => ({
   profile: null,
+  profileStatus: "loading",
   cart: { items: [], itemCount: 0, totals: { subtotalHalala: 0, deliveryFeeHalala: 0, totalHalala: 0 }, deliveryFeeHalala: 0, freeDeliveryThresholdHalala: 0 },
   cartLoading: false,
 
-  setProfile: (profile) => set({ profile }),
+  setProfile: (profile) => set({ profile, profileStatus: "ready" }),
+
+  setProfileStatus: (profileStatus) => set({ profileStatus }),
 
   refreshCart: async () => {
     set({ cartLoading: true });
@@ -64,7 +69,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
   },
 
   checkout: async (input) => {
-    const res = await api.post<{ order: Order; checkoutUrl: string }>("/checkout", input);
+    const res = await api.post<{ order: Order; invoiceUrl: string }>("/checkout", input);
     return res;
   },
 

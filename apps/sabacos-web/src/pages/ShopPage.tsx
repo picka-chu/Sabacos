@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { useSearch, useLocation } from "wouter";
 import { useI18n } from "../i18n.js";
@@ -10,12 +10,22 @@ import { api } from "../api.js";
 import { toast } from "../components/Toast.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
 
+type SortKey = "newest" | "price_asc" | "price_desc";
+
 interface PageResult {
   items: import("@sabacos/core").Product[];
   total: number;
   page: number;
   pageSize: number;
 }
+
+interface Filters {
+  sort: SortKey;
+  minEtb: string;
+  maxEtb: string;
+}
+
+const DEFAULT_FILTERS: Filters = { sort: "newest", minEtb: "", maxEtb: "" };
 
 export function ShopPage() {
   const { t, lang } = useI18n();
@@ -26,9 +36,12 @@ export function ShopPage() {
   const params = useMemo(() => new URLSearchParams(search), [search]);
   const activeCategory = params.get("category") ?? "";
   const initialQuery = params.get("q") ?? "";
+  const wantsFilters = params.get("filters") === "1";
 
   const [query, setQuery] = useState(initialQuery);
-  const [sort, setSort] = useState<"newest" | "price_asc" | "price_desc">("newest");
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [sheetOpen, setSheetOpen] = useState(wantsFilters);
+  const [draft, setDraft] = useState<Filters>(DEFAULT_FILTERS);
   const [items, setItems] = useState<import("@sabacos/core").Product[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -41,6 +54,9 @@ export function ShopPage() {
     const qs = new URLSearchParams();
     if (activeCategory) qs.set("category", activeCategory);
     if (query.trim()) qs.set("q", query.trim());
+    if (filters.sort !== "newest") qs.set("sort", filters.sort);
+    if (filters.minEtb.trim()) qs.set("minPrice", filters.minEtb.trim());
+    if (filters.maxEtb.trim()) qs.set("maxPrice", filters.maxEtb.trim());
     qs.set("page", String(pageNum));
     qs.set("pageSize", "12");
     try {
@@ -57,17 +73,38 @@ export function ShopPage() {
 
   useEffect(() => {
     setItems([]);
-    setPage(1);
     fetchPage(1, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCategory, query]);
+  }, [activeCategory, query, filters]);
 
-  const sorted = useMemo(() => {
-    const arr = [...items];
-    if (sort === "price_asc") arr.sort((a, b) => a.priceHalala - b.priceHalala);
-    if (sort === "price_desc") arr.sort((a, b) => b.priceHalala - a.priceHalala);
-    return arr;
-  }, [items, sort]);
+  const openSheet = () => {
+    setDraft(filters);
+    setSheetOpen(true);
+  };
+
+  const applySheet = () => {
+    const min = parseFloat(draft.minEtb);
+    const max = parseFloat(draft.maxEtb);
+    if (draft.minEtb.trim() && (!Number.isFinite(min) || min < 0)) return;
+    if (draft.maxEtb.trim() && (!Number.isFinite(max) || max < 0)) return;
+    if (
+      Number.isFinite(min) &&
+      Number.isFinite(max) &&
+      draft.minEtb.trim() &&
+      draft.maxEtb.trim() &&
+      min > max
+    ) {
+      setDraft({ ...draft, minEtb: draft.maxEtb, maxEtb: draft.minEtb });
+      return;
+    }
+    setFilters({ ...draft });
+    setSheetOpen(false);
+  };
+
+  const activeFilterCount =
+    (filters.sort !== "newest" ? 1 : 0) +
+    (filters.minEtb.trim() ? 1 : 0) +
+    (filters.maxEtb.trim() ? 1 : 0);
 
   const handleAdd = async (product: import("@sabacos/core").Product) => {
     try {
@@ -101,14 +138,34 @@ export function ShopPage() {
           )}
         </div>
         <button
-          className="chip"
-          style={{ padding: "0 14px", height: 46 }}
-          aria-label="Sort"
-          onClick={() =>
-            setSort((s) => (s === "newest" ? "price_asc" : s === "price_asc" ? "price_desc" : "newest"))
-          }
+          className={`chip ${activeFilterCount > 0 ? "active" : ""}`}
+          style={{ padding: "0 14px", height: 46, position: "relative" }}
+          aria-label={t("filters")}
+          onClick={openSheet}
         >
           <SlidersHorizontal size={18} />
+          {activeFilterCount > 0 && (
+            <span
+              style={{
+                position: "absolute",
+                top: -4,
+                right: -2,
+                minWidth: 18,
+                height: 18,
+                borderRadius: 999,
+                background: "var(--accent-strong)",
+                color: "#fff",
+                fontSize: 11,
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "0 5px",
+              }}
+            >
+              {activeFilterCount}
+            </span>
+          )}
         </button>
       </div>
 
@@ -133,7 +190,7 @@ export function ShopPage() {
       <div className="section-title">
         <span>{t("productsCount", { count: total })}</span>
         <span className="muted" style={{ textTransform: "none", letterSpacing: 0, fontSize: 13 }}>
-          {t(`sort_${sort}`)}
+          {t(`sort_${filters.sort}`)}
         </span>
       </div>
 
@@ -143,14 +200,21 @@ export function ShopPage() {
         <div className="empty-state">
           <h3>{t("noProducts")}</h3>
           <p>{t("noProductsHint")}</p>
-          <button className="btn btn-secondary" onClick={() => navigate("/shop")}>
-            {t("clear")}
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              setQuery("");
+              setFilters(DEFAULT_FILTERS);
+              navigate("/shop");
+            }}
+          >
+            {t("reset")}
           </button>
         </div>
       ) : (
         <>
           <div className="product-grid">
-            {sorted.map((p) => (
+            {items.map((p) => (
               <ProductCard key={p.id} product={p} lang={lang} onAdd={handleAdd} />
             ))}
           </div>
@@ -164,6 +228,62 @@ export function ShopPage() {
               {loading ? t("loading") : t("viewAll")}
             </button>
           )}
+        </>
+      )}
+
+      {sheetOpen && (
+        <>
+          <div className="sheet-backdrop" onClick={() => setSheetOpen(false)} />
+          <div className="sheet">
+            <div className="sheet-handle" />
+            <h2 className="serif" style={{ fontSize: 20, margin: "0 0 16px" }}>{t("filters")}</h2>
+
+            <label style={{ fontSize: 13, fontWeight: 700, display: "block", marginBottom: 8 }}>
+              {t("sortBy")}
+            </label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+              {(["newest", "price_asc", "price_desc"] as SortKey[]).map((key) => (
+                <button
+                  key={key}
+                  className={`chip ${draft.sort === key ? "active" : ""}`}
+                  onClick={() => setDraft({ ...draft, sort: key })}
+                >
+                  {t(`sort_${key}`)}
+                </button>
+              ))}
+            </div>
+
+            <label style={{ fontSize: 13, fontWeight: 700, display: "block", marginBottom: 8 }}>
+              {t("priceRange")}
+            </label>
+            <div className="flex" style={{ gap: 8 }}>
+              <input
+                value={draft.minEtb}
+                inputMode="decimal"
+                placeholder={t("priceFrom")}
+                onChange={(e) => setDraft({ ...draft, minEtb: e.target.value })}
+              />
+              <input
+                value={draft.maxEtb}
+                inputMode="decimal"
+                placeholder={t("priceTo")}
+                onChange={(e) => setDraft({ ...draft, maxEtb: e.target.value })}
+              />
+            </div>
+
+            <div className="flex" style={{ gap: 8, marginTop: 22 }}>
+              <button
+                className="btn btn-secondary"
+                style={{ flex: 1 }}
+                onClick={() => setDraft(DEFAULT_FILTERS)}
+              >
+                {t("reset")}
+              </button>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={applySheet}>
+                {t("apply")}
+              </button>
+            </div>
+          </div>
         </>
       )}
     </div>

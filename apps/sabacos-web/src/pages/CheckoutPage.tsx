@@ -6,7 +6,8 @@ import { useI18n } from "../i18n.js";
 import { api } from "../api.js";
 import { Header } from "../components/Header.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
-import { canRequestLocation, canRequestPhone, haptic, openExternalLink, requestLocation, requestPhoneNumber } from "../telegram.js";
+import { toast } from "../components/Toast.js";
+import { isTelegramSession, haptic, payInvoice, requestLocation, requestPhoneNumber } from "../telegram.js";
 
 type Phase = "form" | "pending" | "success" | "failed";
 
@@ -71,7 +72,7 @@ export function CheckoutPage() {
   const handleSubmit = async () => {
     setErrorMsg(null);
     try {
-      const { order, checkoutUrl } = await checkout({
+      const { order, invoiceUrl } = await checkout({
         customerName: form.customerName.trim(),
         phone: form.phone.trim(),
         address: form.address.trim(),
@@ -79,8 +80,14 @@ export function CheckoutPage() {
       });
       setOrderId(order.id);
       setOrderNo(order.orderNo);
-      openExternalLink(checkoutUrl);
       startPolling(order.id);
+      const status = await payInvoice(invoiceUrl);
+      if (status === "failed") {
+        if (pollRef.current) clearInterval(pollRef.current);
+        setErrorMsg(t("paymentFailed"));
+        setPhase("failed");
+      }
+      // paid / cancelled / pending: polling decides the outcome
     } catch (err) {
       setErrorMsg(apiErrorMessage(err));
       setPhase("failed");
@@ -91,6 +98,7 @@ export function CheckoutPage() {
     haptic();
     const number = await requestPhoneNumber();
     if (number) setForm((f) => ({ ...f, phone: number }));
+    else toast(t("featureUnavailable"));
   };
 
   const handleShareLocation = async () => {
@@ -102,6 +110,8 @@ export function CheckoutPage() {
         ...f,
         address: f.address.includes("[GPS:") ? f.address.replace(/\[GPS:[^\]]+\]/, gpsTag) : `${gpsTag} ${f.address}`.trim(),
       }));
+    } else {
+      toast(t("featureUnavailable"));
     }
   };
 
@@ -199,7 +209,7 @@ export function CheckoutPage() {
                   placeholder="+251 91 234 5678"
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 />
-                {canRequestPhone() && (
+                {isTelegramSession() && (
                   <button type="button" className="btn btn-secondary" style={{ flexShrink: 0, padding: "0 12px" }} onClick={handleSharePhone} title={t("sharePhone")}>
                     <User size={16} />
                   </button>
@@ -214,7 +224,7 @@ export function CheckoutPage() {
                 rows={3}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
               />
-              {canRequestLocation() && (
+              {isTelegramSession() && (
                 <button type="button" className="btn btn-secondary btn-block" style={{ marginTop: 8 }} onClick={handleShareLocation}>
                   <MapPin size={16} /> {t("shareLocation")}
                 </button>

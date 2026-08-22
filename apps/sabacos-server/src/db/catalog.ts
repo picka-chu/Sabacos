@@ -11,6 +11,8 @@ export async function listActiveCategories(db: Db): Promise<Category[]> {
   return (data ?? []).map((row) => categoryRowSchema.parse(row));
 }
 
+export type ProductSort = "newest" | "price_asc" | "price_desc";
+
 export interface ProductQuery {
   categoryId?: string | null;
   featured?: boolean;
@@ -19,6 +21,9 @@ export interface ProductQuery {
   pageSize?: number;
   includeInactive?: boolean;
   categorySlug?: string | null;
+  sort?: ProductSort | null;
+  minPriceHalala?: number | null;
+  maxPriceHalala?: number | null;
 }
 
 export interface ProductPage {
@@ -54,11 +59,20 @@ export async function listProducts(db: Db, q: ProductQuery = {}): Promise<Produc
     const term = `%${q.search.trim()}%`;
     query = query.or(`name_en.ilike.${term},name_am.ilike.${term}`);
   }
+  if (q.minPriceHalala != null) query = query.gte("price_halala", q.minPriceHalala);
+  if (q.maxPriceHalala != null) query = query.lte("price_halala", q.maxPriceHalala);
 
-  query = query
-    .order("is_featured", { ascending: false })
-    .order("created_at", { ascending: false })
-    .range(from, to);
+  if (q.sort === "price_asc") {
+    query = query.order("price_halala", { ascending: true });
+  } else if (q.sort === "price_desc") {
+    query = query.order("price_halala", { ascending: false });
+  } else {
+    query = query
+      .order("is_featured", { ascending: false })
+      .order("created_at", { ascending: false });
+  }
+
+  query = query.range(from, to);
 
   const { data, error, count } = await query;
   if (error) throw new Error(`listProducts: ${error.message}`);

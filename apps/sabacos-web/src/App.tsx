@@ -16,9 +16,11 @@ import { CheckoutPage } from "./pages/CheckoutPage.js";
 import { OrdersPage } from "./pages/OrdersPage.js";
 import { OrderDetailPage } from "./pages/OrderDetailPage.js";
 import { ProfilePage } from "./pages/ProfilePage.js";
+import { SettingsPage } from "./pages/SettingsPage.js";
 
 function Shell() {
   const setProfile = useShopStore((s) => s.setProfile);
+  const setProfileStatus = useShopStore((s) => s.setProfileStatus);
   const refreshCart = useShopStore((s) => s.refreshCart);
   const [location] = useLocation();
   const { t } = useI18n();
@@ -32,9 +34,9 @@ function Shell() {
     api
       .post<{ profile: import("@sabacos/core").Profile }>("/auth/telegram", {})
       .then((res) => setProfile(res.profile))
-      .catch(() => {});
+      .catch(() => setProfileStatus("error"));
     refreshCart().catch(() => {});
-  }, [setProfile, refreshCart]);
+  }, [setProfile, setProfileStatus, refreshCart]);
 
   return (
     <>
@@ -68,6 +70,7 @@ function Shell() {
         <Route path="/orders" component={OrdersPage} />
         <Route path="/orders/:id" component={OrderDetailPage} />
         <Route path="/profile" component={ProfilePage} />
+        <Route path="/settings" component={SettingsPage} />
         <Route>
           <HomePage />
         </Route>

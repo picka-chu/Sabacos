@@ -25,6 +25,7 @@ export interface TelegramWebApp {
   expand: () => void;
   close: () => void;
   openLink: (url: string) => void;
+  openInvoice?: (url: string) => void;
   setHeaderColor: (color: string) => void;
   setBackgroundColor: (color: string) => void;
   enableClosingConfirmation: () => void;
@@ -165,6 +166,49 @@ export function requestLocation(): Promise<{ lat: number; lng: number } | null> 
     }
 
     setTimeout(() => settle(null), 60_000);
+  });
+}
+
+export type InvoiceStatus = "paid" | "failed" | "cancelled" | "pending" | "unknown";
+
+export function payInvoice(url: string): Promise<InvoiceStatus> {
+  const webApp = getTelegramWebApp();
+  const openInvoice = webApp?.openInvoice;
+  if (!webApp || typeof openInvoice !== "function") {
+    return Promise.resolve("unknown");
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (status: InvoiceStatus) => {
+      if (settled) return;
+      settled = true;
+      try {
+        webApp.offEvent?.("invoiceClosed", handler);
+      } catch {
+        /* noop */
+      }
+      resolve(status);
+    };
+    const handler = (data?: unknown) => {
+      const payload = data as { url?: string; status?: string } | undefined;
+      if (payload?.url && payload.url !== url) return;
+      const raw = payload?.status;
+      if (raw === "paid" || raw === "failed" || raw === "cancelled" || raw === "pending") {
+        settle(raw);
+      } else {
+        settle("unknown");
+      }
+    };
+
+    try {
+      webApp.onEvent("invoiceClosed", handler);
+      openInvoice(url);
+    } catch {
+      settle("unknown");
+    }
+
+    setTimeout(() => settle("pending"), 120_000);
   });
 }
 

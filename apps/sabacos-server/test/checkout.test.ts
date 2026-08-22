@@ -56,7 +56,7 @@ function cartItem(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const initializeTransaction = vi.fn();
+const createInvoiceLink = vi.fn();
 const db = {} as never;
 const input = {
   customerName: "Selam",
@@ -93,22 +93,22 @@ describe("checkout", () => {
   it("rejects an empty cart", async () => {
     getCartMock.mockResolvedValue([]);
     await expect(
-      checkout(db, "profile-1", input, { initializeTransaction }),
+      checkout(db, "profile-1", input, { createInvoiceLink }),
     ).rejects.toMatchObject({ code: "empty" });
-    expect(initializeTransaction).not.toHaveBeenCalled();
+    expect(createInvoiceLink).not.toHaveBeenCalled();
   });
 
   it("rejects inactive products", async () => {
     getCartMock.mockResolvedValue([cartItem({ product: product({ isActive: false }) })]);
     await expect(
-      checkout(db, "profile-1", input, { initializeTransaction }),
+      checkout(db, "profile-1", input, { createInvoiceLink }),
     ).rejects.toMatchObject({ code: "inactive" });
   });
 
   it("rejects quantities above stock", async () => {
     getCartMock.mockResolvedValue([cartItem({ qty: 5, product: product({ stock: 3 }) })]);
     await expect(
-      checkout(db, "profile-1", input, { initializeTransaction }),
+      checkout(db, "profile-1", input, { createInvoiceLink }),
     ).rejects.toMatchObject({ code: "insufficient_stock" });
   });
 
@@ -117,15 +117,15 @@ describe("checkout", () => {
       cartItem({ qty: 1, product: product({ priceHalala: 100 }) }),
     ]);
     await expect(
-      checkout(db, "profile-1", input, { initializeTransaction }),
+      checkout(db, "profile-1", input, { createInvoiceLink }),
     ).rejects.toMatchObject({ code: "min_order" });
   });
 
-  it("creates the order, initializes a Chapa transaction, and clears the cart", async () => {
+  it("creates the order, initializes a invoice link, and clears the cart", async () => {
     getCartMock.mockResolvedValue([cartItem({ qty: 2 })]);
-    initializeTransaction.mockResolvedValue("https://checkout.chapa.pay/abc123");
+    createInvoiceLink.mockResolvedValue("https://t.me/invoice/abc123");
 
-    const result = await checkout(db, "profile-1", input, { initializeTransaction });
+    const result = await checkout(db, "profile-1", input, { createInvoiceLink });
 
     expect(createOrderMock).toHaveBeenCalledWith(
       db,
@@ -136,26 +136,27 @@ describe("checkout", () => {
         totalHalala: 112000,
       }),
     );
-    expect(initializeTransaction).toHaveBeenCalledWith(
+    expect(createInvoiceLink).toHaveBeenCalledWith(
       expect.objectContaining({
-        txRef: "00000000-0000-0000-0000-000000000009",
-        amountHalala: 112000,
-        orderId: "00000000-0000-0000-0000-000000000009",
-        orderNo: "SB-000001",
-        shopName: "Sabacos",
-        phone: "+251911111111",
+        payload: "00000000-0000-0000-0000-000000000009",
+        title: "Sabacos — Order SB-000001",
+        currency: "ETB",
+        prices: [
+          { label: "Test Serum × 2", amount: 100000 },
+          { label: "Delivery fee", amount: 12000 },
+        ],
       }),
     );
     expect(clearCartMock).toHaveBeenCalledWith(db, "profile-1");
-    expect(result.checkoutUrl).toBe("https://checkout.chapa.pay/abc123");
+    expect(result.invoiceUrl).toBe("https://t.me/invoice/abc123");
     expect(result.order.orderNo).toBe("SB-000001");
   });
 
   it("waives the delivery fee above the free threshold", async () => {
     getCartMock.mockResolvedValue([cartItem({ qty: 5, product: product({ priceHalala: 40000 }) })]);
-    initializeTransaction.mockResolvedValue("https://checkout.chapa.pay/free-delivery");
+    createInvoiceLink.mockResolvedValue("https://t.me/invoice/freedelivery");
 
-    await checkout(db, "profile-1", input, { initializeTransaction });
+    await checkout(db, "profile-1", input, { createInvoiceLink });
 
     expect(createOrderMock).toHaveBeenCalledWith(
       db,
@@ -165,18 +166,20 @@ describe("checkout", () => {
         totalHalala: 200000,
       }),
     );
-    expect(initializeTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({ amountHalala: 200000 }),
+    expect(createInvoiceLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prices: [{ label: "Test Serum × 5", amount: 200000 }],
+      }),
     );
   });
 
-  it("propagates Chapa failures and still clears the cart", async () => {
+  it("propagates Chapa failures and and clears the cart", async () => {
     getCartMock.mockResolvedValue([cartItem({ qty: 2 })]);
-    initializeTransaction.mockRejectedValue(new Error("chapa down"));
+    createInvoiceLink.mockRejectedValue(new Error("invoice failed"));
 
     await expect(
-      checkout(db, "profile-1", input, { initializeTransaction }),
-    ).rejects.toThrow("chapa down");
+      checkout(db, "profile-1", input, { createInvoiceLink }),
+    ).rejects.toThrow("invoice failed");
     expect(clearCartMock).toHaveBeenCalledWith(db, "profile-1");
   });
 });

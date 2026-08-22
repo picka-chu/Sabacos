@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Languages, Loader2, MapPin, Package, Pencil, Phone, User } from "lucide-react";
+import { Check, Loader2, MapPin, Navigation, Package, Pencil, Phone, Settings } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatETB, type Order } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
@@ -7,12 +7,13 @@ import { Header } from "../components/Header.js";
 import { api } from "../api.js";
 import { apiErrorMessage, useShopStore } from "../store.js";
 import { toast } from "../components/Toast.js";
-import { canRequestPhone, haptic, requestPhoneNumber } from "../telegram.js";
+import { haptic, isTelegramSession, requestLocation, requestPhoneNumber } from "../telegram.js";
 
 export function ProfilePage() {
-  const { t, lang, setLang } = useI18n();
+  const { t } = useI18n();
   const [, navigate] = useLocation();
   const profile = useShopStore((s) => s.profile);
+  const profileStatus = useShopStore((s) => s.profileStatus);
   const updateProfile = useShopStore((s) => s.updateProfile);
 
   const [orders, setOrders] = useState<Order[] | null>(null);
@@ -21,6 +22,7 @@ export function ProfilePage() {
   const [address, setAddress] = useState("");
   const [saving, setSaving] = useState(false);
   const [sharingPhone, setSharingPhone] = useState(false);
+  const [sharingLocation, setSharingLocation] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export function ProfilePage() {
   }, [orders]);
 
   const memberSince = profile?.createdAt
-    ? new Date(profile.createdAt).toLocaleDateString(lang === "am" ? "am-ET" : "en-US", {
+    ? new Date(profile.createdAt).toLocaleDateString("en-US", {
         year: "numeric",
         month: "short",
       })
@@ -81,13 +83,18 @@ export function ProfilePage() {
     }
   }
 
+  function errorMsgGuard(_len: number) {
+    setErrorMsg(t("invalidAddress"));
+  }
+
   async function handleSharePhone() {
+    if (!isTelegramSession()) return;
     haptic("light");
     setSharingPhone(true);
     try {
       const number = await requestPhoneNumber();
       if (!number) {
-        setErrorMsg(t("invalidPhone"));
+        toast(t("featureUnavailable"));
         return;
       }
       await updateProfile({ phone: number });
@@ -96,6 +103,32 @@ export function ProfilePage() {
       toast(apiErrorMessage(err));
     } finally {
       setSharingPhone(false);
+    }
+  }
+
+  async function handleShareLocation() {
+    if (!isTelegramSession()) return;
+    haptic("light");
+    setSharingLocation(true);
+    try {
+      const loc = await requestLocation();
+      if (!loc) {
+        toast(t("featureUnavailable"));
+        return;
+      }
+      const gpsTag = `[GPS: ${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}]`;
+      const base =
+        profile?.address && !profile.address.includes("[GPS:")
+          ? `${gpsTag} ${profile.address}`
+          : profile?.address
+            ? profile.address.replace(/\[GPS:[^\]]+\]/, gpsTag)
+            : gpsTag;
+      await updateProfile({ address: base });
+      toast(t("profileUpdated"));
+    } catch (err) {
+      toast(apiErrorMessage(err));
+    } finally {
+      setSharingLocation(false);
     }
   }
 
@@ -133,9 +166,56 @@ export function ProfilePage() {
     </div>
   );
 
+  if (profileStatus === "loading") {
+    return (
+      <div className="screen">
+        <Header title={t("nav_profile")} showBack />
+        <div className="card profile-skel-row" style={{ padding: 20 }}>
+          <div className="skeleton" style={{ width: 60, height: 60, borderRadius: "50%", flexShrink: 0 }} />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="skeleton" style={{ height: 18, width: "55%" }} />
+            <div className="skeleton" style={{ height: 13, width: "38%" }} />
+            <div className="skeleton" style={{ height: 11, width: "28%" }} />
+          </div>
+        </div>
+        <div className="card" style={{ display: "flex", marginTop: 12 }}>
+          <div style={{ flex: 1, textAlign: "center", padding: "16px 8px" }}>
+            <div className="skeleton" style={{ height: 26, width: 64, margin: "0 auto" }} />
+            <div className="skeleton" style={{ height: 11, width: 48, margin: "8px auto 0" }} />
+          </div>
+          <div style={{ width: 1, background: "var(--line)" }} />
+          <div style={{ flex: 1, textAlign: "center", padding: "16px 8px" }}>
+            <div className="skeleton" style={{ height: 26, width: 64, margin: "0 auto" }} />
+            <div className="skeleton" style={{ height: 11, width: 48, margin: "8px auto 0" }} />
+          </div>
+        </div>
+        <div className="section-title">
+          <span>{t("contactInfo")}</span>
+        </div>
+        <div className="card" style={{ padding: 18, display: "flex", gap: 12 }}>
+          <div className="skeleton" style={{ width: 18, height: 18, borderRadius: 8, marginTop: 2 }} />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="skeleton" style={{ height: 14, width: "82%" }} />
+            <div className="skeleton" style={{ height: 14, width: "58%" }} />
+            <div className="skeleton" style={{ height: 13, width: "40%" }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="screen">
       <Header title={t("nav_profile")} showBack />
+
+      <button
+        className={`chip ${""}`}
+        style={{ marginLeft: "auto", display: "flex", marginBottom: 10 }}
+        aria-label={t("settingsTitle")}
+        onClick={() => navigate("/settings")}
+      >
+        <Settings size={16} /> {t("settingsTitle")}
+      </button>
 
       <div className="card" style={{ padding: 20, display: "flex", alignItems: "center", gap: 14 }}>
         {avatar}
@@ -220,12 +300,12 @@ export function ProfilePage() {
                 )}
               </div>
             </div>
-            <div className="flex" style={{ marginTop: 12 }}>
+            <div className="flex" style={{ marginTop: 12, flexWrap: "wrap" }}>
               <button className="btn btn-ghost" onClick={startEdit}>
                 <Pencil size={15} />
                 {t("edit")}
               </button>
-              {!profile.phone && canRequestPhone() && (
+              {isTelegramSession() && !profile.phone && (
                 <button className="btn btn-ghost" disabled={sharingPhone} onClick={handleSharePhone}>
                   {sharingPhone ? (
                     <Loader2 size={15} style={{ animation: "spin 1.2s linear infinite" }} />
@@ -233,6 +313,16 @@ export function ProfilePage() {
                     <Phone size={15} />
                   )}
                   {t("sharePhone")}
+                </button>
+              )}
+              {isTelegramSession() && (
+                <button className="btn btn-ghost" disabled={sharingLocation} onClick={handleShareLocation}>
+                  {sharingLocation ? (
+                    <Loader2 size={15} style={{ animation: "spin 1.2s linear infinite" }} />
+                  ) : (
+                    <Navigation size={15} />
+                  )}
+                  {t("shareLocation")}
                 </button>
               )}
             </div>
@@ -246,39 +336,29 @@ export function ProfilePage() {
                 <Pencil size={15} />
                 {t("edit")}
               </button>
-              {canRequestPhone() && (
-                <button className="btn btn-secondary" disabled={sharingPhone} onClick={handleSharePhone}>
-                  {sharingPhone ? (
-                    <Loader2 size={15} style={{ animation: "spin 1.2s linear infinite" }} />
-                  ) : (
-                    <Phone size={15} />
-                  )}
-                  {t("sharePhone")}
-                </button>
+              {isTelegramSession() && (
+                <>
+                  <button className="btn btn-secondary" disabled={sharingPhone} onClick={handleSharePhone}>
+                    {sharingPhone ? (
+                      <Loader2 size={15} style={{ animation: "spin 1.2s linear infinite" }} />
+                    ) : (
+                      <Phone size={15} />
+                    )}
+                    {t("sharePhone")}
+                  </button>
+                  <button className="btn btn-secondary" disabled={sharingLocation} onClick={handleShareLocation}>
+                    {sharingLocation ? (
+                      <Loader2 size={15} style={{ animation: "spin 1.2s linear infinite" }} />
+                    ) : (
+                      <Navigation size={15} />
+                    )}
+                    {t("shareLocation")}
+                  </button>
+                </>
               )}
             </div>
           </div>
         )}
-      </div>
-
-      <div className="section-title">
-        <span>{t("language")}</span>
-      </div>
-      <div className="card" style={{ padding: 8, display: "flex", gap: 8 }}>
-        {(["en", "am"] as const).map((code) => (
-          <button
-            key={code}
-            className={`chip ${lang === code ? "active" : ""}`}
-            style={{ flex: 1, justifyContent: "center" }}
-            onClick={() => {
-              haptic("light");
-              setLang(code);
-            }}
-          >
-            <Languages size={16} />
-            {code === "en" ? t("languageEnglish") : t("languageAmharic")}
-          </button>
-        ))}
       </div>
 
       <div className="section-title">
@@ -296,7 +376,7 @@ export function ProfilePage() {
       </button>
 
       <div className="card" style={{ padding: 18, marginTop: 20, display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <User size={18} className="muted" style={{ marginTop: 2, flexShrink: 0 }} />
+        <MapPin size={18} className="muted" style={{ marginTop: 2, flexShrink: 0 }} />
         <p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.5 }}>
           Sabacos · {t("tagline")} · ETB
         </p>

@@ -200,6 +200,27 @@ export function createBot(env: AppEnv): Bot {
   return bot;
 }
 
+export function makeCreateInvoiceLink(env: AppEnv, bot: Bot) {
+  return async (params: {
+    payload: string;
+    title: string;
+    description: string;
+    currency: string;
+    prices: { label: string; amount: number }[];
+  }): Promise<string> => {
+    const link = await bot.api.createInvoiceLink(
+      params.title,
+      params.description,
+      params.payload,
+      env.CHAPA_PROVIDER_TOKEN,
+      params.currency,
+      params.prices.map((p) => ({ label: p.label, amount: p.amount })),
+    );
+    if (!link) throw new Error("createInvoiceLink failed: no link returned");
+    return link;
+  };
+}
+
 function formatOrderLines(order: OrderWithItems): string {
   const lines = order.items
     .map((i) => `• ${i.nameEn} × ${i.qty} — ${formatETB(i.subtotalHalala)}`)

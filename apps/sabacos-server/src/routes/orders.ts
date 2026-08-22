@@ -8,7 +8,7 @@ import { getDb } from "../db/client.js";
 import { getOrdersByProfile, getOrderWithItems } from "../db/orders.js";
 import { saveProfileContact } from "../db/profiles.js";
 import { checkout, CartValidationError } from "../services/checkout.js";
-import { createChapaClient } from "../services/chapa.js";
+import { createBot, makeCreateInvoiceLink } from "../bot/bot.js";
 
 export const orderRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
 
@@ -27,16 +27,18 @@ orderRoutes.post("/checkout", async (c) => {
   const env = getAppEnv();
   const db = getDb(env);
   const profile = c.get("profile");
+  if (!profile.telegramId) throw badRequest("Telegram chat not linked");
 
   const body = await c.req.json().catch(() => null);
   const input = safeParse(checkoutSchema, body);
 
+  const bot = createBot(env);
   try {
     const result = await checkout(
       db,
       profile.id,
       { ...input, note: input.note ?? null },
-      { initializeTransaction: createChapaClient(env).initializeTransaction },
+      { createInvoiceLink: makeCreateInvoiceLink(env, bot) },
     );
     return c.json(result, 201);
   } catch (err) {
