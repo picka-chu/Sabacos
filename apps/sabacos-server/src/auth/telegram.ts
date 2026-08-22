@@ -1,6 +1,6 @@
 import { validateInitData, type Profile } from "@sabacos/core";
 import type { Context, MiddlewareHandler } from "hono";
-import type { AppEnv } from "../env.js";
+import { getAppEnv, type AppEnv } from "../env.js";
 import { getDb } from "../db/client.js";
 import { upsertTelegramProfile } from "../db/profiles.js";
 import { unauthorized } from "../errors.js";
@@ -23,7 +23,7 @@ export const requireUser: MiddlewareHandler<{ Bindings: AppEnv } & UserContext> 
   c,
   next,
 ) => {
-  const env = c.env;
+  const env = getAppEnv();
   const initData = readInitData(c as Context);
   const result = await validateInitData(initData, env.BOT_TOKEN);
   if (!result.valid || !result.payload) {

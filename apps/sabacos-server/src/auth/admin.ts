@@ -1,6 +1,6 @@
 import type { Profile } from "@sabacos/core";
 import type { Context, MiddlewareHandler } from "hono";
-import type { AppEnv } from "../env.js";
+import { getAppEnv, type AppEnv } from "../env.js";
 import { getDb } from "../db/client.js";
 import { getProfileByAuthId } from "../db/profiles.js";
 import { forbidden, unauthorized } from "../errors.js";
@@ -21,7 +21,7 @@ export const requireAdmin: MiddlewareHandler<{ Bindings: AppEnv } & AdminContext
   c,
   next,
 ) => {
-  const env = c.env;
+  const env = getAppEnv();
   const token = readBearer(c as Context);
   if (!token) throw unauthorized("Missing bearer token");
 

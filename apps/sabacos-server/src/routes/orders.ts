@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { badRequest, safeParse } from "../errors.js";
 import { checkoutSchema } from "@sabacos/core";
-import type { AppEnv } from "../env.js";
+import { getAppEnv, type AppEnv } from "../env.js";
 import type { UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
 import { getOrdersByProfile, getOrderWithItems } from "../db/orders.js";
@@ -24,21 +24,21 @@ const saveProfileSchema = z
   });
 
 orderRoutes.post("/checkout", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const profile = c.get("profile");
   if (!profile.telegramId) throw badRequest("Telegram chat not linked");
 
   const body = await c.req.json().catch(() => null);
   const input = safeParse(checkoutSchema, body);
 
-  const bot = createBot(c.env);
+  const bot = createBot(getAppEnv());
   try {
     const result = await checkout(
       db,
       profile.id,
       profile.telegramId,
       { ...input, note: input.note ?? null },
-      { sendInvoice: makeSendInvoice(c.env, bot) },
+      { sendInvoice: makeSendInvoice(getAppEnv(), bot) },
     );
     return c.json(result, 201);
   } catch (err) {
@@ -53,14 +53,14 @@ orderRoutes.post("/checkout", async (c) => {
 });
 
 orderRoutes.get("/orders", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const profile = c.get("profile");
   const orders = await getOrdersByProfile(db, profile.id);
   return c.json({ orders });
 });
 
 orderRoutes.get("/orders/:id", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const profile = c.get("profile");
   const order = await getOrderWithItems(db, c.req.param("id"));
   if (!order || order.profileId !== profile.id) {
@@ -70,7 +70,7 @@ orderRoutes.get("/orders/:id", async (c) => {
 });
 
 orderRoutes.patch("/profile", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const profile = c.get("profile");
   const body = await c.req.json().catch(() => null);
   const input = safeParse(saveProfileSchema, body);

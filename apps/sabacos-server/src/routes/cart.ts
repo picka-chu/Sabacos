@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { badRequest, safeParse } from "../errors.js";
 import { addCartItemSchema, patchCartItemSchema, type CartSummary } from "@sabacos/core";
-import type { AppEnv } from "../env.js";
+import { getAppEnv, type AppEnv } from "../env.js";
 import type { UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
 import { getProductById } from "../db/catalog.js";
@@ -16,14 +16,14 @@ import {
 export const cartRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
 
 cartRoutes.get("/", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const profile = c.get("profile");
   const summary = await getCartSummary(db, profile.id);
   return c.json(summary);
 });
 
 cartRoutes.post("/", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const profile = c.get("profile");
   const body = await c.req.json().catch(() => null);
   const input = safeParse(addCartItemSchema, body);
@@ -39,7 +39,7 @@ cartRoutes.post("/", async (c) => {
 });
 
 cartRoutes.patch("/:id", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const profile = c.get("profile");
   const itemId = c.req.param("id");
   const body = await c.req.json().catch(() => null);
@@ -60,7 +60,7 @@ cartRoutes.patch("/:id", async (c) => {
 });
 
 cartRoutes.delete("/:id", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const profile = c.get("profile");
   await removeCartItem(db, profile.id, c.req.param("id"));
   const summary = await getCartSummary(db, profile.id);
@@ -68,7 +68,7 @@ cartRoutes.delete("/:id", async (c) => {
 });
 
 cartRoutes.delete("/", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const profile = c.get("profile");
   await clearCart(db, profile.id);
   const summary = await getCartSummary(db, profile.id);

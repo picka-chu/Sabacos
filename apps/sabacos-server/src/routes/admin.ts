@@ -19,7 +19,7 @@ import {
   orderRowSchema,
   type Product,
 } from "@sabacos/core";
-import type { AppEnv } from "../env.js";
+import { getAppEnv, type AppEnv } from "../env.js";
 import type { AdminContext } from "../auth/admin.js";
 import { getDb } from "../db/client.js";
 import { listProducts, getProductById } from "../db/catalog.js";
@@ -94,7 +94,7 @@ function toCategoryPatch(body: z.infer<typeof updateCategorySchema>): Record<str
 // ----------------------------------------------------------------- stats
 
 adminRoutes.get("/stats", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
 
   const [paidOrders, allOrders, lowStock, recent] = await Promise.all([
     db.from("orders").select("total_halala, created_at").eq("payment_status", "success"),
@@ -164,7 +164,7 @@ adminRoutes.get("/stats", async (c) => {
 // -------------------------------------------------------------- products
 
 adminRoutes.get("/products", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const { q, category, page, pageSize } = c.req.query();
   const result = await listProducts(db, {
     search: q ?? null,
@@ -177,14 +177,14 @@ adminRoutes.get("/products", async (c) => {
 });
 
 adminRoutes.get("/products/:id", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const product = await getProductById(db, c.req.param("id"), true);
   if (!product) throw notFound();
   return c.json({ product });
 });
 
 adminRoutes.post("/products", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const body = await c.req.json().catch(() => null);
   const input = safeParse(createProductSchema, body);
 
@@ -198,7 +198,7 @@ adminRoutes.post("/products", async (c) => {
 });
 
 adminRoutes.patch("/products/:id", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const id = c.req.param("id");
   const existing = await getProductById(db, id, true);
   if (!existing) throw notFound();
@@ -217,7 +217,7 @@ adminRoutes.patch("/products/:id", async (c) => {
 });
 
 adminRoutes.delete("/products/:id", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const id = c.req.param("id");
   const existing = await getProductById(db, id, true);
   if (!existing) throw notFound();
@@ -235,7 +235,7 @@ adminRoutes.delete("/products/:id", async (c) => {
 });
 
 adminRoutes.post("/products/:id/images", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const id = c.req.param("id");
   const product = await getProductById(db, id, true);
   if (!product) throw notFound();
@@ -271,7 +271,7 @@ adminRoutes.post("/products/:id/images", async (c) => {
 // ------------------------------------------------------------- categories
 
 adminRoutes.get("/categories", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const { data, error } = await db
     .from("categories")
     .select("*")
@@ -281,7 +281,7 @@ adminRoutes.get("/categories", async (c) => {
 });
 
 adminRoutes.post("/categories", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const body = await c.req.json().catch(() => null);
   const input = safeParse(createCategorySchema, body);
   const { data, error } = await db
@@ -294,7 +294,7 @@ adminRoutes.post("/categories", async (c) => {
 });
 
 adminRoutes.patch("/categories/:id", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const id = c.req.param("id");
   const body = await c.req.json().catch(() => null);
   const input = safeParse(updateCategorySchema, body);
@@ -309,7 +309,7 @@ adminRoutes.patch("/categories/:id", async (c) => {
 });
 
 adminRoutes.delete("/categories/:id", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const { error } = await db.from("categories").delete().eq("id", c.req.param("id"));
   if (error) throw new Error(`delete category: ${error.message}`);
   return c.json({ ok: true });
@@ -318,7 +318,7 @@ adminRoutes.delete("/categories/:id", async (c) => {
 // ---------------------------------------------------------------- orders
 
 adminRoutes.get("/orders", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const { status, page, pageSize } = c.req.query();
   const result = await listOrders(db, {
     status: status as never,
@@ -329,14 +329,14 @@ adminRoutes.get("/orders", async (c) => {
 });
 
 adminRoutes.get("/orders/:id", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const order = await getOrderWithItems(db, c.req.param("id"));
   if (!order) throw notFound();
   return c.json({ order });
 });
 
 adminRoutes.patch("/orders/:id/status", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const id = c.req.param("id");
   const order = await getOrderById(db, id);
   if (!order) throw notFound();
@@ -352,7 +352,7 @@ adminRoutes.patch("/orders/:id/status", async (c) => {
   if (!updated) throw notFound();
 
   await notifyAdminChannel(
-    c.env,
+    getAppEnv(),
     `Order ${updated.orderNo} → *${updated.status.toUpperCase()}*`,
   );
 
@@ -362,13 +362,13 @@ adminRoutes.patch("/orders/:id/status", async (c) => {
 // --------------------------------------------------------------- settings
 
 adminRoutes.get("/settings", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const settings = await getSettings(db, true);
   return c.json({ settings });
 });
 
 adminRoutes.put("/settings", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const body = await c.req.json().catch(() => null);
   const input = safeParse(updateSettingsSchema, body);
   const settings = await updateSettings(db, {

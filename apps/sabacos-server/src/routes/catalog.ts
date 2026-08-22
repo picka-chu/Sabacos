@@ -1,14 +1,14 @@
 import { Hono } from "hono";
 import { safeParse } from "../errors.js";
 import { z } from "zod";
-import type { AppEnv } from "../env.js";
+import { getAppEnv, type AppEnv } from "../env.js";
 import { getDb } from "../db/client.js";
 import { listActiveCategories, listProducts, getProductById } from "../db/catalog.js";
 
 export const catalogRoutes = new Hono<{ Bindings: AppEnv }>();
 
 catalogRoutes.get("/categories", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const categories = await listActiveCategories(db);
   return c.json({ categories });
 });
@@ -25,7 +25,7 @@ const productListQuerySchema = z.object({
 });
 
 catalogRoutes.get("/products", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const query = safeParse(productListQuerySchema, c.req.query());
   const isUuid = z.uuid().safeParse(query.category).success;
   const page = await listProducts(db, {
@@ -40,7 +40,7 @@ catalogRoutes.get("/products", async (c) => {
 });
 
 catalogRoutes.get("/products/:id", async (c) => {
-  const db = getDb(c.env);
+  const db = getDb(getAppEnv());
   const product = await getProductById(db, c.req.param("id"));
   if (!product) return c.json({ error: { code: "not_found", message: "Product not found" } }, 404);
   return c.json({ product });

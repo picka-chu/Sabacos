@@ -69,11 +69,6 @@ export async function verifyInitDataHash(
   const calculated = await hmacSha256(secretKey, dataCheckString);
   const calculatedHex = bytesToHex(calculated);
 
-  console.log("dataCheckString:", JSON.stringify(dataCheckString));
-  console.log("calculatedHex:", calculatedHex);
-  console.log("expectedHash:", hash);
-  console.log("botToken length:", botToken.length, "last4:", botToken.slice(-4));
-
   const a = hexToBytes(calculatedHex);
   const b = hexToBytes(hash);
   if (a.length !== b.length) return false;

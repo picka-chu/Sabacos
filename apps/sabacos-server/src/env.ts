@@ -16,8 +16,18 @@ const envSchema = z.object({
 
 export type AppEnv = z.infer<typeof envSchema>;
 
+let loadedEnv: AppEnv | null = null;
+
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
-  return envSchema.parse(source);
+  loadedEnv = envSchema.parse(source);
+  return loadedEnv;
+}
+
+export function getAppEnv(): AppEnv {
+  if (!loadedEnv) {
+    throw new Error("Env not initialized: call loadEnv() at startup before handling requests");
+  }
+  return loadedEnv;
 }
 
 export function envToPublic(env: AppEnv): Pick<AppEnv, "WEBAPP_URL" | "ADMIN_DASHBOARD_URL"> {
