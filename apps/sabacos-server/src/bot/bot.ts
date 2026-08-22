@@ -12,7 +12,7 @@ import { getDb } from "../db/client.js";
 import { getSettings } from "../db/settings.js";
 import { getOrderById, getOrderItems, getOrderWithItems } from "../db/orders.js";
 import { getProductsByIds } from "../db/catalog.js";
-import { getProfileById } from "../db/profiles.js";
+import { getProfileById, upsertTelegramProfile } from "../db/profiles.js";
 import type { SendInvoiceParams } from "../services/checkout.js";
 
 function escapeHtml(value: string): string {
@@ -35,6 +35,17 @@ export function createBot(env: AppEnv): Bot {
   const bot = new Bot(env.BOT_TOKEN);
 
   bot.command("start", async (ctx) => {
+    if (ctx.from) {
+      // Trusted identity straight from Telegram's webhook — create the
+      // account before the user ever opens the mini app.
+      await upsertTelegramProfile(getDb(env), {
+        telegramId: ctx.from.id,
+        firstName: ctx.from.first_name ?? null,
+        lastName: ctx.from.last_name ?? null,
+        username: ctx.from.username ?? null,
+      }).catch((err) => console.error("start: profile upsert failed", err));
+    }
+
     const settings = await getShopSettings(env);
     const shopName = settings?.shopNameEn ?? "Sabacos";
     const firstName = ctx.from?.first_name ? escapeHtml(ctx.from.first_name) : "";

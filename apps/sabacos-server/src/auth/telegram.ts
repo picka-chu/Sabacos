@@ -27,7 +27,15 @@ export const requireUser: MiddlewareHandler<{ Bindings: AppEnv } & UserContext> 
   const initData = readInitData(c as Context);
   const result = await validateInitData(initData, env.BOT_TOKEN);
   if (!result.valid || !result.payload) {
-    throw unauthorized("Invalid Telegram session");
+    const reason = !initData
+      ? "Open Sabacos from inside Telegram to continue"
+      : result.error === "Invalid signature"
+        ? "Telegram session rejected (signature mismatch — check BOT_TOKEN on the server)"
+        : result.error === "initData expired"
+          ? "Session expired — close and reopen Sabacos"
+          : "Malformed Telegram session";
+    console.error(`[auth] request rejected: ${reason}`);
+    throw unauthorized(reason);
   }
 
   const db = getDb(env);
