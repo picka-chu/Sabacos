@@ -33,6 +33,7 @@ import {
 import { getSettings, updateSettings } from "../db/settings.js";
 import { notifyAdminChannel, createBot } from "../bot/bot.js";
 import { aiEnabled, llamaVisionProduct } from "../services/ai.js";
+import { r2Config, r2Put, r2Delete } from "../services/r2.js";
 
 export const adminRoutes = new Hono<{ Bindings: AppEnv } & AdminContext>();
 
@@ -218,7 +219,8 @@ adminRoutes.patch("/products/:id", async (c) => {
 });
 
 adminRoutes.delete("/products/:id", async (c) => {
-  const db = getDb(getAppEnv());
+  const env = getAppEnv();
+  const db = getDb(env);
   const id = c.req.param("id");
   const existing = await getProductById(db, id, true);
   if (!existing) throw notFound();
@@ -226,7 +228,12 @@ adminRoutes.delete("/products/:id", async (c) => {
   const { error } = await db.from("products").delete().eq("id", id);
   if (error) throw new Error(`delete product: ${error.message}`);
 
+  const r2 = r2Config(env);
   for (const url of existing.imageUrls) {
+    if (r2 && url.startsWith(`${r2.publicBase}/`)) {
+      await r2Delete(r2, url.slice(r2.publicBase.length + 1)).catch(() => {});
+      continue;
+    }
     const match = url.match(/\/product-images\/(.+)$/);
     if (match?.[1]) {
       await db.storage.from("product-images").remove([match[1]]).catch(() => {});
@@ -235,8 +242,33 @@ adminRoutes.delete("/products/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+/** Stores an image in Cloudflare R2 when configured, else Supabase Storage. */
+async function storeImage(
+  env: AppEnv,
+  db: ReturnType<typeof getDb>,
+  key: string,
+  file: File,
+): Promise<string> {
+  const r2 = r2Config(env);
+  if (r2) {
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      return await r2Put(r2, key, bytes, file.type || "image/jpeg");
+    } catch (err) {
+      console.error("[r2] upload failed, falling back to Supabase:", err);
+    }
+  }
+  const { error } = await db.storage
+    .from("product-images")
+    .upload(key, file, { contentType: file.type || "image/jpeg", upsert: true });
+  if (error) throw new Error(`upload image: ${error.message}`);
+  const { data } = db.storage.from("product-images").getPublicUrl(key);
+  return data.publicUrl;
+}
+
 adminRoutes.post("/products/:id/images", async (c) => {
-  const db = getDb(getAppEnv());
+  const env = getAppEnv();
+  const db = getDb(env);
   const id = c.req.param("id");
   const product = await getProductById(db, id, true);
   if (!product) throw notFound();
@@ -249,13 +281,8 @@ adminRoutes.post("/products/:id/images", async (c) => {
   for (const file of files) {
     if (!(file instanceof File) || file.size === 0) continue;
     const clean = String(file.name ?? "image").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
-    const path = `${id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${clean}`;
-    const { error } = await db.storage
-      .from("product-images")
-      .upload(path, file, { contentType: file.type || "image/jpeg", upsert: true });
-    if (error) throw new Error(`upload image: ${error.message}`);
-    const { data } = db.storage.from("product-images").getPublicUrl(path);
-    uploaded.push(data.publicUrl);
+    const path = `products/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${clean}`;
+    uploaded.push(await storeImage(env, db, path, file));
   }
 
   const urls = [...product.imageUrls, ...uploaded];
@@ -464,11 +491,7 @@ adminRoutes.post("/ai/product-image", async (c) => {
 
   const safeName = file.name.replace(/[^\w.-]+/g, "_").slice(-80) || "photo.jpg";
   const path = `ai/${Date.now()}-${safeName}`;
-  const { error } = await db.storage
-    .from("product-images")
-    .upload(path, file, { contentType: file.type || "image/jpeg", upsert: true });
-  if (error) throw new Error(`upload image: ${error.message}`);
-  const { data } = db.storage.from("product-images").getPublicUrl(path);
+  const url = await storeImage(env, db, path, file);
 
   let draft = null;
   if (aiEnabled(env)) {

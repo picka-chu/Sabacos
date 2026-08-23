@@ -15,6 +15,10 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().trim().optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().trim().optional(),
   CLOUDFLARE_API_TOKEN: z.string().trim().optional(),
+  R2_ACCESS_KEY_ID: z.string().trim().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().trim().optional(),
+  R2_BUCKET: z.string().trim().optional(),
+  R2_PUBLIC_BASE: z.string().trim().url().optional(),
   MARKETING_SWEEP: z.enum(["on", "off"]).default("on"),
 });
 

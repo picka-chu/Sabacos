@@ -41,6 +41,15 @@ services:
         sync: false
       - key: CLOUDFLARE_API_TOKEN
         sync: false
+      # Cloudflare R2 image storage (optional; falls back to Supabase Storage)
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_PUBLIC_BASE
+        sync: false
       - key: MARKETING_SWEEP
         sync: false
       # Public URLs of the two static sites, e.g. https://sabacos-web.onrender.com
