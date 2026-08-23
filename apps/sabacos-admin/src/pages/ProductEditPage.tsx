@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useParams, useLocation } from "wouter";
 import { ArrowLeft, Save, Trash2, Upload } from "lucide-react";
 import type { Category, Product } from "@sabacos/core";
-import { api, uploadImages } from "../lib/api.js";
+import { api, uploadAiImage } from "../lib/api.js";
 import { useAuth } from "../auth.js";
 
 const etbToHalala = (etb: string) => Math.round((Number(etb) || 0) * 100);
@@ -101,17 +101,32 @@ export function ProductEditPage() {
 
   const removeImage = (url: string) => setImages((imgs) => imgs.filter((u) => u !== url));
 
+  const [analyzing, setAnalyzing] = useState(false);
+
   const onFiles = async (files: FileList | null) => {
-    if (!files || !token || !id) return;
+    if (!files || !token || files.length === 0) return;
     setBusy(true);
+    setAnalyzing(true);
     setError(null);
     try {
-      const res = await uploadImages(id, Array.from(files), token);
-      setImages(res.product.imageUrls);
+      for (const file of Array.from(files)) {
+        const res = await uploadAiImage(file, token);
+        setImages((imgs) => (imgs.includes(res.url) ? imgs : [...imgs, res.url]));
+        if (res.draft) {
+          setForm((f) => ({
+            ...f,
+            nameEn: f.nameEn.trim() || res.draft!.nameEn,
+            nameAm: f.nameAm.trim() || res.draft!.nameAm,
+            descriptionEn: f.descriptionEn.trim() || res.draft!.descriptionEn,
+            descriptionAm: f.descriptionAm.trim() || res.draft!.descriptionAm,
+          }));
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setBusy(false);
+      setAnalyzing(false);
     }
   };
 
@@ -218,45 +233,44 @@ export function ProductEditPage() {
           </div>
         </div>
 
-        {!isNew && (
-          <div className="card" style={{ marginTop: 14 }}>
-            <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Images</h3>
-            <div className="thumb-grid">
-              {images.map((url) => (
-                <div key={url} style={{ position: "relative" }}>
-                  <img src={url} alt="" />
-                  <button
-                    type="button"
-                    onClick={() => removeImage(url)}
-                    style={{
-                      position: "absolute",
-                      top: 2,
-                      right: 2,
-                      width: 20,
-                      height: 20,
-                      borderRadius: 999,
-                      background: "rgba(0,0,0,0.55)",
-                      color: "#fff",
-                      fontSize: 12,
-                      lineHeight: "20px",
-                    }}
-                    title="Remove"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-            <label className="btn btn-outline btn-sm" style={{ marginTop: 12, display: "inline-flex" }}>
-              <Upload size={15} />
-              Upload images
-              <input type="file" multiple accept="image/*" hidden onChange={(e) => onFiles(e.target.files)} />
-            </label>
-            <p className="muted" style={{ margin: "8px 0 0", fontSize: 12 }}>
-              Removed images are dropped from this product on save.
-            </p>
+        <div className="card" style={{ marginTop: 14 }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Images</h3>
+          <p className="muted" style={{ margin: "0 0 12px", fontSize: 12 }}>
+            Upload a photo first — the AI drafts the name and description for you.
+            {analyzing && " Analyzing image…"}
+          </p>
+          <div className="thumb-grid">
+            {images.map((url) => (
+              <div key={url} style={{ position: "relative" }}>
+                <img src={url} alt="" />
+                <button
+                  type="button"
+                  onClick={() => removeImage(url)}
+                  style={{
+                    position: "absolute",
+                    top: 2,
+                    right: 2,
+                    width: 20,
+                    height: 20,
+                    borderRadius: 999,
+                    background: "rgba(0,0,0,0.55)",
+                    color: "#fff",
+                    fontSize: 12,
+                    lineHeight: "20px",
+                  }}
+                  title="Remove"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           </div>
-        )}
+          <label className="btn btn-outline btn-sm" style={{ marginTop: 12, display: "inline-flex" }}>
+            <Upload size={15} />
+            Upload images
+            <input type="file" multiple accept="image/*" hidden onChange={(e) => onFiles(e.target.files)} />
+          </label>
+        </div>
 
         <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={busy}>
           <Save size={16} />

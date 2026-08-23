@@ -64,3 +64,29 @@ export async function uploadImages(
   }
   return (await res.json()) as { product: import("@sabacos/core").Product };
 }
+
+export interface ProductDraft {
+  nameEn: string;
+  nameAm: string;
+  descriptionEn: string;
+  descriptionAm: string;
+}
+
+/** Uploads a photo, stores it, and asks the AI to draft the product listing. */
+export async function uploadAiImage(
+  file: File,
+  token: string,
+): Promise<{ url: string; draft: ProductDraft | null }> {
+  const form = new FormData();
+  form.append("image", file);
+  const res = await fetch(`${BASE}/admin/ai/product-image`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    throw new ApiError("upload_failed", data?.error?.message ?? "Upload failed", res.status);
+  }
+  return (await res.json()) as { url: string; draft: ProductDraft | null };
+}

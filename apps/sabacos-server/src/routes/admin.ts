@@ -31,7 +31,8 @@ import {
   updateOrderStatus,
 } from "../db/orders.js";
 import { getSettings, updateSettings } from "../db/settings.js";
-import { notifyAdminChannel } from "../bot/bot.js";
+import { notifyAdminChannel, createBot } from "../bot/bot.js";
+import { aiEnabled, llamaVisionProduct } from "../services/ai.js";
 
 export const adminRoutes = new Hono<{ Bindings: AppEnv } & AdminContext>();
 
@@ -380,4 +381,104 @@ adminRoutes.put("/settings", async (c) => {
     adminChannelId: input.admin_channel_id,
   });
   return c.json({ settings });
+});
+
+// --------------------------------------------------------------- broadcast
+
+const broadcastSchema = z
+  .object({
+    text: z.string().trim().min(1).max(4000),
+    imageUrl: z.string().trim().url().optional(),
+    buttonText: z.string().trim().min(1).max(64).optional(),
+    buttonUrl: z.string().trim().url().optional(),
+  })
+  .refine((v) => v.buttonUrl === undefined || v.buttonText !== undefined, {
+    message: "buttonText is required when buttonUrl is set",
+  });
+
+adminRoutes.get("/broadcast/audience", async (c) => {
+  const db = getDb(getAppEnv());
+  const { count, error } = await db
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .not("telegram_id", "is", null);
+  if (error) throw new Error(`broadcast audience: ${error.message}`);
+  return c.json({ count: count ?? 0 });
+});
+
+adminRoutes.post("/broadcast", async (c) => {
+  const env = getAppEnv();
+  const db = getDb(env);
+  const input = safeParse(broadcastSchema, await c.req.json().catch(() => null));
+
+  const bot = createBot(env);
+  const replyMarkup =
+    input.buttonUrl && input.buttonText
+      ? { inline_keyboard: [[{ text: input.buttonText, url: input.buttonUrl }]] }
+      : undefined;
+
+  let sent = 0;
+  let failed = 0;
+  const PAGE = 200;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await db
+      .from("profiles")
+      .select("telegram_id")
+      .not("telegram_id", "is", null)
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`broadcast fetch: ${error.message}`);
+    if (!data || data.length === 0) break;
+    for (const row of data) {
+      try {
+        if (input.imageUrl) {
+          await bot.api.sendPhoto(row.telegram_id as string, input.imageUrl, {
+            caption: input.text.slice(0, 1024),
+            ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+          });
+        } else {
+          await bot.api.sendMessage(row.telegram_id as string, input.text, {
+            ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+          });
+        }
+        sent += 1;
+      } catch {
+        failed += 1;
+      }
+      // Stay well under Telegram's ~30 msg/sec global limit.
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    if (data.length < PAGE) break;
+  }
+  return c.json({ sent, failed });
+});
+
+// --------------------------------------------------------------- ai product draft
+
+adminRoutes.post("/ai/product-image", async (c) => {
+  const env = getAppEnv();
+  const db = getDb(env);
+  const form = await c.req.parseBody();
+  const file = form["image"];
+  if (!(file instanceof File)) throw badRequest("image file required");
+  if (file.size > 10 * 1024 * 1024) throw badRequest("Image too large (max 10MB)");
+
+  const safeName = file.name.replace(/[^\w.-]+/g, "_").slice(-80) || "photo.jpg";
+  const path = `ai/${Date.now()}-${safeName}`;
+  const { error } = await db.storage
+    .from("product-images")
+    .upload(path, file, { contentType: file.type || "image/jpeg", upsert: true });
+  if (error) throw new Error(`upload image: ${error.message}`);
+  const { data } = db.storage.from("product-images").getPublicUrl(path);
+
+  let draft = null;
+  if (aiEnabled(env)) {
+    try {
+      const bytes = Buffer.from(await file.arrayBuffer());
+      const mime = file.type || "image/jpeg";
+      draft = await llamaVisionProduct(env, `data:${mime};base64,${bytes.toString("base64")}`);
+    } catch (err) {
+      console.error("[ai] product draft failed:", err);
+    }
+  }
+  return c.json({ url: data.publicUrl, draft });
 });

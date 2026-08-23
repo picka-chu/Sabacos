@@ -98,8 +98,7 @@ export async function llamaAdCopy(
 
 const NOTIFY_JSON = z.object({ text: z.string().min(1).max(400) });
 
-/** Telegram notification copy via Llama. Returns null on any failure. */
-export async function llamaNotifyText(
+/** Telegram notification copy via Llama. Returns null on any failure. */export async function llamaNotifyText(
   env: { CLOUDFLARE_ACCOUNT_ID?: string; CLOUDFLARE_API_TOKEN?: string },
   product: { name: string; priceEtb: string; oldPriceEtb?: string; discountPct: number | null },
   interestHint: string,
@@ -130,6 +129,64 @@ export async function llamaNotifyText(
   try {
     const parsed = NOTIFY_JSON.safeParse(extractJson(result.response));
     return parsed.success ? parsed.data.text : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface ProductDraft {
+  nameEn: string;
+  nameAm: string;
+  descriptionEn: string;
+  descriptionAm: string;
+}
+
+const DRAFT_JSON = z.object({
+  name_en: z.string().min(1),
+  name_am: z.string().min(1),
+  description_en: z.string().min(1),
+  description_am: z.string().min(1),
+});
+
+/**
+ * Analyzes a product photo with the Llama 3.2 11B vision model and drafts
+ * bilingual name + description. Returns null on any failure.
+ */
+export async function llamaVisionProduct(
+  env: aiEnv,
+  imageDataUrl: string,
+): Promise<ProductDraft | null> {
+  const result = await cfRun<{ response: string }>(env, "@cf/meta/llama-3.2-11b-vision-instruct", {
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: imageDataUrl } },
+          {
+            type: "text",
+            text:
+              "Identify this cosmetics/beauty product from the photo. " +
+              "Write a concise product listing. Respond ONLY with JSON: " +
+              '{"name_en": "product name in English (max 60 chars)", ' +
+              '"name_am": "the same name in Amharic script", ' +
+              '"description_en": "2 sentence marketing description in English", ' +
+              '"description_am": "the same description in Amharic script"}.',
+          },
+        ],
+      },
+    ],
+    max_tokens: 600,
+  });
+  if (!result?.response) return null;
+  try {
+    const parsed = DRAFT_JSON.safeParse(extractJson(result.response));
+    if (!parsed.success) return null;
+    return {
+      nameEn: parsed.data.name_en.slice(0, 80),
+      nameAm: parsed.data.name_am.slice(0, 80),
+      descriptionEn: parsed.data.description_en.slice(0, 1000),
+      descriptionAm: parsed.data.description_am.slice(0, 1000),
+    };
   } catch {
     return null;
   }
