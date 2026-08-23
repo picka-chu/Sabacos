@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Loader2, MapPin, Navigation, Package, Pencil, Phone, Settings } from "lucide-react";
+import { Check, ChevronRight, HelpCircle, Info, Loader2, MapPin, Navigation, Package, Pencil, Phone, Settings } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatETB, type Order } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
@@ -362,24 +362,29 @@ export function ProfilePage() {
       </div>
 
       <div className="section-title">
-        <span>{t("nav_orders")}</span>
+        <span>{t("settingsTitle")}</span>
       </div>
-      <button
-        className="card"
-        style={{ padding: 18, display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left" }}
-        onClick={() => navigate("/orders")}
-      >
-        <Package size={20} strokeWidth={1.75} />
-        <span style={{ fontWeight: 600, flex: 1 }}>{t("myOrders")}</span>
-        {stats.count > 0 && <span className="badge badge-accent">{stats.count}</span>}
-        <span className="muted">→</span>
-      </button>
-
-      <div className="card" style={{ padding: 18, marginTop: 20, display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <MapPin size={18} className="muted" style={{ marginTop: 2, flexShrink: 0 }} />
-        <p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.5 }}>
-          Sabacos · {t("tagline")} · ETB
-        </p>
+      <div className="card" style={{ overflow: "hidden" }}>
+        {[
+          { icon: <Settings size={20} strokeWidth={1.75} />, label: t("settingsTitle"), to: "/settings" },
+          { icon: <Info size={20} strokeWidth={1.75} />, label: t("about"), to: "/about" },
+          { icon: <HelpCircle size={20} strokeWidth={1.75} />, label: t("faq"), to: "/faq" },
+          { icon: <Package size={20} strokeWidth={1.75} />, label: t("myOrders"), to: "/orders", badge: stats.count },
+        ].map((row, i) => (
+          <button
+            key={row.to}
+            className="profile-menu-row"
+            style={{ borderTop: i === 0 ? "none" : "1px solid var(--line)" }}
+            onClick={() => navigate(row.to)}
+          >
+            {row.icon}
+            <span style={{ fontWeight: 600, flex: 1, textAlign: "left" }}>{row.label}</span>
+            {"badge" in row && (row as { badge?: number }).badge ? (
+              <span className="badge badge-accent">{(row as { badge?: number }).badge}</span>
+            ) : null}
+            <ChevronRight size={18} className="muted" />
+          </button>
+        ))}
       </div>
     </div>
   );

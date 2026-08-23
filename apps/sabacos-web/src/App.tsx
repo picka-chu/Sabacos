@@ -17,6 +17,8 @@ import { OrdersPage } from "./pages/OrdersPage.js";
 import { OrderDetailPage } from "./pages/OrderDetailPage.js";
 import { ProfilePage } from "./pages/ProfilePage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
+import { AboutPage } from "./pages/AboutPage.js";
+import { FaqPage } from "./pages/FaqPage.js";
 
 function Shell() {
   const setProfile = useShopStore((s) => s.setProfile);
@@ -89,6 +91,8 @@ function Shell() {
         <Route path="/orders/:id" component={OrderDetailPage} />
         <Route path="/profile" component={ProfilePage} />
         <Route path="/settings" component={SettingsPage} />
+        <Route path="/about" component={AboutPage} />
+        <Route path="/faq" component={FaqPage} />
         <Route>
           <HomePage />
         </Route>

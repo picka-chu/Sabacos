@@ -158,6 +158,21 @@
   box-shadow: 0 4px 12px var(--accent-glow);
 }
 
+/* Profile menu rows */
+.profile-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  width: 100%;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.profile-menu-row:active {
+  background: var(--surface-2);
+}
+
 /* Category chips row */
 .chip-scroll {
   display: flex;
