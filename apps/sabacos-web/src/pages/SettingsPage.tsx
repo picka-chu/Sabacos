@@ -1,12 +1,10 @@
-import { ChevronRight, Languages, LifeBuoy, Info } from "lucide-react";
-import { useLocation } from "wouter";
+import { Languages, Info } from "lucide-react";
 import { useI18n } from "../i18n.js";
 import { PageTitle } from "../components/PageTitle.js";
 import { haptic } from "../telegram.js";
 
 export function SettingsPage() {
   const { t, lang, setLang } = useI18n();
-  const [, navigate] = useLocation();
 
   return (
     <div className="screen">
@@ -31,19 +29,6 @@ export function SettingsPage() {
           </button>
         ))}
       </div>
-
-      <div className="section-title">
-        <span>{t("helpSupport")}</span>
-      </div>
-      <button
-        className="card"
-        style={{ padding: 18, display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left" }}
-        onClick={() => navigate("/profile")}
-      >
-        <LifeBuoy size={20} strokeWidth={1.75} />
-        <span style={{ fontWeight: 600, flex: 1 }}>{t("contactInfo")}</span>
-        <ChevronRight size={18} className="muted" />
-      </button>
 
       <div className="section-title">
         <span>{t("about")}</span>

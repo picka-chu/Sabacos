@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronRight, HelpCircle, Info, Loader2, MapPin, Navigation, Package, Pencil, Phone, Settings } from "lucide-react";
+import { Check, ChevronRight, HelpCircle, Info, Loader2, MapPin, Navigation, Pencil, Phone, Settings } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatETB, type Order } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
@@ -208,15 +208,6 @@ export function ProfilePage() {
     <div className="screen">
       <PageTitle title={t("nav_profile")} />
 
-      <button
-        className={`chip ${""}`}
-        style={{ marginLeft: "auto", display: "flex", marginBottom: 10 }}
-        aria-label={t("settingsTitle")}
-        onClick={() => navigate("/settings")}
-      >
-        <Settings size={16} /> {t("settingsTitle")}
-      </button>
-
       <div className="card" style={{ padding: 20, display: "flex", alignItems: "center", gap: 14 }}>
         {avatar}
         <div style={{ minWidth: 0 }}>
@@ -369,7 +360,6 @@ export function ProfilePage() {
           { icon: <Settings size={20} strokeWidth={1.75} />, label: t("settingsTitle"), to: "/settings" },
           { icon: <Info size={20} strokeWidth={1.75} />, label: t("about"), to: "/about" },
           { icon: <HelpCircle size={20} strokeWidth={1.75} />, label: t("faq"), to: "/faq" },
-          { icon: <Package size={20} strokeWidth={1.75} />, label: t("myOrders"), to: "/orders", badge: stats.count },
         ].map((row, i) => (
           <button
             key={row.to}
@@ -379,9 +369,6 @@ export function ProfilePage() {
           >
             {row.icon}
             <span style={{ fontWeight: 600, flex: 1, textAlign: "left" }}>{row.label}</span>
-            {"badge" in row && (row as { badge?: number }).badge ? (
-              <span className="badge badge-accent">{(row as { badge?: number }).badge}</span>
-            ) : null}
             <ChevronRight size={18} className="muted" />
           </button>
         ))}
