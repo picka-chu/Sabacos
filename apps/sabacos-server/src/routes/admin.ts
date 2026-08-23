@@ -503,5 +503,5 @@ adminRoutes.post("/ai/product-image", async (c) => {
       console.error("[ai] product draft failed:", err);
     }
   }
-  return c.json({ url: data.publicUrl, draft });
+  return c.json({ url, draft });
 });
