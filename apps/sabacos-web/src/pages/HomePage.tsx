@@ -1,12 +1,14 @@
+import { useEffect, useState } from "react";
 import { ChevronRight, Search, SlidersHorizontal } from "lucide-react";
 import { useLocation } from "wouter";
 import { useI18n } from "../i18n.js";
 import { ProductCard } from "../components/ProductCard.js";
-import { BannerCarousel } from "../components/BannerCarousel.js";
+import { BannerCarousel, type AdBanner } from "../components/BannerCarousel.js";
 import { ProductGridSkeleton } from "../components/Skeletons.js";
 import { iconForCategory } from "../categoryIcons.js";
 import { useCategories, useProducts } from "../hooks.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
+import { api } from "../api.js";
 import { toast } from "../components/Toast.js";
 
 export function HomePage() {
@@ -20,6 +22,21 @@ export function HomePage() {
 
   const featuredItems = featured.result?.items ?? [];
   const latestItems = latest.result?.items ?? [];
+
+  const [ad, setAd] = useState<AdBanner | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ banner: AdBanner | null }>(`/ads/banner?lang=${lang}`)
+      .then((res) => {
+        if (!cancelled) setAd(res.banner);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const bannerPool = [...featuredItems, ...latestItems];
   const banners = bannerPool
@@ -74,7 +91,11 @@ export function HomePage() {
         </div>
       </div>
 
-      <BannerCarousel products={banners} onOpen={(p) => navigate(`/product/${p.id}`)} />
+      <BannerCarousel
+        products={banners.filter((p) => p.id !== ad?.productId)}
+        ad={ad}
+        onOpen={(id) => navigate(`/product/${id}`)}
+      />
 
       <div className="chip-scroll" style={{ marginTop: 10 }}>
         <button className="chip active" onClick={() => navigate("/shop")}>

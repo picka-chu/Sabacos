@@ -8,9 +8,11 @@ import { catalogRoutes } from "./routes/catalog.js";
 import { cartRoutes } from "./routes/cart.js";
 import { orderRoutes } from "./routes/orders.js";
 import { adminRoutes } from "./routes/admin.js";
+import { adRoutes } from "./routes/ads.js";
 import { requireUser } from "./auth/telegram.js";
 import { requireAdmin } from "./auth/admin.js";
 import { sendError, notFound } from "./errors.js";
+import { startMarketingSweeper } from "./services/notifier.js";
 
 const env = loadEnv();
 const db = getDb(env);
@@ -57,6 +59,9 @@ app.use("/api/v1/checkout", requireUser);
 app.use("/api/v1/orders", requireUser);
 app.use("/api/v1/profile", requireUser);
 app.use("/api/v1/auth/telegram", requireUser);
+app.use("/api/v1/track/*", requireUser);
+app.use("/api/v1/ads/*", requireUser);
+app.route("/api/v1", adRoutes);
 app.route("/api/v1/cart", cartRoutes);
 app.route("/api/v1", orderRoutes);
 
@@ -77,6 +82,9 @@ async function start(): Promise<void> {
 
   await registerBotDefaults(bot, env);
   console.log("Bot commands and menu button registered");
+
+  startMarketingSweeper(bot, env);
+  console.log(`Marketing sweeper ${env.MARKETING_SWEEP === "off" ? "disabled" : "running (hourly)"}`);
 
   serve({ fetch: app.fetch, port: env.PORT }, (info) => {
     console.log(`Sabacos server listening on http://localhost:${info.port}`);

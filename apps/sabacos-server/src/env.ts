@@ -12,6 +12,10 @@ const envSchema = z.object({
   WEBHOOK_URL: z.string().trim().url().optional(),
   WEBHOOK_SECRET: z.string().trim().optional(),
   ADMIN_CHANNEL_ID: z.string().trim().optional(),
+  GEMINI_API_KEY: z.string().trim().optional(),
+  CLOUDFLARE_ACCOUNT_ID: z.string().trim().optional(),
+  CLOUDFLARE_API_TOKEN: z.string().trim().optional(),
+  MARKETING_SWEEP: z.enum(["on", "off"]).default("on"),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

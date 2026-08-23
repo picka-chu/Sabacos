@@ -7,6 +7,8 @@ function collectConsole(page: Page): string[] {
       const text = msg.text();
       if (/favicon\.ico/i.test(text)) return;
       if (/^Failed to load resource:/i.test(text)) return;
+      // GPU driver noise from headless Chromium's software rasterizer, not app errors.
+      if (/WebGL-.*GL Driver Message/i.test(text)) return;
       messages.push(`[${msg.type()}] ${text}`);
     }
   });
@@ -85,5 +87,22 @@ test("scrubbing the timeline moves the playhead and timecode", async ({ page }) 
   expect(box).not.toBeNull();
   await timeline.click({ position: { x: box!.width * 0.5, y: 12 } });
   await expect(timecode).not.toHaveValue(/^00:00:00$/);
+  expect(errors).toEqual([]);
+});
+
+test("adding elements creates and selects layers", async ({ page }) => {
+  const errors = collectConsole(page);
+  await openEditor(page);
+
+  for (const kind of ["text", "rect", "ellipse", "triangle", "line"]) {
+    await page.getByTestId(`add-${kind}`).click();
+    const name = kind.charAt(0).toUpperCase() + kind.slice(1);
+    await expect(
+      page.locator(".layer-row").filter({ has: page.locator(".layer-name", { hasText: new RegExp(`^${name}$`) }) }),
+    ).toBeVisible();
+  }
+
+  // The last added element (line) is selected in the inspector.
+  await expect(page.getByTestId("inspector-name")).toHaveValue("Line");
   expect(errors).toEqual([]);
 });

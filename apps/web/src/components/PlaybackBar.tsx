@@ -11,6 +11,10 @@ export function PlaybackBar() {
   const setTime = useEditorStore((s) => s.setTime);
   const setComposition = useEditorStore((s) => s.setComposition);
   const setTimelineZoom = useEditorStore((s) => s.setTimelineZoom);
+  const showReferences = useEditorStore((s) => s.showReferences);
+  const toggleReferences = useEditorStore((s) => s.toggleReferences);
+  const showAi = useEditorStore((s) => s.showAi);
+  const toggleAi = useEditorStore((s) => s.toggleAi);
 
   const comp = project.compositions.find((c) => c.id === compId);
   if (!comp) return null;
@@ -63,6 +67,22 @@ export function PlaybackBar() {
         ))}
       </select>
       <div className="toolbar-spacer" />
+      <button
+        className={`toolbar-btn ${showAi ? "has-keyframes" : ""}`}
+        onClick={toggleAi}
+        title="AI editor (describe edits in plain language)"
+        data-testid="toggle-ai"
+      >
+        AI
+      </button>
+      <button
+        className={`toolbar-btn ${showReferences ? "has-keyframes" : ""}`}
+        onClick={toggleReferences}
+        title="Reference videos (imported inspiration clips)"
+        data-testid="toggle-references"
+      >
+        References
+      </button>
       <span className="zoom-label">{Math.round(timelineZoom)}px/s</span>
       <button className="toolbar-btn" onClick={() => setTimelineZoom(timelineZoom / 1.5)} title="Zoom out">
         &minus;

@@ -36,6 +36,13 @@ services:
         sync: false
       - key: ADMIN_CHANNEL_ID
         sync: false
+      # Cloudflare Workers AI (optional; ads/notifications fall back to templates without them)
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: MARKETING_SWEEP
+        sync: false
       # Public URLs of the two static sites, e.g. https://sabacos-web.onrender.com
       - key: WEBAPP_URL
         sync: false

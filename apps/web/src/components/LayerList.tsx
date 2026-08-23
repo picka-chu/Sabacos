@@ -7,6 +7,7 @@ import {
   setLayerVisible,
 } from "@motion/core";
 import { useEditorStore } from "../store/useEditorStore";
+import { AddElementBar } from "./AddElementBar";
 
 const KIND_ICONS: Record<Layer["kind"], string> = {
   image: "\u{1F5BC}",
@@ -31,6 +32,7 @@ export function LayerList() {
   return (
     <aside className="side-panel layer-list">
       <h2 className="panel-title">Layers</h2>
+      <AddElementBar />
       <div className="layer-rows">
         {layersTopDown.map((layer) => (
           <div

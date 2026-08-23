@@ -15,7 +15,7 @@ import type { Operation } from "./op-executor";
 
 export type SessionStatus = "open" | "approved" | "discarded";
 
-export type ReferenceStatus = "importing" | "ready" | "failed";
+export type ReferenceStatus = "importing" | "downloading" | "analyzing" | "transcribing" | "ready" | "failed";
 
 export type ReferenceStyleCard = {
   duration: number;

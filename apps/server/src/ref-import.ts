@@ -112,7 +112,7 @@ export class RefImportService {
   }
 
   private script(name: string): string {
-    return fileURLToPath(new URL(`./scripts/${name}`, import.meta.url));
+    return fileURLToPath(new URL(`../scripts/${name}`, import.meta.url));
   }
 
   private async run(cmd: string[], timeoutMs?: number): Promise<string> {
@@ -197,17 +197,20 @@ export class RefImportService {
 
       if (!opts?.alreadyDownloaded) {
         const ref = this.store.getReference(refId)!;
+        update({ status: "downloading" });
         await this.download(ref.sourceUrl!, ref.id);
       }
       filePath = this.findDownloadedFile(refId);
       if (!filePath) throw new Error("Download produced no file");
 
+      update({ status: "analyzing", error: null });
       const probe = await this.probe(filePath);
       const ext = extname(filePath).replace(/^\./, "") || "mp4";
       const posterPath = join(this.refsDir(), `${refId}.jpg`);
       await this.thumbnail(filePath, posterPath, probe.duration);
 
       const style = await this.analyze(filePath);
+      update({ status: "transcribing" });
       const transcript = await this.transcribe(filePath);
 
       const projectId = this.store.getReference(refId)!.projectId;

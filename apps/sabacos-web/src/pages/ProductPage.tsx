@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { formatETB, t } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { QuantityStepper } from "../components/QuantityStepper.js";
 import { useProduct } from "../hooks.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
+import { api } from "../api.js";
 import { toast } from "../components/Toast.js";
 
 export function ProductPage() {
@@ -16,6 +17,12 @@ export function ProductPage() {
   const [qty, setQty] = useState(1);
   const galleryRef = useRef<HTMLDivElement | null>(null);
   const [activeImg, setActiveImg] = useState(0);
+
+  // Marketing agent: log the view for interest profiling (fire-and-forget).
+  useEffect(() => {
+    if (!params.id) return;
+    api.post("/track/view", { productId: params.id }).catch(() => {});
+  }, [params.id]);
 
   if (loading) {
     return (
