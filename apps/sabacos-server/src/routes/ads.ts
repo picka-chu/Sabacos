@@ -40,7 +40,7 @@ adRoutes.post("/track/view", async (c) => {
   return c.json({ ok: true });
 });
 
-adRoutes.get("/banner", async (c) => {
+adRoutes.get("/ads/banner", async (c) => {
   const env = getAppEnv();
   const db = getDb(env);
   const profile = c.get("profile");
