@@ -17,6 +17,7 @@ import {
   productRowSchema,
   categoryRowSchema,
   orderRowSchema,
+  type DeliveryConfig,
   type Product,
 } from "@sabacos/core";
 import { getAppEnv, type AppEnv } from "../env.js";
@@ -53,6 +54,7 @@ function toProductRow(body: z.infer<typeof createProductSchema>) {
     image_urls: body.imageUrls ?? [],
     is_active: body.isActive ?? true,
     is_featured: body.isFeatured ?? false,
+    is_fragile: body.isFragile ?? false,
   };
 }
 
@@ -70,6 +72,7 @@ function toProductPatch(body: z.infer<typeof updateProductSchema>): Record<strin
   if (body.imageUrls !== undefined) patch.image_urls = body.imageUrls;
   if (body.isActive !== undefined) patch.is_active = body.isActive;
   if (body.isFeatured !== undefined) patch.is_featured = body.isFeatured;
+  if (body.isFragile !== undefined) patch.is_fragile = body.isFragile;
   return patch;
 }
 
@@ -406,6 +409,7 @@ adminRoutes.put("/settings", async (c) => {
     shopNameAm: input.shop_name_am,
     shopPhone: input.shop_phone,
     adminChannelId: input.admin_channel_id,
+    deliveryConfig: (input.delivery_config as DeliveryConfig | undefined) ?? undefined,
   });
   return c.json({ settings });
 });

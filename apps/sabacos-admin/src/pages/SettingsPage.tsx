@@ -16,6 +16,7 @@ export function SettingsPage() {
     shopPhone: "",
     adminChannelId: "",
   });
+  const [deliveryConfigJson, setDeliveryConfigJson] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +35,9 @@ export function SettingsPage() {
           shopPhone: s.shopPhone,
           adminChannelId: s.adminChannelId ?? "",
         });
+        setDeliveryConfigJson(
+          JSON.stringify(s.deliveryConfig ?? null, null, 2),
+        );
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load settings"));
   }, [token]);
@@ -41,6 +45,17 @@ export function SettingsPage() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!token) return;
+
+    let deliveryConfig: unknown = undefined;
+    if (deliveryConfigJson.trim() && deliveryConfigJson.trim() !== "null") {
+      try {
+        deliveryConfig = JSON.parse(deliveryConfigJson);
+      } catch {
+        setError("Delivery config is not valid JSON.");
+        return;
+      }
+    }
+
     setBusy(true);
     setSaved(false);
     setError(null);
@@ -54,6 +69,7 @@ export function SettingsPage() {
           shop_name_am: form.shopNameAm.trim(),
           shop_phone: form.shopPhone.trim(),
           admin_channel_id: form.adminChannelId.trim() || null,
+          ...(deliveryConfig !== undefined ? { delivery_config: deliveryConfig } : {}),
         },
         token,
       );
@@ -109,6 +125,22 @@ export function SettingsPage() {
             <label>Admin channel ID</label>
             <input className="input" value={form.adminChannelId} onChange={(e) => set("adminChannelId", e.target.value)} placeholder="Leave blank to disable" />
           </div>
+        </div>
+
+        <h3 style={{ margin: "20px 0 12px", fontSize: 15 }}>Zone pricing (JSON)</h3>
+        <div className="field">
+          <label>
+            delivery_config — origin lat/lng, zones, baseTiers, freeThresholdHalala,
+            expressMultiplier, fragileFeeHalala. Leave as null to use defaults.
+          </label>
+          <textarea
+            className="input"
+            rows={14}
+            spellCheck={false}
+            style={{ fontFamily: "monospace", fontSize: 13 }}
+            value={deliveryConfigJson}
+            onChange={(e) => setDeliveryConfigJson(e.target.value)}
+          />
         </div>
 
         <button className="btn btn-primary" disabled={busy}>

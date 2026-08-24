@@ -10,7 +10,7 @@ import {
 import type { AppEnv } from "../env.js";
 import { getDb } from "../db/client.js";
 import { getSettings } from "../db/settings.js";
-import { getOrderById, getOrderItems, getOrderWithItems } from "../db/orders.js";
+import { getOrderById, getOrderItems, getOrderWithItems, getOrdersByProfile } from "../db/orders.js";
 import { getProductsByIds } from "../db/catalog.js";
 import { getProfileById, upsertTelegramProfile } from "../db/profiles.js";
 
@@ -18,12 +18,54 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function mainMenuKeyboard(env: AppEnv): InlineKeyboard {
-  return new InlineKeyboard()
-    .webApp("🛍  Shop Now", env.WEBAPP_URL)
-    .webApp("📦  My Orders", `${env.WEBAPP_URL}/orders`)
-    .row()
-    .text("ℹ️  Help", "show_help");
+// Persistent bottom-of-chat keyboard (DurgerKing style). "Shop" is a native
+// web_app button — it launches the mini app straight from the keyboard.
+function mainMenuKeyboard(env: AppEnv) {
+  return {
+    keyboard: [
+      [{ text: "🛍  Shop", web_app: { url: env.WEBAPP_URL } }],
+      [{ text: "📦  My Orders" }, { text: "ℹ️  Help" }],
+    ],
+    resize_keyboard: true,
+    is_persistent: true,
+  };
+}
+
+const MENU_BUTTON_TEXTS = ["🛍  Shop", "📦  My Orders", "ℹ️  Help"] as const;
+
+async function sendMyOrders(ctx: Context, env: AppEnv): Promise<void> {
+  const from = ctx.from;
+  if (!from) return;
+  const db = getDb(env);
+  const profile = await getProfileById(db, String(from.id)).catch(() => null);
+  const orders = profile
+    ? await getOrdersByProfile(db, profile.id).catch(() => [])
+    : [];
+
+  if (orders.length === 0) {
+    await ctx.reply("📦 No orders yet — tap 🛍 Shop to place your first one!", {
+      reply_markup: mainMenuKeyboard(env),
+    });
+    return;
+  }
+
+  const lines = orders.slice(0, 5).map(
+    (o) => `${statusEmoji(o.status)} ${o.orderNo} — ${translateStatus("en", o.status)} · ${formatETB(o.totalHalala)}`,
+  );
+  await ctx.reply(["📦 Your recent orders:", "", ...lines].join("\n"), {
+    reply_markup: new InlineKeyboard().webApp("👀  View all orders", `${env.WEBAPP_URL}/orders`),
+  });
+}
+
+function statusEmoji(status: Order["status"]): string {
+  switch (status) {
+    case "pending_payment": return "⏳";
+    case "paid": return "✅";
+    case "processing": return "🧴";
+    case "shipped": return "🚚";
+    case "delivered": return "🎉";
+    default: return "❌";
+  }
 }
 
 async function getShopSettings(env: AppEnv) {
@@ -69,15 +111,31 @@ export function createBot(env: AppEnv): Bot {
   });
 
   bot.command("orders", async (ctx) => {
-    await ctx.reply("📦 Your orders, all in one place:", {
-      reply_markup: new InlineKeyboard().webApp("📦  View my orders", `${env.WEBAPP_URL}/orders`),
-    });
+    await sendMyOrders(ctx, env);
   });
 
   bot.command("help", async (ctx) => {
     const settings = await getShopSettings(env);
     await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
       reply_markup: mainMenuKeyboard(env),
+    });
+  });
+
+  // Reply-keyboard buttons (persistent menu at the bottom of the chat).
+  bot.on("message:text").filter((ctx) => ctx.message.text.trim() === "📦  My Orders", async (ctx) => {
+    await sendMyOrders(ctx, env);
+  });
+
+  bot.on("message:text").filter((ctx) => ctx.message.text.trim() === "ℹ️  Help", async (ctx) => {
+    const settings = await getShopSettings(env);
+    await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
+      reply_markup: mainMenuKeyboard(env),
+    });
+  });
+
+  bot.on("message:text").filter((ctx) => ctx.message.text.trim() === "🛍  Shop", async (ctx) => {
+    await ctx.reply("🛍  Ready when you are:", {
+      reply_markup: new InlineKeyboard().webApp("🛍  Open the shop", env.WEBAPP_URL),
     });
   });
 
@@ -89,8 +147,12 @@ export function createBot(env: AppEnv): Bot {
     });
   });
 
-  // Friendly fallback for any non-command text
-  bot.on("message:text").filter((ctx) => !ctx.message.text.startsWith("/"), async (ctx) => {
+  // Friendly fallback for any non-command text that isn't a menu button
+  bot.on("message:text").filter(
+    (ctx) =>
+      !ctx.message.text.startsWith("/") &&
+      !MENU_BUTTON_TEXTS.includes(ctx.message.text.trim() as (typeof MENU_BUTTON_TEXTS)[number]),
+    async (ctx) => {
     const settings = await getShopSettings(env);
     const shopName = settings?.shopNameEn ?? "Sabacos";
     await ctx.reply(

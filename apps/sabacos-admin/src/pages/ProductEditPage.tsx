@@ -27,6 +27,7 @@ export function ProductEditPage() {
     stock: "0",
     isActive: true,
     isFeatured: false,
+    isFragile: false,
   });
   const [images, setImages] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -57,6 +58,7 @@ export function ProductEditPage() {
             stock: p.stock.toString(),
             isActive: p.isActive,
             isFeatured: p.isFeatured,
+            isFragile: p.isFragile,
           });
           setImages(p.imageUrls);
         })
@@ -84,6 +86,7 @@ export function ProductEditPage() {
       imageUrls: images,
       isActive: form.isActive,
       isFeatured: form.isFeatured,
+      isFragile: form.isFragile,
     };
     try {
       if (isNew) {
@@ -227,6 +230,10 @@ export function ProductEditPage() {
                 <label className="row" style={{ gap: 6 }}>
                   <input type="checkbox" checked={form.isFeatured} onChange={(e) => set("isFeatured", e.target.checked)} />
                   Featured
+                </label>
+                <label className="row" style={{ gap: 6 }}>
+                  <input type="checkbox" checked={form.isFragile} onChange={(e) => set("isFragile", e.target.checked)} />
+                  Fragile
                 </label>
               </div>
             </div>

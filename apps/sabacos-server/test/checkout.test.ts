@@ -127,13 +127,14 @@ describe("checkout", () => {
 
     const result = await checkout(db, "profile-1", input, { createInvoiceLink });
 
+    // No coords/zone given → default Zone 2 surcharge (2500) + base tier (5500).
     expect(createOrderMock).toHaveBeenCalledWith(
       db,
       expect.objectContaining({
         profileId: "profile-1",
         subtotalHalala: 100000,
-        deliveryFeeHalala: 12000,
-        totalHalala: 112000,
+        deliveryFeeHalala: 8000,
+        totalHalala: 108000,
       }),
     );
     expect(createInvoiceLink).toHaveBeenCalledWith(
@@ -143,13 +144,65 @@ describe("checkout", () => {
         currency: "ETB",
         prices: [
           { label: "Test Serum × 2", amount: 100000 },
-          { label: "Delivery fee", amount: 12000 },
+          { label: "Delivery fee", amount: 8000 },
         ],
       }),
     );
     expect(clearCartMock).toHaveBeenCalledWith(db, "profile-1");
     expect(result.invoiceUrl).toBe("https://t.me/invoice/abc123");
     expect(result.order.orderNo).toBe("SB-000001");
+    expect(result.delivery.zone).toBeNull();
+  });
+
+  it("prices express delivery with the zone surcharge", async () => {
+    getCartMock.mockResolvedValue([cartItem({ qty: 2 })]);
+    createInvoiceLink.mockResolvedValue("https://t.me/invoice/express");
+
+    await checkout(
+      db,
+      "profile-1",
+      { ...input, zone: 1, deliveryType: "express" },
+      { createInvoiceLink },
+    );
+
+    // (5500 base + 0 zone surcharge) × 1.5 = 8250
+    expect(createOrderMock).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ deliveryFeeHalala: 8250, totalHalala: 108250 }),
+    );
+    expect(createInvoiceLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prices: [
+          { label: "Test Serum × 2", amount: 100000 },
+          { label: "Delivery", amount: 5500 },
+          { label: "Express surcharge", amount: 2750 },
+        ],
+      }),
+    );
+  });
+
+  it("adds the fragile handling fee", async () => {
+    getCartMock.mockResolvedValue([
+      cartItem({ qty: 1, product: product({ priceHalala: 30000, isFragile: true }) }),
+    ]);
+    createInvoiceLink.mockResolvedValue("https://t.me/invoice/fragile");
+
+    await checkout(db, "profile-1", input, { createInvoiceLink });
+
+    // subtotal 30000 → base 9000 + zone 2500 + fragile 1000
+    expect(createOrderMock).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        fragile: true,
+        deliveryFeeHalala: 12500,
+        totalHalala: 42500,
+      }),
+    );
+    expect(createInvoiceLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prices: expect.arrayContaining([{ label: "Fragile handling", amount: 1000 }]),
+      }),
+    );
   });
 
   it("waives the delivery fee above the free threshold", async () => {

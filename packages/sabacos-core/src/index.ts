@@ -5,3 +5,4 @@ export * from "./i18n.js";
 export * from "./schemas.js";
 export * from "./initData.js";
 export * from "./totals.js";
+export * from "./delivery.js";

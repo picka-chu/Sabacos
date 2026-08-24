@@ -54,6 +54,14 @@ app.post("/webhook", async (c) => {
 
 app.route("/api/v1/catalog", catalogRoutes);
 
+// Public: clients need the zone table + thresholds to preview delivery cost.
+app.get("/api/v1/delivery/config", async (c) => {
+  const { getSettings } = await import("./db/settings.js");
+  const { DEFAULT_DELIVERY_CONFIG } = await import("@sabacos/core");
+  const settings = await getSettings(db).catch(() => null);
+  return c.json({ config: settings?.deliveryConfig ?? DEFAULT_DELIVERY_CONFIG });
+});
+
 app.use("/api/v1/cart/*", requireUser);
 app.use("/api/v1/checkout", requireUser);
 app.use("/api/v1/orders", requireUser);

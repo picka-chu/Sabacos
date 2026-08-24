@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User } from "lucide-react";
-import { formatETB, t } from "@sabacos/core";
+import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User, X, Zap, Truck } from "lucide-react";
+import { DEFAULT_DELIVERY_CONFIG, formatETB, quoteDelivery, t } from "@sabacos/core";
+import type { DeliveryConfig } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { api } from "../api.js";
 import { PageTitle } from "../components/PageTitle.js";
@@ -10,6 +11,12 @@ import { toast } from "../components/Toast.js";
 import { isTelegramSession, haptic, payInvoice, requestLocation, requestPhoneNumber } from "../telegram.js";
 
 type Phase = "form" | "pending" | "success" | "failed";
+
+const ZONES = [
+  { value: 1, labelKey: "zone1" },
+  { value: 2, labelKey: "zone2" },
+  { value: 3, labelKey: "zone3" },
+] as const;
 
 export function CheckoutPage() {
   const { t, lang } = useI18n();
@@ -25,6 +32,10 @@ export function CheckoutPage() {
     address: profile?.address ?? "",
     note: "",
   });
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [manualZone, setManualZone] = useState<number | null>(null);
+  const [deliveryType, setDeliveryType] = useState<"standard" | "express">("standard");
+  const [deliveryConfig, setDeliveryConfig] = useState<DeliveryConfig>(DEFAULT_DELIVERY_CONFIG);
   const [phase, setPhase] = useState<Phase>("form");
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderNo, setOrderNo] = useState<string | null>(null);
@@ -34,6 +45,44 @@ export function CheckoutPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const totals = cart.totals;
+  const fragile = cart.items.some((i) => i.product.isFragile);
+
+  // Live delivery estimate mirrors the server exactly (same core engine).
+  const estimate = useMemo(
+    () =>
+      quoteDelivery(deliveryConfig, {
+        subtotalHalala: totals.subtotalHalala,
+        latitude: coords?.lat ?? null,
+        longitude: coords?.lng ?? null,
+        zone: coords ? null : manualZone,
+        express: deliveryType === "express",
+        fragile,
+      }),
+    [deliveryConfig, totals.subtotalHalala, coords, manualZone, deliveryType, fragile],
+  );
+
+  useEffect(() => {
+    api.get<{ config: DeliveryConfig }>("/delivery/config")
+      .then((res) => res.config && setDeliveryConfig(res.config))
+      .catch(() => undefined);
+  }, []);
+
+  const grandTotal = totals.subtotalHalala + estimate.totalDeliveryFeeHalala;
+
+  const priceFor = (express: boolean) =>
+    quoteDelivery(deliveryConfig, {
+      subtotalHalala: totals.subtotalHalala,
+      latitude: coords?.lat ?? null,
+      longitude: coords?.lng ?? null,
+      zone: coords ? null : manualZone,
+      express,
+      fragile,
+    }).totalDeliveryFeeHalala;
+
+  const freeGap =
+    deliveryConfig.freeThresholdHalala - totals.subtotalHalala;
+  const showFreeNudge =
+    freeGap > 0 && freeGap <= 20000 && !estimate.freeDeliveryApplied && deliveryType === "standard";
 
   const canSubmit = useMemo(
     () =>
@@ -77,6 +126,10 @@ export function CheckoutPage() {
         phone: form.phone.trim(),
         address: form.address.trim(),
         note: form.note.trim() || null,
+        latitude: coords?.lat ?? null,
+        longitude: coords?.lng ?? null,
+        zone: coords ? null : manualZone,
+        deliveryType,
       });
       setOrderId(order.id);
       setOrderNo(order.orderNo);
@@ -111,11 +164,14 @@ export function CheckoutPage() {
     haptic();
     const loc = await requestLocation();
     if (loc) {
+      setCoords(loc);
+      setManualZone(null);
       const gpsTag = `[GPS: ${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}]`;
       setForm((f) => ({
         ...f,
         address: f.address.includes("[GPS:") ? f.address.replace(/\[GPS:[^\]]+\]/, gpsTag) : `${gpsTag} ${f.address}`.trim(),
       }));
+      toast(t("locationSaved"));
     } else {
       toast(t("featureUnavailable"));
     }
@@ -191,11 +247,11 @@ export function CheckoutPage() {
             </div>
             <div className="row" style={{ justifyContent: "space-between", marginTop: 6 }}>
               <span className="muted">{t("deliveryFee")}</span>
-              <span>{totals.deliveryFeeHalala === 0 ? t("free") : formatETB(totals.deliveryFeeHalala)}</span>
+              <span>{estimate.totalDeliveryFeeHalala === 0 ? t("free") : formatETB(estimate.totalDeliveryFeeHalala)}</span>
             </div>
             <div className="row" style={{ justifyContent: "space-between", marginTop: 6 }}>
               <strong>{t("total")}</strong>
-              <strong style={{ fontSize: 18 }}>{formatETB(totals.totalHalala)}</strong>
+              <strong style={{ fontSize: 18 }}>{formatETB(grandTotal)}</strong>
             </div>
           </div>
 
@@ -233,11 +289,6 @@ export function CheckoutPage() {
                 rows={3}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
               />
-              {isTelegramSession() && (
-                <button type="button" className="btn btn-secondary btn-block" style={{ marginTop: 8 }} onClick={handleShareLocation}>
-                  <MapPin size={16} /> {t("shareLocation")}
-                </button>
-              )}
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>{t("note")}</label>
@@ -247,6 +298,100 @@ export function CheckoutPage() {
                 onChange={(e) => setForm({ ...form, note: e.target.value })}
               />
             </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: 14, padding: 18 }}>
+            <h2 style={{ fontSize: 17, margin: "0 0 12px", fontWeight: 700 }}>{t("deliveryOptions")}</h2>
+
+            {coords ? (
+              <div className="row" style={{ gap: 8 }}>
+                <div className="zone-option active btn-block" style={{ cursor: "default" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <MapPin size={15} /> {t("locationSaved")}
+                  </span>
+                </div>
+                <button type="button" className="btn btn-secondary" style={{ flexShrink: 0, padding: "0 12px" }} onClick={() => setCoords(null)}>
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <>
+                {isTelegramSession() && (
+                  <button type="button" className="btn btn-secondary btn-block" onClick={handleShareLocation}>
+                    <MapPin size={16} /> {t("shareLocation")}
+                  </button>
+                )}
+                <p className="muted" style={{ fontSize: 12.5, margin: "10px 2px 8px" }}>{t("chooseZone")}</p>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {ZONES.map((z) => (
+                    <button
+                      key={z.value}
+                      type="button"
+                      className={`zone-option${manualZone === z.value ? " active" : ""}`}
+                      onClick={() => {
+                        haptic();
+                        setManualZone(z.value);
+                      }}
+                    >
+                      <span>{t(z.labelKey)}</span>
+                      <span className="muted" style={{ fontSize: 12 }}>
+                        +{formatETB(deliveryConfig.zones[z.value - 1]?.surchargeHalala ?? 0)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 14 }}>
+              <button
+                type="button"
+                className={`zone-option zone-speed${deliveryType === "standard" ? " active" : ""}`}
+                onClick={() => {
+                  haptic();
+                  setDeliveryType("standard");
+                }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                  <Truck size={15} /> {t("standardDelivery")}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>
+                  {priceFor(false) === 0 ? t("free") : formatETB(priceFor(false))}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`zone-option zone-speed${deliveryType === "express" ? " active" : ""}`}
+                onClick={() => {
+                  haptic();
+                  setDeliveryType("express");
+                }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                  <Zap size={15} /> {t("expressDelivery")}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>
+                  {priceFor(true) === 0 ? t("free") : formatETB(priceFor(true))}
+                </span>
+              </button>
+            </div>
+            {deliveryType === "express" && (
+              <p className="muted" style={{ fontSize: 12.5, margin: "8px 2px 0" }}>
+                <Zap size={12} style={{ verticalAlign: -2 }} /> {t("expressHint")}
+              </p>
+            )}
+
+            {fragile && estimate.fragileFeeHalala > 0 && (
+              <div className="row muted" style={{ justifyContent: "space-between", marginTop: 10, fontSize: 13 }}>
+                <span>{t("fragileHandling")}</span>
+                <span>+{formatETB(estimate.fragileFeeHalala)}</span>
+              </div>
+            )}
+            {showFreeNudge && (
+              <p style={{ fontSize: 12.5, margin: "10px 2px 0", color: "var(--accent-strong)", fontWeight: 600 }}>
+                🚚 {t("freeDeliveryHint", { amount: formatETB(freeGap) })}
+              </p>
+            )}
           </div>
 
           {errorMsg && (
@@ -259,10 +404,10 @@ export function CheckoutPage() {
           <div className="sticky-summary">
             <div className="flex" style={{ justifyContent: "space-between" }}>
               <span className="muted">{t("total")}</span>
-              <span className="price" style={{ fontSize: 20 }}>{formatETB(totals.totalHalala)}</span>
+              <span className="price" style={{ fontSize: 20 }}>{formatETB(grandTotal)}</span>
             </div>
             <button className="btn btn-primary btn-block" disabled={!canSubmit} onClick={handleSubmit}>
-              {t("payWithTelegram")} · {formatETB(totals.totalHalala)}
+              {t("payWithTelegram")} · {formatETB(grandTotal)}
             </button>
             <p className="muted text-center" style={{ margin: 0, fontSize: 12, fontWeight: 500 }}>
               {t("payWithTelegramHint")}

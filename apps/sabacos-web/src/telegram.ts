@@ -232,6 +232,7 @@ export function requestLocation(): Promise<{ lat: number; lng: number } | null> 
         location?: { latitude?: number; longitude?: number };
       } | undefined;
       if (payload?.response && payload.location?.latitude != null && payload.location.longitude != null) {
+        try { webApp.expand(); } catch { /* noop */ }
         settle({ lat: payload.location.latitude, lng: payload.location.longitude });
       } else {
         settle(null);
@@ -328,7 +329,12 @@ export function requestPhoneNumber(): Promise<string | null> {
     };
     const handler = (data?: unknown) => {
       const payload = data as { response?: boolean; phoneNumber?: string } | undefined;
-      settle(payload?.response && payload.phoneNumber ? payload.phoneNumber : null);
+      if (payload?.response && payload.phoneNumber) {
+        try { webApp.expand(); } catch { /* noop */ }
+        settle(payload.phoneNumber);
+      } else {
+        settle(null);
+      }
     };
 
     try {

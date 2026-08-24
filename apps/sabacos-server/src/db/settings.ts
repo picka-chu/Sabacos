@@ -1,4 +1,9 @@
-import { settingsRowSchema, type Settings } from "@sabacos/core";
+import {
+  mergeDeliveryConfig,
+  settingsRowSchema,
+  type DeliveryConfig,
+  type Settings,
+} from "@sabacos/core";
 import type { Db } from "./client.js";
 
 let cache: Settings | null = null;
@@ -27,6 +32,10 @@ export async function updateSettings(db: Db, patch: Partial<Settings>): Promise<
     shopPhone: patch.shopPhone ?? current.shopPhone,
     adminChannelId:
       patch.adminChannelId === undefined ? current.adminChannelId : patch.adminChannelId,
+    deliveryConfig:
+      patch.deliveryConfig === undefined
+        ? (current.deliveryConfig ?? null)
+        : mergeDeliveryConfig(patch.deliveryConfig),
   };
 
   const { error } = await db
@@ -39,6 +48,7 @@ export async function updateSettings(db: Db, patch: Partial<Settings>): Promise<
         shop_name_am: merged.shopNameAm,
         shop_phone: merged.shopPhone,
         admin_channel_id: merged.adminChannelId,
+        ...(merged.deliveryConfig ? { delivery_config: merged.deliveryConfig } : {}),
       },
     })
     .eq("key", "store");

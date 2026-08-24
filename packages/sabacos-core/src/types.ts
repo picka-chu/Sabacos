@@ -1,3 +1,5 @@
+import type { DeliveryConfig } from "./delivery.js";
+
 export const CURRENCY = "ETB" as const;
 export const CURRENCY_LABEL = "ETB" as const;
 export const HALALA_PER_ETB = 100;
@@ -66,6 +68,7 @@ export interface Product {
   imageUrls: string[];
   isActive: boolean;
   isFeatured: boolean;
+  isFragile: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,6 +82,8 @@ export interface CartItem {
   product: Product;
 }
 
+export type DeliveryType = "standard" | "express";
+
 export interface Order {
   id: string;
   orderNo: string;
@@ -91,6 +96,11 @@ export interface Order {
   phone: string;
   address: string;
   note: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  zone: number | null;
+  deliveryType: DeliveryType;
+  fragile: boolean;
   invoicePayload: string;
   telegramPaymentChargeId: string | null;
   providerPaymentChargeId: string | null;
@@ -124,12 +134,12 @@ export interface Payment {
 }
 
 export interface Settings {
-  deliveryFeeHalala: number;
-  freeDeliveryThresholdHalala: number;
+  deliveryFeeHalala: number;  freeDeliveryThresholdHalala: number;
   shopNameEn: string;
   shopNameAm: string;
   shopPhone: string;
   adminChannelId: string | null;
+  deliveryConfig?: DeliveryConfig | null;
 }
 
 export interface OrderTotals {

@@ -14,7 +14,16 @@ interface ShopState {
   updateQty: (itemId: string, qty: number) => Promise<CartSummary>;
   removeItem: (itemId: string) => Promise<CartSummary>;
   clearCart: () => Promise<void>;
-  checkout: (input: { customerName: string; phone: string; address: string; note?: string | null }) => Promise<{
+  checkout: (input: {
+    customerName: string;
+    phone: string;
+    address: string;
+    note?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    zone?: number | null;
+    deliveryType?: "standard" | "express";
+  }) => Promise<{
     order: Order;
     invoiceUrl: string;
   }>;

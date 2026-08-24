@@ -479,6 +479,27 @@
   gap: 4px;
 }
 
+.zone-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: inherit;
+  font-size: 14px;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.zone-option.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .checkout-btn {
   position: sticky;
   bottom: calc(var(--safe-bottom) + var(--nav-height) + 8px);

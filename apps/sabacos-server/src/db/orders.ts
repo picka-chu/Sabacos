@@ -20,6 +20,11 @@ export interface CreateOrderInput {
   phone: string;
   address: string;
   note: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  zone?: number | null;
+  deliveryType?: "standard" | "express";
+  fragile?: boolean;
   items: Array<{
     productId: string;
     nameEn: string;
@@ -49,6 +54,11 @@ export async function createOrder(db: Db, input: CreateOrderInput): Promise<Orde
       phone: input.phone,
       address: input.address,
       note: input.note ?? null,
+      latitude: input.latitude ?? null,
+      longitude: input.longitude ?? null,
+      zone: input.zone ?? null,
+      delivery_type: input.deliveryType ?? "standard",
+      fragile: input.fragile ?? false,
       invoice_payload: "",
     })
     .select("*")

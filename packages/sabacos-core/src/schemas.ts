@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { MAX_CART_QTY } from "./types.js";
+import { mergeDeliveryConfig } from "./delivery.js";
 import {
-  MAX_CART_QTY,
   ORDER_STATUSES,
   PAYMENT_STATUSES,
   type Category,
@@ -81,6 +82,7 @@ export const productRowSchema = z
     image_urls: z.array(z.string()),
     is_active: z.boolean(),
     is_featured: z.boolean(),
+    is_fragile: z.boolean().default(false),
     created_at: z.string(),
     updated_at: z.string(),
   })
@@ -99,6 +101,7 @@ export const productRowSchema = z
       imageUrls: r.image_urls,
       isActive: r.is_active,
       isFeatured: r.is_featured,
+      isFragile: r.is_fragile ?? false,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }),
@@ -117,6 +120,11 @@ export const orderRowSchema = z
     phone: z.string().min(1),
     address: z.string().min(1),
     note: z.string().nullable(),
+    latitude: z.number().nullable().default(null),
+    longitude: z.number().nullable().default(null),
+    zone: z.number().int().min(1).max(5).nullable().default(null),
+    delivery_type: z.enum(["standard", "express"]).default("standard"),
+    fragile: z.boolean().default(false),
     invoice_payload: z.string(),
     telegram_payment_charge_id: z.string().nullable(),
     provider_payment_charge_id: z.string().nullable(),
@@ -137,6 +145,11 @@ export const orderRowSchema = z
       phone: r.phone,
       address: r.address,
       note: r.note,
+      latitude: r.latitude ?? null,
+      longitude: r.longitude ?? null,
+      zone: r.zone ?? null,
+      deliveryType: r.delivery_type ?? "standard",
+      fragile: r.fragile ?? false,
       invoicePayload: r.invoice_payload,
       telegramPaymentChargeId: r.telegram_payment_charge_id,
       providerPaymentChargeId: r.provider_payment_charge_id,
@@ -205,6 +218,7 @@ const settingsFieldsSchema = z.object({
   shop_name_am: z.string().min(1),
   shop_phone: z.string(),
   admin_channel_id: z.string().nullable(),
+  delivery_config: z.unknown().optional(),
 });
 
 export const settingsRowSchema = settingsFieldsSchema.transform(
@@ -215,6 +229,8 @@ export const settingsRowSchema = settingsFieldsSchema.transform(
     shopNameAm: r.shop_name_am,
     shopPhone: r.shop_phone,
     adminChannelId: r.admin_channel_id,
+    deliveryConfig:
+      r.delivery_config != null ? mergeDeliveryConfig(r.delivery_config) : null,
   }),
 );
 
@@ -254,6 +270,11 @@ export const checkoutSchema = z.object({
   phone: z.string().trim().min(3).max(30),
   address: z.string().trim().min(5).max(500),
   note: z.string().trim().max(500).optional().nullable(),
+  latitude: z.number().min(-90).max(90).optional().nullable(),
+  longitude: z.number().min(-180).max(180).optional().nullable(),
+  /** Manual zone (1-based) when GPS is unavailable. */
+  zone: z.number().int().min(1).max(5).optional().nullable(),
+  deliveryType: z.enum(["standard", "express"]).optional(),
 });
 
 export const createProductSchema = z.object({
@@ -269,6 +290,7 @@ export const createProductSchema = z.object({
   imageUrls: z.array(z.string().url()).max(12).optional(),
   isActive: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
+  isFragile: z.boolean().optional(),
 });
 
 export const updateProductSchema = createProductSchema.partial();
