@@ -7,7 +7,7 @@ import { PageTitle } from "../components/PageTitle.js";
 import { api } from "../api.js";
 import { apiErrorMessage, useShopStore } from "../store.js";
 import { toast } from "../components/Toast.js";
-import { haptic, isTelegramSession, requestLocation, requestPhoneNumber } from "../telegram.js";
+import { haptic, isTelegramSession } from "../telegram.js";
 
 export function ProfilePage() {
   const { t } = useI18n();
@@ -15,6 +15,7 @@ export function ProfilePage() {
   const profile = useShopStore((s) => s.profile);
   const profileStatus = useShopStore((s) => s.profileStatus);
   const updateProfile = useShopStore((s) => s.updateProfile);
+  const refreshProfile = useShopStore((s) => s.refreshProfile);
 
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [editing, setEditing] = useState(false);
@@ -87,18 +88,35 @@ export function ProfilePage() {
     setErrorMsg(t("invalidAddress"));
   }
 
+  // The bot asks for the share in the chat; poll until it lands on the profile.
+  function pollProfileForShare(ready: (p: { phone: string | null; lastLatitude: number | null; lastLongitude: number | null }) => boolean, onDone: () => void) {
+    let tries = 0;
+    const timer = setInterval(async () => {
+      tries += 1;
+      try {
+        const p = await refreshProfile();
+        if (p && ready({ phone: p.phone, lastLatitude: p.lastLatitude, lastLongitude: p.lastLongitude })) {
+          clearInterval(timer);
+          onDone();
+        }
+      } catch {
+        /* keep polling */
+      }
+      if (tries >= 45) clearInterval(timer);
+    }, 2000);
+  }
+
   async function handleSharePhone() {
     if (!isTelegramSession()) return;
     haptic("light");
     setSharingPhone(true);
     try {
-      const number = await requestPhoneNumber();
-      if (!number) {
-        toast(t("featureUnavailable"));
-        return;
-      }
-      await updateProfile({ phone: number });
-      toast(t("profileUpdated"));
+      await api.post("/profile/request-phone", {});
+      toast(t("checkTelegramChat"));
+      pollProfileForShare(
+        (p) => p.phone != null && p.phone !== "" ,
+        () => toast(t("phoneSaved")),
+      );
     } catch (err) {
       toast(apiErrorMessage(err));
     } finally {
@@ -111,20 +129,12 @@ export function ProfilePage() {
     haptic("light");
     setSharingLocation(true);
     try {
-      const loc = await requestLocation();
-      if (!loc) {
-        toast(t("featureUnavailable"));
-        return;
-      }
-      const gpsTag = `[GPS: ${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}]`;
-      const base =
-        profile?.address && !profile.address.includes("[GPS:")
-          ? `${gpsTag} ${profile.address}`
-          : profile?.address
-            ? profile.address.replace(/\[GPS:[^\]]+\]/, gpsTag)
-            : gpsTag;
-      await updateProfile({ address: base });
-      toast(t("profileUpdated"));
+      await api.post("/profile/request-location", {});
+      toast(t("checkTelegramChat"));
+      pollProfileForShare(
+        (p) => p.lastLatitude != null,
+        () => toast(t("locationSaved")),
+      );
     } catch (err) {
       toast(apiErrorMessage(err));
     } finally {

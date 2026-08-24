@@ -65,11 +65,22 @@ export async function getProfileById(db: Db, id: string): Promise<Profile | null
 export async function saveProfileContact(
   db: Db,
   id: string,
-  input: { phone?: string; address?: string },
+  input: {
+    phone?: string;
+    address?: string;
+    lastLatitude?: number | null;
+    lastLongitude?: number | null;
+  },
 ): Promise<Profile> {
-  const patch: Record<string, string> = {};
+  const patch: Record<string, string | number> = {};
   if (input.phone !== undefined) patch.phone = input.phone;
   if (input.address !== undefined) patch.address = input.address;
+  if (input.lastLatitude !== undefined && input.lastLatitude !== null) {
+    patch.last_latitude = input.lastLatitude;
+  }
+  if (input.lastLongitude !== undefined && input.lastLongitude !== null) {
+    patch.last_longitude = input.lastLongitude;
+  }
 
   const { data, error } = await db.from("profiles").update(patch).eq("id", id).select("*").single();
   if (error) throw new Error(`saveProfileContact: ${error.message}`);

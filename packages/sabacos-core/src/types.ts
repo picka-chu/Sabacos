@@ -40,6 +40,9 @@ export interface Profile {
   phone: string | null;
   address: string | null;
   photoUrl: string | null;
+  /** Latest GPS pin the user shared with the bot (powers zone pricing). */
+  lastLatitude: number | null;
+  lastLongitude: number | null;
   role: ProfileRole;
   createdAt: string;
   updatedAt: string;

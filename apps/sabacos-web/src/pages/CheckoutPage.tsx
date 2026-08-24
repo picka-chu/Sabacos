@@ -2,13 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User, X, Zap, Truck } from "lucide-react";
 import { DEFAULT_DELIVERY_CONFIG, formatETB, quoteDelivery, t } from "@sabacos/core";
-import type { DeliveryConfig } from "@sabacos/core";
+import type { DeliveryConfig, Profile } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { api } from "../api.js";
 import { PageTitle } from "../components/PageTitle.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
 import { toast } from "../components/Toast.js";
-import { isTelegramSession, haptic, payInvoice, requestLocation, requestPhoneNumber } from "../telegram.js";
+import { isTelegramSession, haptic, payInvoice } from "../telegram.js";
 
 type Phase = "form" | "pending" | "success" | "failed";
 
@@ -25,6 +25,7 @@ export function CheckoutPage() {
   const profile = useShopStore((s) => s.profile);
   const checkout = useShopStore((s) => s.checkout);
   const clearCart = useShopStore((s) => s.clearCart);
+  const refreshProfile = useShopStore((s) => s.refreshProfile);
 
   const [form, setForm] = useState({
     customerName: profile?.firstName ?? "",
@@ -155,26 +156,56 @@ export function CheckoutPage() {
 
   const handleSharePhone = async () => {
     haptic();
-    const number = await requestPhoneNumber();
-    if (number) setForm((f) => ({ ...f, phone: number }));
-    else toast(t("featureUnavailable"));
+    try {
+      await api.post("/profile/request-phone", {});
+      toast(t("checkTelegramChat"));
+      pollProfileForShare((p) => Boolean(p.phone), () => {
+        setForm((f) => ({ ...f, phone: useShopStore.getState().profile?.phone ?? f.phone }));
+        toast(t("phoneSaved"));
+      });
+    } catch (err) {
+      toast(apiErrorMessage(err));
+    }
   };
 
   const handleShareLocation = async () => {
     haptic();
-    const loc = await requestLocation();
-    if (loc) {
-      setCoords(loc);
-      setManualZone(null);
-      const gpsTag = `[GPS: ${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}]`;
-      setForm((f) => ({
-        ...f,
-        address: f.address.includes("[GPS:") ? f.address.replace(/\[GPS:[^\]]+\]/, gpsTag) : `${gpsTag} ${f.address}`.trim(),
-      }));
-      toast(t("locationSaved"));
-    } else {
-      toast(t("featureUnavailable"));
+    try {
+      await api.post("/profile/request-location", {});
+      toast(t("checkTelegramChat"));
+      pollProfileForShare(
+        (p) => p.lastLatitude != null && p.lastLongitude != null,
+        () => {
+          const p = useShopStore.getState().profile;
+          if (p?.lastLatitude != null && p.lastLongitude != null) {
+            setCoords({ lat: p.lastLatitude, lng: p.lastLongitude });
+            setManualZone(null);
+          }
+          haptic("heavy");
+          toast(t("locationSaved"));
+        },
+      );
+    } catch (err) {
+      toast(apiErrorMessage(err));
     }
+  };
+
+  // The bot asks for the share in the chat; poll until it lands on the profile.
+  const pollProfileForShare = (ready: (p: Profile) => boolean, onDone: () => void) => {
+    let tries = 0;
+    const timer = setInterval(async () => {
+      tries += 1;
+      try {
+        const p = await refreshProfile();
+        if (p && ready(p)) {
+          clearInterval(timer);
+          onDone();
+        }
+      } catch {
+        /* keep polling */
+      }
+      if (tries >= 45) clearInterval(timer);
+    }, 2000);
   };
 
   if (phase === "success" && orderNo) {

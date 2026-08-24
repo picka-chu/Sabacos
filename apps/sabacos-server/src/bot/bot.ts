@@ -12,7 +12,7 @@ import { getDb } from "../db/client.js";
 import { getSettings } from "../db/settings.js";
 import { getOrderById, getOrderItems, getOrderWithItems, getOrdersByProfile } from "../db/orders.js";
 import { getProductsByIds } from "../db/catalog.js";
-import { getProfileById, upsertTelegramProfile } from "../db/profiles.js";
+import { getProfileById, saveProfileContact, upsertTelegramProfile } from "../db/profiles.js";
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -66,6 +66,50 @@ function statusEmoji(status: Order["status"]): string {
     case "delivered": return "🎉";
     default: return "❌";
   }
+}
+
+// ---------------------------------------------------------------- share flow
+
+// The mini app asks the server to make the bot DM one of these one-time
+// keyboards. Works on every Telegram client, unlike the in-app WebApp
+// requestPhone/requestLocation APIs which need recent clients.
+export async function sendShareRequest(
+  env: AppEnv,
+  telegramId: number,
+  kind: "phone" | "location",
+): Promise<void> {
+  const bot = createBot(env);
+  if (kind === "phone") {
+    await bot.api.sendMessage(telegramId, [
+      "📱 Almost done!",
+      "",
+      "Tap the button below to share your phone number with us —",
+      "we'll only use it for order & delivery updates.",
+    ].join("\n"), {
+      reply_markup: {
+        keyboard: [[{ text: "📱  Share my number", request_contact: true }]],
+        resize_keyboard: true,
+        one_time_keyboard: true,
+      },
+    });
+    return;
+  }
+  await bot.api.sendMessage(telegramId, [
+    "📍 One more thing!",
+    "",
+    "Tap the button below to share your location —",
+    "a precise GPS pin helps our courier find you and prices your delivery fairly.",
+  ].join("\n"), {
+    reply_markup: {
+      keyboard: [[{ text: "📍  Share my location", request_location: true }]],
+      resize_keyboard: true,
+      one_time_keyboard: true,
+    },
+  });
+}
+
+function backToCheckoutKeyboard(env: AppEnv) {
+  return new InlineKeyboard().webApp("✅  Back to the shop", `${env.WEBAPP_URL}/checkout`);
 }
 
 async function getShopSettings(env: AppEnv) {
@@ -171,6 +215,44 @@ export function createBot(env: AppEnv): Bot {
       return;
     }
     await ctx.reply(`Admin Dashboard: ${env.ADMIN_DASHBOARD_URL}`);
+  });
+
+  // User shared their number via the bot's request keyboard → save it and
+  // send them straight back to the mini app.
+  bot.on("message:contact", async (ctx) => {
+    const from = ctx.from;
+    if (!from || ctx.message.contact.user_id !== from.id) return; // only accept own contact
+    const db = getDb(env);
+    const profile =
+      (await getProfileById(db, String(from.id)).catch(() => null)) ??
+      (await upsertTelegramProfile(db, { telegramId: from.id }));
+    await saveProfileContact(db, profile.id, {
+      phone: ctx.message.contact.phone_number,
+    });
+    await ctx.reply("✅ Phone saved! Tap below to continue where you left off.", {
+      reply_markup: backToCheckoutKeyboard(env),
+    });
+  });
+
+  bot.on("message:location", async (ctx) => {
+    const from = ctx.from;
+    if (!from) return;
+    const db = getDb(env);
+    const profile =
+      (await getProfileById(db, String(from.id)).catch(() => null)) ??
+      (await upsertTelegramProfile(db, { telegramId: from.id }));
+    await saveProfileContact(db, profile.id, {
+      lastLatitude: ctx.message.location.latitude,
+      lastLongitude: ctx.message.location.longitude,
+    });
+    await ctx.reply([
+      "📍 Location saved!",
+      "",
+      "Tap below to continue checkout — your delivery price updates automatically.",
+      "Tip: for a precise door delivery, also describe nearby landmarks in the address field.",
+    ].join("\n"), {
+      reply_markup: backToCheckoutKeyboard(env),
+    });
   });
 
   bot.on("pre_checkout_query", async (ctx) => {

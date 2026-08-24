@@ -66,6 +66,7 @@ app.use("/api/v1/cart/*", requireUser);
 app.use("/api/v1/checkout", requireUser);
 app.use("/api/v1/orders", requireUser);
 app.use("/api/v1/profile", requireUser);
+app.use("/api/v1/profile/*", requireUser);
 app.use("/api/v1/auth/telegram", requireUser);
 app.use("/api/v1/track/*", requireUser);
 app.use("/api/v1/ads/*", requireUser);
