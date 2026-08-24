@@ -299,6 +299,20 @@ export function canRequestPhone(): boolean {
   return Boolean(webApp && typeof webApp.requestPhone === "function");
 }
 
+/**
+ * Closes the mini app, dropping the user back into the bot chat — the
+ * closest thing Telegram offers to "minimize". Used right after asking the
+ * bot for a phone/location share, so the request keyboard is in view.
+ */
+export function closeToChat(): void {
+  const webApp = getTelegramWebApp();
+  try {
+    webApp?.close();
+  } catch {
+    /* noop */
+  }
+}
+
 export function openExternalLink(url: string): void {
   const webApp = getTelegramWebApp();
   if (typeof webApp?.openLink === "function") {
