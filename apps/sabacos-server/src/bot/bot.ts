@@ -144,8 +144,11 @@ export function createBot(env: AppEnv): Bot {
         `💳 Secure checkout powered by Chapa`,
         `🚚 Live order tracking until delivery`,
       ].join("\n"),
-      { parse_mode: "HTML", reply_markup: mainMenuKeyboard(env) },
+      { parse_mode: "HTML", reply_markup: new InlineKeyboard().webApp("🛍  Shop now", env.WEBAPP_URL) },
     );
+    // Telegram doesn't allow inline + reply keyboards on the same message,
+    // so set the persistent keyboard on a second lightweight message.
+    await ctx.reply(" ", { reply_markup: mainMenuKeyboard(env) });
   });
 
   bot.command("shop", async (ctx) => {
