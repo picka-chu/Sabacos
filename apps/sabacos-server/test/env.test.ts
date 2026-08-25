@@ -6,6 +6,7 @@ const base = {
   CHAPA_PROVIDER_TOKEN: "provider:token",
   SUPABASE_URL: "https://project.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+  SUPABASE_ANON_KEY: "anon-key",
   WEBAPP_URL: "https://shop.sabacos.et",
   ADMIN_DASHBOARD_URL: "https://admin.sabacos.et",
 };

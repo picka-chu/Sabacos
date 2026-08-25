@@ -4,6 +4,7 @@ import type { AppEnv } from "../env.js";
 export type Db = SupabaseClient;
 
 let client: Db | null = null;
+let authClient: Db | null = null;
 
 export function getDb(env?: AppEnv): Db {
   if (client) return client;
@@ -14,8 +15,23 @@ export function getDb(env?: AppEnv): Db {
   return client;
 }
 
+/**
+ * Supabase client initialized with the anon key, used exclusively for
+ * auth operations (getUser, signIn, etc.).  The service-role key bypasses
+ * RLS but the auth server rejects it for user token validation.
+ */
+export function getAuthDb(env?: AppEnv): Db {
+  if (authClient) return authClient;
+  if (!env) throw new Error("getAuthDb called without env before initialization");
+  authClient = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return authClient;
+}
+
 export function resetDb(): void {
   client = null;
+  authClient = null;
 }
 
 export function adminClientForToken(env: AppEnv, token: string): Db {

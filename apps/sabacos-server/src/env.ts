@@ -7,6 +7,7 @@ const baseSchema = z.object({
   CHAPA_PROVIDER_TOKEN: z.string().trim().min(1, "CHAPA_PROVIDER_TOKEN is required (from BotFather)"),
   SUPABASE_URL: z.string().trim().url("SUPABASE_URL is required"),
   SUPABASE_SERVICE_ROLE_KEY: z.string().trim().min(1, "SUPABASE_SERVICE_ROLE_KEY is required"),
+  SUPABASE_ANON_KEY: z.string().trim().min(1, "SUPABASE_ANON_KEY is required (for admin auth validation)"),
   WEBAPP_URL: z.string().trim().url("WEBAPP_URL is required (the Telegram Mini App URL)"),
   ADMIN_DASHBOARD_URL: z.string().trim().url("ADMIN_DASHBOARD_URL is required"),
   WEBHOOK_URL: z.string().trim().url().optional(),

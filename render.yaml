@@ -29,6 +29,8 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
       # Full public URL of this service: https://sabacos-server.onrender.com
       - key: WEBHOOK_URL
         sync: false
