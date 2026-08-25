@@ -29,16 +29,21 @@ export function r2Config(env: AppEnv): R2Config | null {
   return null;
 }
 
-let cached: { client: S3Client; cfg: R2Config } | null = null;
+let cached: { client: S3Client; key: string } | null = null;
+
+function configKey(cfg: R2Config): string {
+  return `${cfg.accountId}:${cfg.accessKeyId}:${cfg.bucket}:${cfg.publicBase}`;
+}
 
 function getClient(cfg: R2Config): S3Client {
-  if (cached && cached.cfg === cfg) return cached.client;
+  const key = configKey(cfg);
+  if (cached && cached.key === key) return cached.client;
   const client = new S3Client({
     region: "auto",
     endpoint: `https://${cfg.accountId}.r2.cloudflarestorage.com`,
     credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
   });
-  cached = { client, cfg };
+  cached = { client, key };
   return client;
 }
 

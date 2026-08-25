@@ -36,6 +36,8 @@ import { notifyAdminChannel, createBot, postProductToChannel } from "../bot/bot.
 import { aiEnabled, llamaVisionProduct } from "../services/ai.js";
 import { r2Config, r2Put, r2Delete } from "../services/r2.js";
 
+const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
 export const adminRoutes = new Hono<{ Bindings: AppEnv } & AdminContext>();
 
 // --------------------------------------------------------------- helpers
@@ -298,6 +300,9 @@ adminRoutes.post("/products/:id/images", async (c) => {
   const uploaded: string[] = [];
   for (const file of files) {
     if (!(file instanceof File) || file.size === 0) continue;
+    if (file.type && !ALLOWED_IMAGE_MIMES.has(file.type)) {
+      throw badRequest(`Unsupported image type: ${file.type}. Allowed: JPEG, PNG, WebP, GIF`);
+    }
     const clean = String(file.name ?? "image").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
     const path = `products/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${clean}`;
     uploaded.push(await storeImage(env, db, path, file));
@@ -376,7 +381,9 @@ adminRoutes.get("/orders", async (c) => {
 
 adminRoutes.get("/orders/:id", async (c) => {
   const db = getDb(getAppEnv());
-  const order = await getOrderWithItems(db, c.req.param("id"));
+  const id = c.req.param("id");
+  if (!z.string().uuid().safeParse(id).success) throw badRequest("Invalid order ID");
+  const order = await getOrderWithItems(db, id);
   if (!order) throw notFound();
   return c.json({ order });
 });
@@ -384,6 +391,7 @@ adminRoutes.get("/orders/:id", async (c) => {
 adminRoutes.patch("/orders/:id/status", async (c) => {
   const db = getDb(getAppEnv());
   const id = c.req.param("id");
+  if (!z.string().uuid().safeParse(id).success) throw badRequest("Invalid order ID");
   const order = await getOrderById(db, id);
   if (!order) throw notFound();
 
@@ -437,6 +445,7 @@ const broadcastSchema = z
     imageUrl: z.string().trim().url().optional(),
     buttonText: z.string().trim().min(1).max(64).optional(),
     buttonUrl: z.string().trim().url().optional(),
+    dryRun: z.boolean().optional(),
   })
   .refine((v) => v.buttonUrl === undefined || v.buttonText !== undefined, {
     message: "buttonText is required when buttonUrl is set",
@@ -456,6 +465,21 @@ adminRoutes.post("/broadcast", async (c) => {
   const env = getAppEnv();
   const db = getDb(env);
   const input = safeParse(broadcastSchema, await c.req.json().catch(() => null));
+
+  // Count audience first for dry-run.
+  const { count: audienceSize } = await db
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .not("telegram_id", "is", null);
+
+  if (input.dryRun) {
+    return c.json({
+      dryRun: true,
+      audienceSize: audienceSize ?? 0,
+      text: input.text,
+      imageUrl: input.imageUrl ?? null,
+    });
+  }
 
   const bot = createBot(env);
   const replyMarkup =
@@ -495,7 +519,7 @@ adminRoutes.post("/broadcast", async (c) => {
     }
     if (data.length < PAGE) break;
   }
-  return c.json({ sent, failed });
+  return c.json({ sent, failed, audienceSize: audienceSize ?? 0 });
 });
 
 // --------------------------------------------------------------- ai product draft
@@ -507,6 +531,9 @@ adminRoutes.post("/ai/product-image", async (c) => {
   const file = form["image"];
   if (!(file instanceof File)) throw badRequest("image file required");
   if (file.size > 10 * 1024 * 1024) throw badRequest("Image too large (max 10MB)");
+  if (file.type && !ALLOWED_IMAGE_MIMES.has(file.type)) {
+    throw badRequest(`Unsupported image type: ${file.type}. Allowed: JPEG, PNG, WebP, GIF`);
+  }
 
   const safeName = file.name.replace(/[^\w.-]+/g, "_").slice(-80) || "photo.jpg";
   const path = `ai/${Date.now()}-${safeName}`;

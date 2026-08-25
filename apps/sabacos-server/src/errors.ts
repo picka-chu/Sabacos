@@ -19,6 +19,8 @@ export const unauthorized = (message = "Unauthorized") => new ApiError(401, "una
 export const forbidden = (message = "Forbidden") => new ApiError(403, "forbidden", message);
 export const conflict = (message: string) => new ApiError(409, "conflict", message);
 
+const isProd = process.env.NODE_ENV === "production";
+
 export function sendError(c: Context, err: unknown) {
   if (err instanceof ApiError) {
     return c.json(
@@ -38,8 +40,14 @@ export function sendError(c: Context, err: unknown) {
     );
   }
   console.error("[api] unhandled error:", err);
+  // In production, never leak raw error messages (may contain DB column names, etc.).
   return c.json(
-    { error: { code: "internal_error", message: "Internal server error" } },
+    {
+      error: {
+        code: "internal_error",
+        message: isProd ? "Internal server error" : String(err),
+      },
+    },
     500,
   );
 }

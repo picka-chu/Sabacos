@@ -148,6 +148,9 @@ export async function runMarketingSweep(db: Db, bot: Bot, env: AppEnv): Promise<
   return sent;
 }
 
+let sweepInterval: ReturnType<typeof setInterval> | null = null;
+let sweepTimeout: ReturnType<typeof setTimeout> | null = null;
+
 /** Starts the hourly sweep loop. No-op when MARKETING_SWEEP=off. */
 export function startMarketingSweeper(bot: Bot, env: AppEnv): void {
   if ((env.MARKETING_SWEEP ?? "on") === "off") return;
@@ -167,6 +170,12 @@ export function startMarketingSweeper(bot: Bot, env: AppEnv): void {
     }
   };
 
-  setTimeout(tick, 60_000);
-  setInterval(tick, 3_600_000);
+  sweepTimeout = setTimeout(tick, 60_000);
+  sweepInterval = setInterval(tick, 3_600_000);
+}
+
+/** Stops the hourly sweep loop (called during graceful shutdown). */
+export function stopMarketingSweeper(): void {
+  if (sweepTimeout) { clearTimeout(sweepTimeout); sweepTimeout = null; }
+  if (sweepInterval) { clearInterval(sweepInterval); sweepInterval = null; }
 }

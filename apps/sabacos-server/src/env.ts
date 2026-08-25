@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const envSchema = z.object({
+const baseSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(8788),
   BOT_TOKEN: z.string().trim().min(1, "BOT_TOKEN is required"),
@@ -21,6 +21,12 @@ const envSchema = z.object({
   R2_PUBLIC_BASE: z.string().trim().url().optional(),
   MARKETING_SWEEP: z.enum(["on", "off"]).default("on"),
 });
+
+// In production, WEBHOOK_SECRET is required to prevent forged updates.
+const envSchema = baseSchema.refine(
+  (v) => v.NODE_ENV !== "production" || v.WEBHOOK_SECRET,
+  { message: "WEBHOOK_SECRET is required in production", path: ["WEBHOOK_SECRET"] },
+);
 
 export type AppEnv = z.infer<typeof envSchema>;
 

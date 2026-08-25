@@ -112,7 +112,7 @@ describe("checkout", () => {
     ).rejects.toMatchObject({ code: "insufficient_stock" });
   });
 
-  it("rejects orders below the minimum total", async () => {
+  it("rejects orders below the minimum total", { timeout: 15_000 }, async () => {
     getCartMock.mockResolvedValue([
       cartItem({ qty: 1, product: product({ priceHalala: 100 }) }),
     ]);

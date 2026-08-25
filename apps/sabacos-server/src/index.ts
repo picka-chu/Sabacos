@@ -1,4 +1,4 @@
-import { serve } from "@hono/node-server";
+import { serve, type ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { loadEnv } from "./env.js";
@@ -12,49 +12,112 @@ import { adRoutes } from "./routes/ads.js";
 import { requireUser } from "./auth/telegram.js";
 import { requireAdmin } from "./auth/admin.js";
 import { sendError, notFound } from "./errors.js";
-import { startMarketingSweeper } from "./services/notifier.js";
+import { log } from "./log.js";
+import { rateLimit } from "./rate-limit.js";
+import { startMarketingSweeper, stopMarketingSweeper } from "./services/notifier.js";
 
 const env = loadEnv();
 const db = getDb(env);
 const bot = createBot(env);
 
+// ---------------------------------------------------------------------------
+// Allowed CORS origins
+// ---------------------------------------------------------------------------
+const allowedOrigins = new Set<string>([env.WEBAPP_URL, env.ADMIN_DASHBOARD_URL]);
+if (env.NODE_ENV !== "production") {
+  allowedOrigins.add("http://localhost:5174");
+  allowedOrigins.add("http://localhost:5175");
+}
+
+function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin) return true; // non-browser clients
+  try {
+    const host = new URL(origin).host;
+    for (const allowed of allowedOrigins) {
+      if (new URL(allowed).host === host) return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function ipKey(c: { req: { header: (name: string) => string | undefined } }): string {
+  return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("x-real-ip") ?? "unknown";
+}
+
 const app = new Hono<{ Bindings: typeof env }>();
 
+// ---------------------------------------------------------------------------
+// Global middleware
+// ---------------------------------------------------------------------------
+
+// CORS — whitelist origins
 app.use(
   "*",
   cors({
-    origin: (origin) => origin ?? "*",
+    origin: (origin) => (isAllowedOrigin(origin) ? origin : allowedOrigins.values().next().value!),
     allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization", "X-Telegram-Init-Data"],
+    maxAge: 86400,
   }),
 );
 
-app.onError((err, c) => sendError(c, err));
-
-app.notFound((c) => sendError(c, notFound()));
-
-app.get("/health", async (c) => {
-  const { data, error } = await db.from("settings").select("key").limit(1);
-  return c.json({
-    ok: true,
-    db: !error,
-    time: new Date().toISOString(),
-  });
+// Security response headers
+app.use("*", async (c, next) => {
+  await next();
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Frame-Options", "DENY");
+  c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (env.NODE_ENV === "production") {
+    c.header("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+  }
 });
 
+// Global rate limit: 120 req/min per IP
+app.use("*", rateLimit({ windowMs: 60_000, limit: 120, keyGenerator: ipKey }));
+
+// ---------------------------------------------------------------------------
+// Error handling
+// ---------------------------------------------------------------------------
+app.onError((err, c) => sendError(c, err));
+app.notFound((c) => sendError(c, notFound()));
+
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
+app.get("/health", async (c) => {
+  const { data, error } = await db.from("settings").select("key").limit(1);
+  return c.json({ ok: true, db: !error, time: new Date().toISOString() });
+});
+
+// ---------------------------------------------------------------------------
+// Telegram webhook — timing-safe secret comparison
+// ---------------------------------------------------------------------------
 app.post("/webhook", async (c) => {
-  const secret = c.req.header("x-telegram-bot-api-secret-token");
-  if (env.WEBHOOK_SECRET && secret !== env.WEBHOOK_SECRET) {
-    return c.json({ error: { code: "unauthorized", message: "Bad webhook secret" } }, 401);
+  const provided = c.req.header("x-telegram-bot-api-secret-token") ?? "";
+  if (env.WEBHOOK_SECRET) {
+    const a = new TextEncoder().encode(provided);
+    const b = new TextEncoder().encode(env.WEBHOOK_SECRET);
+    if (a.length !== b.length) {
+      return c.json({ error: { code: "unauthorized", message: "Bad webhook secret" } }, 401);
+    }
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
+    if (diff !== 0) {
+      return c.json({ error: { code: "unauthorized", message: "Bad webhook secret" } }, 401);
+    }
   }
   const update = await c.req.json();
   await bot.handleUpdate(update);
   return c.json({ ok: true });
 });
 
+// ---------------------------------------------------------------------------
+// Public routes (no auth)
+// ---------------------------------------------------------------------------
 app.route("/api/v1/catalog", catalogRoutes);
 
-// Public: clients need the zone table + thresholds to preview delivery cost.
 app.get("/api/v1/delivery/config", async (c) => {
   const { getSettings } = await import("./db/settings.js");
   const { DEFAULT_DELIVERY_CONFIG } = await import("@sabacos/core");
@@ -62,8 +125,11 @@ app.get("/api/v1/delivery/config", async (c) => {
   return c.json({ config: settings?.deliveryConfig ?? DEFAULT_DELIVERY_CONFIG });
 });
 
-app.use("/api/v1/cart/*", requireUser);
-app.use("/api/v1/checkout", requireUser);
+// ---------------------------------------------------------------------------
+// Authenticated user routes — tighter rate limit: 30 req/min
+// ---------------------------------------------------------------------------
+app.use("/api/v1/cart/*", rateLimit({ windowMs: 60_000, limit: 30, keyGenerator: ipKey }), requireUser);
+app.use("/api/v1/checkout", rateLimit({ windowMs: 60_000, limit: 10, keyGenerator: ipKey }), requireUser);
 app.use("/api/v1/orders", requireUser);
 app.use("/api/v1/profile", requireUser);
 app.use("/api/v1/profile/*", requireUser);
@@ -74,35 +140,73 @@ app.route("/api/v1", adRoutes);
 app.route("/api/v1/cart", cartRoutes);
 app.route("/api/v1", orderRoutes);
 
-app.use("/api/v1/admin/*", requireAdmin);
+// ---------------------------------------------------------------------------
+// Admin routes — 20 req/min, requires admin bearer
+// ---------------------------------------------------------------------------
+app.use("/api/v1/admin/*", rateLimit({ windowMs: 60_000, limit: 20, keyGenerator: ipKey }), requireAdmin);
 app.route("/api/v1/admin", adminRoutes);
+
+// ---------------------------------------------------------------------------
+// Body-size guard: reject requests > 10 MB early
+// ---------------------------------------------------------------------------
+app.use("*", async (c, next) => {
+  const cl = Number(c.req.header("content-length") ?? 0);
+  if (cl > 10 * 1024 * 1024) {
+    return c.json({ error: { code: "payload_too_large", message: "Request too large (max 10 MB)" } }, 413);
+  }
+  await next();
+});
+
+// ---------------------------------------------------------------------------
+// Server lifecycle
+// ---------------------------------------------------------------------------
+let server: ServerType | undefined;
 
 async function start(): Promise<void> {
   await bot.init();
-  console.log(`Bot initialized as @${bot.botInfo.username}`);
+  log.info(`Bot initialized as @${bot.botInfo.username}`);
 
   if (env.WEBHOOK_URL) {
     const url = `${env.WEBHOOK_URL.replace(/\/$/, "")}/webhook`;
     await bot.api.setWebhook(url, env.WEBHOOK_SECRET ? { secret_token: env.WEBHOOK_SECRET } : {});
-    console.log(`Webhook set to ${url}`);
+    log.info(`Webhook set to ${url}`);
   } else {
-    console.log("WEBHOOK_URL not set; skipping webhook registration. Set it in production.");
+    log.warn("WEBHOOK_URL not set; skipping webhook registration.");
   }
 
   await registerBotDefaults(bot, env);
-  console.log("Bot commands and menu button registered");
+  log.info("Bot commands and menu button registered");
 
   startMarketingSweeper(bot, env);
-  console.log(`Marketing sweeper ${env.MARKETING_SWEEP === "off" ? "disabled" : "running (hourly)"}`);
+  log.info(`Marketing sweeper ${env.MARKETING_SWEEP === "off" ? "disabled" : "running (hourly)"}`);
 
-  serve({ fetch: app.fetch, port: env.PORT }, (info) => {
-    console.log(`Sabacos server listening on http://localhost:${info.port}`);
-    console.log(`Mini app URL: ${env.WEBAPP_URL}`);
-    console.log(`Admin dashboard URL: ${env.ADMIN_DASHBOARD_URL}`);
+  server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
+    log.info(`Sabacos server listening on http://localhost:${info.port}`);
+    log.info(`Mini app URL: ${env.WEBAPP_URL}`);
+    log.info(`Admin dashboard URL: ${env.ADMIN_DASHBOARD_URL}`);
   });
 }
 
+// ---------------------------------------------------------------------------
+// Graceful shutdown
+// ---------------------------------------------------------------------------
+function shutdown(signal: string): void {
+  log.info(`${signal} received — shutting down`);
+  stopMarketingSweeper();
+  server?.close(() => {
+    log.info("HTTP server closed");
+    process.exit(0);
+  });
+  setTimeout(() => {
+    log.error("Forced shutdown after timeout");
+    process.exit(1);
+  }, 10_000).unref();
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
 start().catch((err) => {
-  console.error("Failed to start server:", err);
+  log.error("Failed to start server:", err);
   process.exit(1);
 });
