@@ -14,6 +14,8 @@ import { nextOrderSeq } from "./sequences.js";
 export interface CreateOrderInput {
   profileId: string;
   subtotalHalala: number;
+  discountHalala: number;
+  discountPercent: number;
   deliveryFeeHalala: number;
   totalHalala: number;
   customerName: string;
@@ -48,6 +50,8 @@ export async function createOrder(db: Db, input: CreateOrderInput): Promise<Orde
       status: "pending_payment",
       payment_status: "pending",
       subtotal_halala: input.subtotalHalala,
+      discount_halala: input.discountHalala,
+      discount_percent: input.discountPercent,
       delivery_fee_halala: input.deliveryFeeHalala,
       total_halala: input.totalHalala,
       customer_name: input.customerName,

@@ -93,6 +93,8 @@ export interface Order {
   profileId: string;
   status: OrderStatus;
   subtotalHalala: number;
+  discountHalala: number;
+  discountPercent: number;
   deliveryFeeHalala: number;
   totalHalala: number;
   customerName: string;

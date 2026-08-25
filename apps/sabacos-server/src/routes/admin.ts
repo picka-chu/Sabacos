@@ -168,6 +168,296 @@ adminRoutes.get("/stats", async (c) => {
   });
 });
 
+// ------------------------------------------------------------- analytics
+
+adminRoutes.get("/analytics", async (c) => {
+  const db = getDb(getAppEnv());
+  const { range } = c.req.query();
+  const days = range === "7d" ? 7 : range === "90d" ? 90 : 30;
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+
+  const [
+    totalUsers,
+    newUsersWeek,
+    newUsersMonth,
+    usersByDay,
+    totalOrdersAll,
+    recentOrders,
+    paidOrdersInRange,
+    topProductsByViews,
+    topCategoriesByViews,
+    topCustomers,
+    totalViews,
+    uniqueViewers,
+  ] = await Promise.all([
+    db.from("profiles").select("id", { count: "exact", head: true }),
+    db.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
+    db.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", monthAgo),
+    db.from("profiles").select("created_at").gte("created_at", since).order("created_at", { ascending: true }),
+    db.from("orders").select("id", { count: "exact", head: true }),
+    db.from("orders").select("id, created_at, total_halala, status, payment_status").gte("created_at", since).order("created_at", { ascending: true }),
+    db.from("orders").select("id, profile_id, total_halala, customer_name").eq("payment_status", "success").gte("created_at", since),
+    db.from("product_views").select("product_id").gte("created_at", since),
+    db.from("product_views").select("category_id").gte("created_at", since).not("category_id", "is", null),
+    db.from("orders").select("profile_id, total_halala, customer_name").eq("payment_status", "success").gte("created_at", since),
+    db.from("product_views").select("id", { count: "exact", head: true }).gte("created_at", since),
+    db.from("product_views").select("profile_id").gte("created_at", since),
+  ]);
+
+  // Get order items for recent orders
+  const recentOrderIds = (recentOrders.data ?? []).map((r) => r.id as string);
+  let orderItemsData: Array<Record<string, unknown>> = [];
+  if (recentOrderIds.length > 0) {
+    // Supabase has a limit on `in` clauses, batch in chunks of 100
+    for (let i = 0; i < recentOrderIds.length; i += 100) {
+      const chunk = recentOrderIds.slice(i, i + 100);
+      const { data } = await db
+        .from("order_items")
+        .select("order_id, product_id, name_en, name_am, qty, subtotal_halala")
+        .in("order_id", chunk);
+      if (data) orderItemsData.push(...data);
+    }
+  }
+
+  // --- user metrics ---
+  const totalUserCount = totalUsers.count ?? 0;
+  const newUsersWeekCount = newUsersWeek.count ?? 0;
+  const newUsersMonthCount = newUsersMonth.count ?? 0;
+
+  const userDayMap = new Map<string, number>();
+  for (const row of usersByDay.data ?? []) {
+    const day = (row.created_at as string).slice(0, 10);
+    userDayMap.set(day, (userDayMap.get(day) ?? 0) + 1);
+  }
+  const usersByDayArr = [...userDayMap.entries()]
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // --- order metrics ---
+  const totalOrderCount = totalOrdersAll.count ?? 0;
+
+  const orderDayMap = new Map<string, number>();
+  for (const row of recentOrders.data ?? []) {
+    const day = (row.created_at as string).slice(0, 10);
+    orderDayMap.set(day, (orderDayMap.get(day) ?? 0) + 1);
+  }
+  const ordersByDayArr = [...orderDayMap.entries()]
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // --- revenue metrics ---
+  const totalRevenue = (paidOrdersInRange.data ?? []).reduce(
+    (sum, row) => sum + (row.total_halala as number), 0,
+  );
+  const paidCount = (paidOrdersInRange.data ?? []).length;
+  const avgOrderVal = paidCount > 0 ? Math.round(totalRevenue / paidCount) : 0;
+
+  // Derive revenue by day from recentOrders that are paid
+  const revenueDayMap = new Map<string, number>();
+  const paidOrderIds = new Set((paidOrdersInRange.data ?? []).map((r) => r.id as string));
+  for (const row of recentOrders.data ?? []) {
+    if (!paidOrderIds.has(row.id as string)) continue;
+    const day = (row.created_at as string).slice(0, 10);
+    revenueDayMap.set(day, (revenueDayMap.get(day) ?? 0) + (row.total_halala as number));
+  }
+  const revenueByDayArr = [...revenueDayMap.entries()]
+    .map(([date, revenue]) => ({ date, revenue }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // --- product metrics (from order_items) ---
+  const productOrderMap = new Map<string, { nameEn: string; nameAm: string; qty: number; revenue: number }>();
+  for (const row of orderItemsData) {
+    const pid = row.product_id as string;
+    if (!pid) continue;
+    const existing = productOrderMap.get(pid);
+    if (existing) {
+      existing.qty += row.qty as number;
+      existing.revenue += row.subtotal_halala as number;
+    } else {
+      productOrderMap.set(pid, {
+        nameEn: row.name_en as string,
+        nameAm: row.name_am as string,
+        qty: row.qty as number,
+        revenue: row.subtotal_halala as number,
+      });
+    }
+  }
+  const topProductsByOrderArr = [...productOrderMap.entries()]
+    .map(([productId, data]) => ({ productId, ...data }))
+    .sort((a, b) => b.qty - a.qty)
+    .slice(0, 10);
+
+  // Top products by views
+  const productViewMap = new Map<string, number>();
+  for (const row of topProductsByViews.data ?? []) {
+    const pid = row.product_id as string;
+    productViewMap.set(pid, (productViewMap.get(pid) ?? 0) + 1);
+  }
+  const topProductsByViewArr = [...productViewMap.entries()]
+    .map(([productId, views]) => ({ productId, views }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 10);
+
+  const topViewedIds = topProductsByViewArr.map((p) => p.productId);
+  let productNames = new Map<string, { nameEn: string; nameAm: string }>();
+  if (topViewedIds.length > 0) {
+    const { data: nameRows } = await db
+      .from("products")
+      .select("id, name_en, name_am")
+      .in("id", topViewedIds);
+    for (const row of nameRows ?? []) {
+      productNames.set(row.id as string, {
+        nameEn: row.name_en as string,
+        nameAm: row.name_am as string,
+      });
+    }
+  }
+  const topProductsByViewNamed = topProductsByViewArr.map((p) => ({
+    ...p,
+    nameEn: productNames.get(p.productId)?.nameEn ?? "",
+    nameAm: productNames.get(p.productId)?.nameAm ?? "",
+  }));
+
+  // --- category metrics ---
+  const categoryViewMap = new Map<string, number>();
+  for (const row of topCategoriesByViews.data ?? []) {
+    const cid = row.category_id as string;
+    categoryViewMap.set(cid, (categoryViewMap.get(cid) ?? 0) + 1);
+  }
+  const topCatViewArr = [...categoryViewMap.entries()]
+    .map(([categoryId, views]) => ({ categoryId, views }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 10);
+
+  const topCatIds = topCatViewArr.map((c) => c.categoryId);
+  let categoryNames = new Map<string, { nameEn: string; nameAm: string }>();
+  if (topCatIds.length > 0) {
+    const { data: catRows } = await db
+      .from("categories")
+      .select("id, name_en, name_am")
+      .in("id", topCatIds);
+    for (const row of catRows ?? []) {
+      categoryNames.set(row.id as string, {
+        nameEn: row.name_en as string,
+        nameAm: row.name_am as string,
+      });
+    }
+  }
+  const topCategoriesByViewNamed = topCatViewArr.map((c) => ({
+    ...c,
+    nameEn: categoryNames.get(c.categoryId)?.nameEn ?? "",
+    nameAm: categoryNames.get(c.categoryId)?.nameAm ?? "",
+  }));
+
+  // Category revenue from order_items
+  const orderItemProductIds = [...new Set(orderItemsData.map((r) => r.product_id as string).filter(Boolean))];
+  let prodToCat = new Map<string, string>();
+  if (orderItemProductIds.length > 0) {
+    const { data: prodRows } = await db
+      .from("products")
+      .select("id, category_id")
+      .in("id", orderItemProductIds);
+    for (const row of prodRows ?? []) {
+      if (row.category_id) prodToCat.set(row.id as string, row.category_id as string);
+    }
+  }
+  const catRevenueMap = new Map<string, number>();
+  for (const row of orderItemsData) {
+    const catId = prodToCat.get(row.product_id as string);
+    if (!catId) continue;
+    catRevenueMap.set(catId, (catRevenueMap.get(catId) ?? 0) + (row.subtotal_halala as number));
+  }
+  const topCatRevenueArr = [...catRevenueMap.entries()]
+    .map(([categoryId, revenue]) => ({ categoryId, revenue }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 10);
+
+  const topCatRevenueIds = topCatRevenueArr.map((c) => c.categoryId);
+  let catRevNames = new Map<string, { nameEn: string; nameAm: string }>();
+  if (topCatRevenueIds.length > 0) {
+    const { data: catRevRows } = await db
+      .from("categories")
+      .select("id, name_en, name_am")
+      .in("id", topCatRevenueIds);
+    for (const row of catRevRows ?? []) {
+      catRevNames.set(row.id as string, {
+        nameEn: row.name_en as string,
+        nameAm: row.name_am as string,
+      });
+    }
+  }
+  const topCategoriesByRevenueNamed = topCatRevenueArr.map((c) => ({
+    ...c,
+    nameEn: catRevNames.get(c.categoryId)?.nameEn ?? "",
+    nameAm: catRevNames.get(c.categoryId)?.nameAm ?? "",
+  }));
+
+  // --- customer metrics ---
+  const customerMap = new Map<string, { name: string; totalSpent: number; orderCount: number }>();
+  for (const row of topCustomers.data ?? []) {
+    const pid = row.profile_id as string;
+    const existing = customerMap.get(pid);
+    if (existing) {
+      existing.totalSpent += row.total_halala as number;
+      existing.orderCount += 1;
+    } else {
+      customerMap.set(pid, {
+        name: row.customer_name as string,
+        totalSpent: row.total_halala as number,
+        orderCount: 1,
+      });
+    }
+  }
+  const topCustomersArr = [...customerMap.entries()]
+    .map(([profileId, data]) => ({ profileId, ...data }))
+    .sort((a, b) => b.totalSpent - a.totalSpent)
+    .slice(0, 10);
+
+  // --- engagement ---
+  const totalViewCount = totalViews.count ?? 0;
+  const uniqueViewerSet = new Set((uniqueViewers.data ?? []).map((r) => r.profile_id as string));
+  const uniqueViewerCount = uniqueViewerSet.size;
+
+  return c.json({
+    analytics: {
+      range: `${days}d`,
+      generatedAt: new Date().toISOString(),
+      users: {
+        total: totalUserCount,
+        newThisWeek: newUsersWeekCount,
+        newThisMonth: newUsersMonthCount,
+        byDay: usersByDayArr,
+      },
+      orders: {
+        total: totalOrderCount,
+        byDay: ordersByDayArr,
+      },
+      revenue: {
+        total: totalRevenue,
+        averageOrderValue: avgOrderVal,
+        byDay: revenueByDayArr,
+      },
+      products: {
+        topByOrders: topProductsByOrderArr,
+        topByViews: topProductsByViewNamed,
+      },
+      categories: {
+        topByViews: topCategoriesByViewNamed,
+        topByRevenue: topCategoriesByRevenueNamed,
+      },
+      customers: {
+        top: topCustomersArr,
+      },
+      engagement: {
+        totalViews: totalViewCount,
+        uniqueViewers: uniqueViewerCount,
+      },
+    },
+  });
+});
+
 // -------------------------------------------------------------- products
 
 adminRoutes.get("/products", async (c) => {

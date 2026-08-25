@@ -12,6 +12,7 @@ import type { Db } from "../db/client.js";
 import { getSettings } from "../db/settings.js";
 import { clearCart, getCart } from "../db/cart.js";
 import { createOrder } from "../db/orders.js";
+import { getTotalDiscountForProfile } from "../db/waitlist.js";
 
 export interface InvoicePriceLine {
   label: string;
@@ -102,24 +103,33 @@ export async function checkout(
     );
   }
 
+  // Look up waitlist / referral discount for this user.
+  const discountPercent = Math.min(await getTotalDiscountForProfile(db, profileId), 100);
+  const discountHalala = discountPercent > 0
+    ? Math.round((subtotalHalala * discountPercent) / 100)
+    : 0;
+  const discountedSubtotal = subtotalHalala - discountHalala;
+
   // Zone delivery pricing (GPS coords preferred, manual zone as fallback).
   const fragile = cart.some((i) => i.product.isFragile);
   const config = settings.deliveryConfig
     ? mergeDeliveryConfig(settings.deliveryConfig)
     : DEFAULT_DELIVERY_CONFIG;
   const delivery = quoteDelivery(config, {
-    subtotalHalala,
+    subtotalHalala: discountedSubtotal,
     latitude: input.latitude ?? null,
     longitude: input.longitude ?? null,
     zone: input.zone ?? null,
     express: input.deliveryType === "express",
     fragile,
   });
-  const totalHalala = subtotalHalala + delivery.totalDeliveryFeeHalala;
+  const totalHalala = discountedSubtotal + delivery.totalDeliveryFeeHalala;
 
   const order = await createOrder(db, {
     profileId,
     subtotalHalala,
+    discountHalala,
+    discountPercent,
     deliveryFeeHalala: delivery.totalDeliveryFeeHalala,
     totalHalala,
     customerName: input.customerName,
@@ -148,6 +158,9 @@ export async function checkout(
       amount: i.product.priceHalala * i.qty,
     })),
   ];
+  if (discountHalala > 0) {
+    prices.push({ label: `Waitlist discount (${discountPercent}%)`, amount: -discountHalala });
+  }
   if (delivery.expressSurchargeHalala > 0) {
     if (delivery.baseFeeHalala + delivery.zoneSurchargeHalala > 0) {
       prices.push({

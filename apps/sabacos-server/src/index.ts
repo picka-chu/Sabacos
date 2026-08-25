@@ -9,6 +9,8 @@ import { cartRoutes } from "./routes/cart.js";
 import { orderRoutes } from "./routes/orders.js";
 import { adminRoutes } from "./routes/admin.js";
 import { adRoutes } from "./routes/ads.js";
+import { waitlistAdminRoutes } from "./routes/waitlist-admin.js";
+import { waitlistRoutes } from "./routes/waitlist.js";
 import { requireUser } from "./auth/telegram.js";
 import { requireAdmin } from "./auth/admin.js";
 import { sendError, notFound } from "./errors.js";
@@ -136,15 +138,19 @@ app.use("/api/v1/profile/*", requireUser);
 app.use("/api/v1/auth/telegram", requireUser);
 app.use("/api/v1/track/*", requireUser);
 app.use("/api/v1/ads/*", requireUser);
+app.use("/api/v1/waitlist", requireUser);
+app.use("/api/v1/waitlist/*", requireUser);
 app.route("/api/v1", adRoutes);
 app.route("/api/v1/cart", cartRoutes);
 app.route("/api/v1", orderRoutes);
+app.route("/api/v1/waitlist", waitlistRoutes);
 
 // ---------------------------------------------------------------------------
 // Admin routes — 20 req/min, requires admin bearer
 // ---------------------------------------------------------------------------
 app.use("/api/v1/admin/*", rateLimit({ windowMs: 60_000, limit: 20, keyGenerator: ipKey }), requireAdmin);
 app.route("/api/v1/admin", adminRoutes);
+app.route("/api/v1/admin/waitlist", waitlistAdminRoutes);
 
 // ---------------------------------------------------------------------------
 // Body-size guard: reject requests > 10 MB early

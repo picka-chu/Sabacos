@@ -10,6 +10,8 @@ import { CategoriesPage } from "./pages/CategoriesPage.js";
 import { OrdersPage } from "./pages/OrdersPage.js";
 import { OrderDetailPage } from "./pages/OrderDetailPage.js";
 import { BroadcastPage } from "./pages/BroadcastPage.js";
+import { AnalyticsPage } from "./pages/AnalyticsPage.js";
+import { WaitlistPage } from "./pages/WaitlistPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 
 function Gate({ children }: { children: React.ReactNode }) {
@@ -58,6 +60,12 @@ export default function App() {
       </Route>
       <Route path="/orders/:id">
         <Gate><OrderDetailPage /></Gate>
+      </Route>
+      <Route path="/analytics">
+        <Gate><AnalyticsPage /></Gate>
+      </Route>
+      <Route path="/waitlist">
+        <Gate><WaitlistPage /></Gate>
       </Route>
       <Route path="/broadcast">
         <Gate><BroadcastPage /></Gate>

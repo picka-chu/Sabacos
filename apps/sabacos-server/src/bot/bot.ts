@@ -13,6 +13,7 @@ import { getSettings } from "../db/settings.js";
 import { getOrderById, getOrderItems, getOrderWithItems, getOrdersByProfile } from "../db/orders.js";
 import { getProductsByIds } from "../db/catalog.js";
 import { getProfileById, saveProfileContact, upsertTelegramProfile } from "../db/profiles.js";
+import { getWaitlistConfig, getWaitlistEntryByCode } from "../db/waitlist.js";
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -120,15 +121,32 @@ export function createBot(env: AppEnv): Bot {
   const bot = new Bot(env.BOT_TOKEN);
 
   bot.command("start", async (ctx) => {
+    const db = getDb(env);
     if (ctx.from) {
       // Trusted identity straight from Telegram's webhook — create the
       // account before the user ever opens the mini app.
-      await upsertTelegramProfile(getDb(env), {
+      await upsertTelegramProfile(db, {
         telegramId: ctx.from.id,
         firstName: ctx.from.first_name ?? null,
         lastName: ctx.from.last_name ?? null,
         username: ctx.from.username ?? null,
       }).catch((err) => console.error("start: profile upsert failed", err));
+    }
+
+    // Check for referral deep link: /start ref_CODE
+    const payload = ctx.match as string | undefined;
+    let referralMsg = "";
+    if (payload?.startsWith("ref_")) {
+      const code = payload.slice(4).toUpperCase();
+      const config = await getWaitlistConfig(db).catch(() => null);
+      const referrer = await getWaitlistEntryByCode(db, code).catch(() => null);
+      if (config?.isActive && referrer) {
+        referralMsg = [
+          "",
+          `🔗 You were invited by a friend!`,
+          `Join the waitlist through the shop to get early-bird perks.`,
+        ].join("\n");
+      }
     }
 
     const settings = await getShopSettings(env);
@@ -143,6 +161,7 @@ export function createBot(env: AppEnv): Bot {
         `✨ Curated skincare, makeup & fragrance`,
         `💳 Secure checkout powered by Chapa`,
         `🚚 Live order tracking until delivery`,
+        referralMsg,
       ].join("\n"),
       { parse_mode: "HTML", reply_markup: new InlineKeyboard().webApp("🛍  Shop now", env.WEBAPP_URL) },
     );
@@ -373,6 +392,9 @@ function formatOrderLines(order: OrderWithItems): string {
 }
 
 export function formatAdminOrderAlert(order: OrderWithItems): string {
+  const discountLine = order.discountHalala > 0
+    ? `Discount (${order.discountPercent}%): -${formatETB(order.discountHalala)}`
+    : null;
   return [
     `🛍 *New paid order*`,
     ``,
@@ -383,9 +405,12 @@ export function formatAdminOrderAlert(order: OrderWithItems): string {
     formatOrderLines(order),
     ``,
     `Subtotal: ${formatETB(order.subtotalHalala)}`,
+    discountLine,
     `Delivery: ${order.deliveryFeeHalala > 0 ? formatETB(order.deliveryFeeHalala) : "Free"}`,
     `*Total: ${formatETB(order.totalHalala)}*`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function buildHelpText(shopPhone: string | null): string {
@@ -423,6 +448,9 @@ export async function registerBotDefaults(bot: Bot, env: AppEnv): Promise<void> 
 }
 
 export async function sendReceipt(ctx: Context, env: AppEnv, order: OrderWithItems): Promise<void> {
+  const discountLine = order.discountHalala > 0
+    ? `Discount (${order.discountPercent}%): -${formatETB(order.discountHalala)}`
+    : null;
   const lines = [
     `✅ *Payment received! Thank you for your order.*`,
     ``,
@@ -431,12 +459,14 @@ export async function sendReceipt(ctx: Context, env: AppEnv, order: OrderWithIte
     formatOrderLines(order),
     ``,
     `Subtotal: ${formatETB(order.subtotalHalala)}`,
+    discountLine,
     `Delivery: ${order.deliveryFeeHalala > 0 ? formatETB(order.deliveryFeeHalala) : "Free"}`,
     `Total: ${formatETB(order.totalHalala)}`,
     ``,
     `Deliver to: ${order.address}`,
     `Phone: ${order.phone}`,
-  ];
+  ]
+    .filter(Boolean);
   await ctx.reply(lines.join("\n"), { parse_mode: "Markdown" });
 }
 
