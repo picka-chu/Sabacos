@@ -449,3 +449,45 @@ export async function notifyAdminChannel(env: AppEnv, text: string): Promise<voi
     console.error("admin channel notification failed", err);
   });
 }
+
+export async function postProductToChannel(
+  env: AppEnv,
+  product: { id: string; nameEn: string; nameAm: string; descriptionEn: string; descriptionAm: string; priceHalala: number; imageUrls: string[] },
+): Promise<void> {
+  const settings = await getSettings(getDb(env)).catch(() => null);
+  const channelId = settings?.adminChannelId ?? env.ADMIN_CHANNEL_ID;
+  if (!channelId) return;
+
+  const price = (product.priceHalala / 100).toFixed(2);
+  const caption = [
+    `*${escapeHtml(product.nameEn)}*`,
+    product.nameAm ? `_${escapeHtml(product.nameAm)}_` : "",
+    "",
+    product.descriptionEn ? escapeHtml(product.descriptionEn).slice(0, 300) : "",
+    "",
+    `💰 *${price} ETB*`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const webAppUrl = `${env.WEBAPP_URL}/product/${product.id}`;
+  const bot = new Bot(env.BOT_TOKEN);
+
+  try {
+    const photo = product.imageUrls[0];
+    if (photo) {
+      await bot.api.sendPhoto(channelId, photo, {
+        caption,
+        parse_mode: "Markdown",
+        reply_markup: new InlineKeyboard().webApp("🛍  Order now", webAppUrl),
+      });
+    } else {
+      await bot.api.sendMessage(channelId, caption, {
+        parse_mode: "Markdown",
+        reply_markup: new InlineKeyboard().webApp("🛍  Order now", webAppUrl),
+      });
+    }
+  } catch (err) {
+    console.error("postProductToChannel failed", err);
+  }
+}

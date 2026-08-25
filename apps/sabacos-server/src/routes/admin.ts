@@ -32,7 +32,7 @@ import {
   updateOrderStatus,
 } from "../db/orders.js";
 import { getSettings, updateSettings } from "../db/settings.js";
-import { notifyAdminChannel, createBot } from "../bot/bot.js";
+import { notifyAdminChannel, createBot, postProductToChannel } from "../bot/bot.js";
 import { aiEnabled, llamaVisionProduct } from "../services/ai.js";
 import { r2Config, r2Put, r2Delete } from "../services/r2.js";
 
@@ -189,7 +189,8 @@ adminRoutes.get("/products/:id", async (c) => {
 });
 
 adminRoutes.post("/products", async (c) => {
-  const db = getDb(getAppEnv());
+  const env = getAppEnv();
+  const db = getDb(env);
   const body = await c.req.json().catch(() => null);
   const input = safeParse(createProductSchema, body);
 
@@ -199,7 +200,21 @@ adminRoutes.post("/products", async (c) => {
     .select("*")
     .single();
   if (error) throw new Error(`create product: ${error.message}`);
-  return c.json({ product: productRowSchema.parse(data) }, 201);
+
+  const product = productRowSchema.parse(data);
+
+  // Post to the channel in the background (don't block the response).
+  postProductToChannel(env, {
+    id: product.id,
+    nameEn: product.nameEn,
+    nameAm: product.nameAm,
+    descriptionEn: product.descriptionEn,
+    descriptionAm: product.descriptionAm,
+    priceHalala: product.priceHalala,
+    imageUrls: product.imageUrls,
+  }).catch(() => undefined);
+
+  return c.json({ product }, 201);
 });
 
 adminRoutes.patch("/products/:id", async (c) => {
