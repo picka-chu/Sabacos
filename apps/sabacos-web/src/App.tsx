@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { Info } from "lucide-react";
 import { api } from "./api.js";
@@ -19,6 +19,7 @@ import { ProfilePage } from "./pages/ProfilePage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { AboutPage } from "./pages/AboutPage.js";
 import { FaqPage } from "./pages/FaqPage.js";
+import { WaitlistPage } from "./pages/WaitlistPage.js";
 
 function Shell() {
   const setProfile = useShopStore((s) => s.setProfile);
@@ -27,6 +28,10 @@ function Shell() {
   const [location] = useLocation();
   const { t } = useI18n();
   const inTelegram = isTelegramSession();
+
+  // Waitlist phase state
+  const [waitlistActive, setWaitlistActive] = useState<boolean | null>(null);
+  const [waitlistJoined, setWaitlistJoined] = useState(false);
 
   useEffect(() => {
     applyTelegramTheme();
@@ -38,7 +43,26 @@ function Shell() {
       .then((res) => setProfile(res.profile))
       .catch(() => setProfileStatus("error"));
     refreshCart().catch(() => {});
+
+    // Check if waitlist phase is active
+    api
+      .get<{ active: boolean }>("/shop/status")
+      .then((res) => {
+        setWaitlistActive(res.active);
+      })
+      .catch(() => {
+        setWaitlistActive(false);
+      });
   }, [setProfile, setProfileStatus, refreshCart]);
+
+  // If waitlist is active, check if the user has already joined
+  useEffect(() => {
+    if (!waitlistActive) return;
+    api
+      .get<{ joined: boolean }>("/waitlist/status")
+      .then((res) => setWaitlistJoined(res.joined))
+      .catch(() => {});
+  }, [waitlistActive]);
 
   useEffect(() => {
     const bb = getTelegramWebApp()?.BackButton;
@@ -58,6 +82,26 @@ function Shell() {
     else bb.hide();
   }, [location]);
 
+  // Waitlist loading skeleton
+  if (waitlistActive === null) {
+    return (
+      <div className="screen" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh" }}>
+        <div className="skeleton" style={{ width: 48, height: 48, borderRadius: "50%" }} />
+      </div>
+    );
+  }
+
+  // Waitlist active: show waitlist page (position card if joined, join form if not)
+  if (waitlistActive) {
+    return (
+      <>
+        <WaitlistPage />
+        <ToastHost />
+      </>
+    );
+  }
+
+  // Normal mode (shop open)
   return (
     <>
       {!inTelegram && (

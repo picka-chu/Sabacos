@@ -18,7 +18,7 @@ interface CfResponse<T> {
   errors?: { code: number; message: string }[];
 }
 
-async function cfRun<T>(env: { CLOUDFLARE_ACCOUNT_ID?: string; CLOUDFLARE_API_TOKEN?: string }, model: string, input: unknown): Promise<T | null> {
+async function cfRun<T>(env: { CLOUDFLARE_ACCOUNT_ID?: string; CLOUDFLARE_API_TOKEN?: string }, model: string, input: unknown, timeoutMs = 15_000): Promise<T | null> {
   if (!aiEnabled(env)) return null;
   try {
     const res = await fetch(`${CF_BASE}/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/run/${model}`, {
@@ -28,7 +28,7 @@ async function cfRun<T>(env: { CLOUDFLARE_ACCOUNT_ID?: string; CLOUDFLARE_API_TO
         "content-type": "application/json",
       },
       body: JSON.stringify(input),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) {
       console.error(`[ai] ${model} failed: ${res.status}`);
@@ -176,7 +176,7 @@ export async function llamaVisionProduct(
       },
     ],
     max_tokens: 600,
-  });
+  }, 45_000);
   if (!result?.response) return null;
   try {
     const parsed = DRAFT_JSON.safeParse(extractJson(result.response));

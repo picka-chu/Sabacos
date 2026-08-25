@@ -21,7 +21,17 @@ function escapeHtml(value: string): string {
 
 // Persistent bottom-of-chat keyboard (DurgerKing style). "Shop" is a native
 // web_app button — it launches the mini app straight from the keyboard.
-function mainMenuKeyboard(env: AppEnv) {
+function mainMenuKeyboard(env: AppEnv, waitlistActive = false) {
+  if (waitlistActive) {
+    return {
+      keyboard: [
+        [{ text: "📋  Join Waitlist", web_app: { url: env.WEBAPP_URL } }],
+        [{ text: "ℹ️  Help" }],
+      ],
+      resize_keyboard: true,
+      is_persistent: true,
+    };
+  }
   return {
     keyboard: [
       [{ text: "🛍  Shop", web_app: { url: env.WEBAPP_URL } }],
@@ -32,7 +42,7 @@ function mainMenuKeyboard(env: AppEnv) {
   };
 }
 
-const MENU_BUTTON_TEXTS = ["🛍  Shop", "📦  My Orders", "ℹ️  Help"] as const;
+const MENU_BUTTON_TEXTS = ["🛍  Shop", "📋  Join Waitlist", "📦  My Orders", "ℹ️  Help"] as const;
 
 async function sendMyOrders(ctx: Context, env: AppEnv): Promise<void> {
   const from = ctx.from;
@@ -123,8 +133,6 @@ export function createBot(env: AppEnv): Bot {
   bot.command("start", async (ctx) => {
     const db = getDb(env);
     if (ctx.from) {
-      // Trusted identity straight from Telegram's webhook — create the
-      // account before the user ever opens the mini app.
       await upsertTelegramProfile(db, {
         telegramId: ctx.from.id,
         firstName: ctx.from.first_name ?? null,
@@ -133,25 +141,47 @@ export function createBot(env: AppEnv): Bot {
       }).catch((err) => console.error("start: profile upsert failed", err));
     }
 
+    const settings = await getShopSettings(env);
+    const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
+    const waitlistActive = waitlistConfig?.isActive === true;
+    const shopName = settings?.shopNameEn ?? "Sabacos";
+    const firstName = ctx.from?.first_name ? escapeHtml(ctx.from.first_name) : "";
+
     // Check for referral deep link: /start ref_CODE
     const payload = ctx.match as string | undefined;
     let referralMsg = "";
-    if (payload?.startsWith("ref_")) {
+    if (payload?.startsWith("ref_") && waitlistActive) {
       const code = payload.slice(4).toUpperCase();
-      const config = await getWaitlistConfig(db).catch(() => null);
       const referrer = await getWaitlistEntryByCode(db, code).catch(() => null);
-      if (config?.isActive && referrer) {
-        referralMsg = [
-          "",
-          `🔗 You were invited by a friend!`,
-          `Join the waitlist through the shop to get early-bird perks.`,
-        ].join("\n");
+      if (referrer) {
+        referralMsg = "\n\n🔗 You were invited by a friend! Open the shop to claim your early-bird perk.";
       }
     }
 
-    const settings = await getShopSettings(env);
-    const shopName = settings?.shopNameEn ?? "Sabacos";
-    const firstName = ctx.from?.first_name ? escapeHtml(ctx.from.first_name) : "";
+    if (waitlistActive) {
+      await ctx.reply(
+        [
+          `🌸 <b>${escapeHtml(shopName)}</b> is coming soon!`,
+          "",
+          `We're launching soon — join the waitlist to get exclusive early-bird discounts.`,
+          "",
+          `✨ Be among the first to shop premium cosmetics`,
+          `💰 Early-bird members get a special discount`,
+          `🎁 Refer friends for extra perks`,
+          referralMsg,
+        ].join("\n"),
+        {
+          parse_mode: "HTML",
+          reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", env.WEBAPP_URL),
+        },
+      );
+      // Also update the persistent keyboard
+      await ctx.reply("Tap below anytime to open the waitlist:", {
+        reply_markup: mainMenuKeyboard(env, true),
+      });
+      return;
+    }
+
     await ctx.reply(
       [
         `🌸 Welcome to <b>${escapeHtml(shopName)}</b>${firstName ? `, ${firstName}` : ""}!`,
@@ -161,13 +191,19 @@ export function createBot(env: AppEnv): Bot {
         `✨ Curated skincare, makeup & fragrance`,
         `💳 Secure checkout powered by Chapa`,
         `🚚 Live order tracking until delivery`,
-        referralMsg,
       ].join("\n"),
       { parse_mode: "HTML", reply_markup: new InlineKeyboard().webApp("🛍  Shop now", env.WEBAPP_URL) },
     );
   });
 
   bot.command("shop", async (ctx) => {
+    const waitlistConfig = await getWaitlistConfig(getDb(env)).catch(() => null);
+    if (waitlistConfig?.isActive) {
+      await ctx.reply("📋  Waitlist is open — tap below to join:", {
+        reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", env.WEBAPP_URL),
+      });
+      return;
+    }
     await ctx.reply("🛍  Ready when you are:", {
       reply_markup: new InlineKeyboard().webApp("🛍  Open the shop", env.WEBAPP_URL),
     });
@@ -196,7 +232,20 @@ export function createBot(env: AppEnv): Bot {
     });
   });
 
+  bot.on("message:text").filter((ctx) => ctx.message.text.trim() === "📋  Join Waitlist", async (ctx) => {
+    await ctx.reply("📋  Opening the waitlist:", {
+      reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", env.WEBAPP_URL),
+    });
+  });
+
   bot.on("message:text").filter((ctx) => ctx.message.text.trim() === "🛍  Shop", async (ctx) => {
+    const waitlistConfig = await getWaitlistConfig(getDb(env)).catch(() => null);
+    if (waitlistConfig?.isActive) {
+      await ctx.reply("📋  Waitlist is open — tap below to join:", {
+        reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", env.WEBAPP_URL),
+      });
+      return;
+    }
     await ctx.reply("🛍  Ready when you are:", {
       reply_markup: new InlineKeyboard().webApp("🛍  Open the shop", env.WEBAPP_URL),
     });
