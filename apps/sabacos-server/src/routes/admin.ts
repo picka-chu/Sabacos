@@ -825,15 +825,19 @@ adminRoutes.post("/ai/product-image", async (c) => {
     throw badRequest(`Unsupported image type: ${file.type}. Allowed: JPEG, PNG, WebP, GIF`);
   }
 
+  // Read bytes once — File stream is consumed after first read
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const mime = file.type || "image/jpeg";
+
   const safeName = file.name.replace(/[^\w.-]+/g, "_").slice(-80) || "photo.jpg";
   const path = `ai/${Date.now()}-${safeName}`;
-  const url = await storeImage(env, db, path, file);
+
+  // Store using the bytes (not the File object) so the stream isn't double-consumed
+  const url = await storeImage(env, db, path, new File([bytes], safeName, { type: mime }));
 
   let draft = null;
   if (aiEnabled(env)) {
     try {
-      const bytes = Buffer.from(await file.arrayBuffer());
-      const mime = file.type || "image/jpeg";
       draft = await llamaVisionProduct(env, `data:${mime};base64,${bytes.toString("base64")}`);
     } catch (err) {
       console.error("[ai] product draft failed:", err);

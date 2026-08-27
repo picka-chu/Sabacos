@@ -72,13 +72,33 @@ export interface ProductDraft {
   descriptionAm: string;
 }
 
+/** Resize an image to max 1024px on the longest side, returns a new File. */
+async function resizeImage(file: File, maxDim = 1024): Promise<File> {
+  if (!file.type.startsWith("image/")) return file;
+  const bitmap = await createImageBitmap(file);
+  if (bitmap.width <= maxDim && bitmap.height <= maxDim) {
+    bitmap.close();
+    return file;
+  }
+  const scale = maxDim / Math.max(bitmap.width, bitmap.height);
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.85 });
+  return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+}
+
 /** Uploads a photo, stores it, and asks the AI to draft the product listing. */
 export async function uploadAiImage(
   file: File,
   token: string,
 ): Promise<{ url: string; draft: ProductDraft | null }> {
+  const resized = await resizeImage(file);
   const form = new FormData();
-  form.append("image", file);
+  form.append("image", resized);
   const res = await fetch(`${BASE}/admin/ai/product-image`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },

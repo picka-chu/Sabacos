@@ -120,6 +120,7 @@ export function ProductEditPage() {
     try {
       for (let i = 0; i < fileList.length; i++) {
         const file = fileList[i];
+        if (!file) continue;
 
         // Mark as uploading
         setAiFiles((prev) =>
@@ -157,8 +158,7 @@ export function ProductEditPage() {
                 idx === i
                   ? {
                       ...f,
-                      step: "complete" as const,
-                      draftName: undefined,
+                      step: "error" as const,
                       error: "AI could not identify the product",
                     }
                   : f,
@@ -296,6 +296,11 @@ export function ProductEditPage() {
           <p className="muted" style={{ margin: "0 0 12px", fontSize: 12 }}>
             Upload a photo — the AI drafts the name and description for you.
           </p>
+          <label className="btn btn-outline btn-sm" style={{ display: "inline-flex", marginBottom: 12 }}>
+            <Upload size={15} />
+            Upload images
+            <input type="file" multiple accept="image/*" hidden onChange={(e) => onFiles(e.target.files)} />
+          </label>
           <div className="thumb-grid">
             {images.map((url) => (
               <div key={url} style={{ position: "relative" }}>
@@ -322,11 +327,6 @@ export function ProductEditPage() {
               </div>
             ))}
           </div>
-          <label className="btn btn-outline btn-sm" style={{ marginTop: 12, display: "inline-flex" }}>
-            <Upload size={15} />
-            Upload images
-            <input type="file" multiple accept="image/*" hidden onChange={(e) => onFiles(e.target.files)} />
-          </label>
 
           <AiStatusIndicator files={aiFiles} />
         </div>
