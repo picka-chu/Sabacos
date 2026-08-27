@@ -74,14 +74,29 @@ export async function updateWaitlistConfig(
   if (patch.maxReferralDiscount !== undefined) row.max_referral_discount = patch.maxReferralDiscount;
   if (patch.discountGracePeriodDays !== undefined) row.discount_grace_period_days = patch.discountGracePeriodDays;
 
-  const { data, error } = await db
-    .from("waitlist_config")
-    .update(row)
-    .eq("id", "00000000-0000-0000-0000-000000000001")
-    .select("*")
-    .single();
-  if (error) throw new Error(`updateWaitlistConfig: ${error.message}`);
-  return mapConfigRow(data as Record<string, unknown>);
+  // The grace-period column is added by migration 0008. If it hasn't been
+  // applied yet, retry the update without it so the toggle keeps working.
+  const run = (includeGrace: boolean) => {
+    const payload = includeGrace ? row : { ...row };
+    if (!includeGrace) delete payload.discount_grace_period_days;
+    return db
+      .from("waitlist_config")
+      .update(payload)
+      .eq("id", "00000000-0000-0000-0000-000000000001")
+      .select("*")
+      .single();
+  };
+
+  let result = await run(true);
+  if (
+    result.error &&
+    row.discount_grace_period_days !== undefined &&
+    /discount_grace_period_days/i.test(result.error.message ?? "")
+  ) {
+    result = await run(false);
+  }
+  if (result.error) throw new Error(`updateWaitlistConfig: ${result.error.message}`);
+  return mapConfigRow(result.data as Record<string, unknown>);
 }
 
 // ---------------------------------------------------------- entries

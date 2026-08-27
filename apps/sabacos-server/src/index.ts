@@ -10,6 +10,7 @@ import { orderRoutes } from "./routes/orders.js";
 import { adminRoutes } from "./routes/admin.js";
 import { adRoutes } from "./routes/ads.js";
 import { waitlistAdminRoutes } from "./routes/waitlist-admin.js";
+import { discountAdminRoutes } from "./routes/discount-admin.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
 import { requireUser } from "./auth/telegram.js";
 import { requireAdmin } from "./auth/admin.js";
@@ -151,6 +152,7 @@ app.route("/api/v1/waitlist", waitlistRoutes);
 app.use("/api/v1/admin/*", rateLimit({ windowMs: 60_000, limit: 20, keyGenerator: ipKey }), requireAdmin);
 app.route("/api/v1/admin", adminRoutes);
 app.route("/api/v1/admin/waitlist", waitlistAdminRoutes);
+app.route("/api/v1/admin/discounts", discountAdminRoutes);
 
 // ---------------------------------------------------------------------------
 // Body-size guard: reject requests > 10 MB early

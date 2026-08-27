@@ -12,6 +12,7 @@ import { OrderDetailPage } from "./pages/OrderDetailPage.js";
 import { BroadcastPage } from "./pages/BroadcastPage.js";
 import { AnalyticsPage } from "./pages/AnalyticsPage.js";
 import { WaitlistPage } from "./pages/WaitlistPage.js";
+import { DiscountsPage } from "./pages/DiscountsPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 
 function Gate({ children }: { children: React.ReactNode }) {
@@ -66,6 +67,9 @@ export default function App() {
       </Route>
       <Route path="/waitlist">
         <Gate><WaitlistPage /></Gate>
+      </Route>
+      <Route path="/discounts">
+        <Gate><DiscountsPage /></Gate>
       </Route>
       <Route path="/broadcast">
         <Gate><BroadcastPage /></Gate>

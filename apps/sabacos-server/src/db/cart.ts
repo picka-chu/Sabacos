@@ -2,6 +2,7 @@ import { productRowSchema, type CartItem, type CartSummary, type Product } from 
 import { computeTotals } from "@sabacos/core";
 import type { Db } from "./client.js";
 import { getSettings } from "./settings.js";
+import { attachPromos, computePromotionOrderDiscount, getActiveDiscounts } from "./discounts.js";
 
 interface CartRow {
   id: string;
@@ -73,17 +74,48 @@ export async function clearCart(db: Db, profileId: string): Promise<void> {
 export async function getCartSummary(db: Db, profileId: string): Promise<CartSummary> {
   const items = await getCart(db, profileId);
   const settings = await getSettings(db);
+  const discounts = await getActiveDiscounts(db);
+
+  // Enrich items with the best active promotion and compute discounted totals
+  // so the cart matches what checkout will charge.
+  const promoById = new Map<string, Product["promo"]>();
+  if (discounts.length > 0) {
+    for (const p of attachPromos(items.map((i) => i.product), discounts)) {
+      promoById.set(p.id, p.promo ?? null);
+    }
+  }
+  const enriched: CartItem[] = items.map((i) => ({
+    ...i,
+    product: { ...i.product, promo: promoById.get(i.product.id) ?? null },
+  }));
+
+  const originalSubtotal = enriched.reduce(
+    (s, i) => s + i.product.priceHalala * i.qty,
+    0,
+  );
+  const promo = computePromotionOrderDiscount(enriched, discounts, originalSubtotal);
+
   const totals = computeTotals(
-    items.map((i) => ({ priceHalala: i.product.priceHalala, qty: i.qty })),
+    enriched.map((i) => ({
+      priceHalala: i.product.promo?.salePriceHalala ?? i.product.priceHalala,
+      qty: i.qty,
+    })),
     settings.deliveryFeeHalala,
     settings.freeDeliveryThresholdHalala,
   );
+
   return {
-    items,
-    itemCount: items.reduce((n, i) => n + i.qty, 0),
+    items: enriched,
+    itemCount: enriched.reduce((n, i) => n + i.qty, 0),
     totals,
     deliveryFeeHalala: settings.deliveryFeeHalala,
     freeDeliveryThresholdHalala: settings.freeDeliveryThresholdHalala,
+    discountHalala: promo.totalDiscountHalala,
+    discountLabel: promo.totalDiscountHalala > 0
+      ? promo.lines.length === 1 ? promo.lines[0]?.label ?? "Promo"
+        : promo.lines.length > 1 ? `${promo.lines.length} promotions`
+        : `Promo (-${promo.percent}%)`
+      : null,
   };
 }
 

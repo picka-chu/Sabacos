@@ -65,7 +65,12 @@ export function CartPage() {
                   <div className="info">
                     <div className="name">{lang === "am" ? item.product.nameAm : item.product.nameEn}</div>
                     <div className="price" style={{ fontSize: 14, marginTop: 4 }}>
-                      {formatETB(item.product.priceHalala)}
+                      {formatETB(item.product.promo?.salePriceHalala ?? item.product.priceHalala)}
+                      {item.product.promo != null && (
+                        <span className="price-strike" style={{ fontSize: 12, marginLeft: 6 }}>
+                          {formatETB(item.product.priceHalala)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex" style={{ flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
@@ -110,6 +115,12 @@ export function CartPage() {
               <span className="muted">{t("subtotal")}</span>
               <span className="price">{formatETB(totals.subtotalHalala)}</span>
             </div>
+            {cart.discountHalala != null && cart.discountHalala > 0 && (
+              <div className="row" style={{ justifyContent: "space-between", marginTop: 8, color: "var(--success)" }}>
+                <span style={{ fontSize: 14 }}>{cart.discountLabel || "Promo"}</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>-{formatETB(cart.discountHalala)}</span>
+              </div>
+            )}
             <div className="row" style={{ justifyContent: "space-between", marginTop: 8 }}>
               <span className="muted">{t("deliveryFee")}</span>
               <span className={totals.deliveryFeeHalala === 0 ? "badge badge-success" : "muted"}>

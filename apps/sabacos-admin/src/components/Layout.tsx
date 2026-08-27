@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, Tags, ClipboardList, BarChart3, ListOrdered, Megaphone, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Package, Tags, ClipboardList, BarChart3, ListOrdered, Megaphone, Settings, LogOut, Percent } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "../auth.js";
 
@@ -6,6 +6,7 @@ const NAV = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/products", label: "Products", icon: Package },
   { path: "/categories", label: "Categories", icon: Tags },
+  { path: "/discounts", label: "Discounts", icon: Percent },
   { path: "/orders", label: "Orders", icon: ClipboardList },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },
   { path: "/waitlist", label: "Waitlist", icon: ListOrdered },

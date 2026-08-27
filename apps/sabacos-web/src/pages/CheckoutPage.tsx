@@ -249,7 +249,9 @@ export function CheckoutPage() {
                 <span style={{ fontSize: 14 }}>
                   {lang === "am" ? item.product.nameAm : item.product.nameEn} × {item.qty}
                 </span>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>{formatETB(item.product.priceHalala * item.qty)}</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>
+                  {formatETB((item.product.promo?.salePriceHalala ?? item.product.priceHalala) * item.qty)}
+                </span>
               </div>
             ))}
             <hr className="divider" />
@@ -257,6 +259,12 @@ export function CheckoutPage() {
               <span className="muted">{t("subtotal")}</span>
               <span>{formatETB(totals.subtotalHalala)}</span>
             </div>
+            {cart.discountHalala != null && cart.discountHalala > 0 && (
+              <div className="row" style={{ justifyContent: "space-between", marginTop: 6, color: "var(--success)" }}>
+                <span style={{ fontSize: 13 }}>{cart.discountLabel || "Promo"}</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>-{formatETB(cart.discountHalala)}</span>
+              </div>
+            )}
             <div className="row" style={{ justifyContent: "space-between", marginTop: 6 }}>
               <span className="muted">{t("deliveryFee")}</span>
               <span>{estimate.totalDeliveryFeeHalala === 0 ? t("free") : formatETB(estimate.totalDeliveryFeeHalala)}</span>

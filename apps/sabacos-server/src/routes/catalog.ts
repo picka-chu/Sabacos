@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getAppEnv, type AppEnv } from "../env.js";
 import { getDb } from "../db/client.js";
 import { listActiveCategories, listProducts, getProductById } from "../db/catalog.js";
+import { attachPromos, getActiveDiscounts } from "../db/discounts.js";
 
 export const catalogRoutes = new Hono<{ Bindings: AppEnv }>();
 
@@ -44,12 +45,14 @@ catalogRoutes.get("/products", async (c) => {
     page: query.page,
     pageSize: query.pageSize,
   });
-  return c.json(page);
+  const discounts = await getActiveDiscounts(db);
+  return c.json({ ...page, items: attachPromos(page.items, discounts) });
 });
 
 catalogRoutes.get("/products/:id", async (c) => {
   const db = getDb(getAppEnv());
   const product = await getProductById(db, c.req.param("id"));
   if (!product) return c.json({ error: { code: "not_found", message: "Product not found" } }, 404);
-  return c.json({ product });
+  const discounts = await getActiveDiscounts(db);
+  return c.json({ product: attachPromos([product], discounts)[0] });
 });

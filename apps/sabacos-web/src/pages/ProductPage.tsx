@@ -53,6 +53,15 @@ export function ProductPage() {
   const out = product.stock <= 0;
   const low = !out && product.stock <= 5;
 
+  const promo = product.promo;
+  const sale = promo ? promo.salePriceHalala : product.priceHalala;
+  const strike =
+    promo != null
+      ? product.priceHalala
+      : product.compareAtHalala != null && product.compareAtHalala > product.priceHalala
+        ? product.compareAtHalala
+        : null;
+
   const handleAdd = async () => {
     try {
       const cart = await addToCart(product, qty);
@@ -117,9 +126,12 @@ export function ProductPage() {
       </h1>
 
       <div className="flex" style={{ gap: 10, alignItems: "baseline" }}>
-        <span className="price" style={{ fontSize: 22 }}>{formatETB(product.priceHalala)}</span>
-        {product.compareAtHalala != null && product.compareAtHalala > product.priceHalala && (
-          <span className="price-strike" style={{ fontSize: 15 }}>{formatETB(product.compareAtHalala)}</span>
+        <span className="price" style={{ fontSize: 22 }}>{formatETB(sale)}</span>
+        {strike != null && strike > sale && (
+          <span className="price-strike" style={{ fontSize: 15 }}>{formatETB(strike)}</span>
+        )}
+        {promo != null && (
+          <span className="badge badge-gold" style={{ fontSize: 12 }}>-{promo.percent}%</span>
         )}
       </div>
 
@@ -140,7 +152,7 @@ export function ProductPage() {
           disabled={out}
           onClick={handleAdd}
         >
-          {out ? t("outOfStock") : t("addToCart")} · {formatETB(product.priceHalala * qty)}
+          {out ? t("outOfStock") : t("addToCart")} · {formatETB(sale * qty)}
         </button>
         <button
           className="btn btn-secondary btn-block"

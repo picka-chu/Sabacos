@@ -16,6 +16,21 @@ export function ProductCard({ product, lang, onAdd }: Props) {
   const out = product.stock <= 0;
   const image = product.imageUrls[0];
 
+  const promo = product.promo;
+  const sale = promo ? promo.salePriceHalala : product.priceHalala;
+  const strike =
+    promo != null
+      ? product.priceHalala
+      : product.compareAtHalala != null && product.compareAtHalala > product.priceHalala
+        ? product.compareAtHalala
+        : null;
+  const badgePct =
+    promo != null
+      ? promo.percent
+      : product.compareAtHalala != null && product.compareAtHalala > product.priceHalala
+        ? Math.round((1 - product.priceHalala / product.compareAtHalala) * 100)
+        : null;
+
   return (
     <div
       className="product-card"
@@ -37,9 +52,9 @@ export function ProductCard({ product, lang, onAdd }: Props) {
             {t(lang, "outOfStock")}
           </span>
         )}
-        {product.compareAtHalala != null && product.compareAtHalala > product.priceHalala && !out && (
+        {badgePct != null && !out && (
           <span className="badge badge-gold" style={{ position: "absolute", top: 10, right: 10 }}>
-            -{Math.round((1 - product.priceHalala / product.compareAtHalala) * 100)}%
+            -{badgePct}%
           </span>
         )}
         {!out && (
@@ -59,9 +74,9 @@ export function ProductCard({ product, lang, onAdd }: Props) {
       <div className="card-body">
         <span className="name">{name}</span>
         <div className="price-row">
-          <span className="price">{formatETB(product.priceHalala)}</span>
-          {product.compareAtHalala != null && product.compareAtHalala > product.priceHalala && (
-            <span className="price-strike">{formatETB(product.compareAtHalala)}</span>
+          <span className="price">{formatETB(sale)}</span>
+          {strike != null && strike > sale && (
+            <span className="price-strike">{formatETB(strike)}</span>
           )}
         </div>
       </div>

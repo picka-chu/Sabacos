@@ -57,6 +57,13 @@ export interface Category {
   isActive: boolean;
 }
 
+export interface ProductPromo {
+  /** Effective discount percentage shown on the sale badge (e.g. 15 = "-15%"). */
+  percent: number;
+  salePriceHalala: number;
+  endsAt: string | null;
+}
+
 export interface Product {
   id: string;
   categoryId: string | null;
@@ -74,6 +81,8 @@ export interface Product {
   isFragile: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Set by the catalog/cart routes when an active promotion covers this product. */
+  promo?: ProductPromo | null;
 }
 
 export interface CartItem {
@@ -159,6 +168,9 @@ export interface CartSummary {
   totals: OrderTotals;
   deliveryFeeHalala: number;
   freeDeliveryThresholdHalala: number;
+  /** Combined halala discount from active promotions applied to this cart. */
+  discountHalala?: number;
+  discountLabel?: string | null;
 }
 
 export interface ApiErrorBody {

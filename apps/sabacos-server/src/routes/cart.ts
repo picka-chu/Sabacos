@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { badRequest, safeParse } from "../errors.js";
-import { addCartItemSchema, patchCartItemSchema, type CartSummary } from "@sabacos/core";
+import { addCartItemSchema, patchCartItemSchema } from "@sabacos/core";
 import { getAppEnv, type AppEnv } from "../env.js";
 import type { UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";

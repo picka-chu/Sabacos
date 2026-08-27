@@ -13,6 +13,7 @@ import { getSettings } from "../db/settings.js";
 import { clearCart, getCart } from "../db/cart.js";
 import { createOrder } from "../db/orders.js";
 import { getTotalDiscountForProfile } from "../db/waitlist.js";
+import { computePromotionOrderDiscount, getActiveDiscounts } from "../db/discounts.js";
 
 export interface InvoicePriceLine {
   label: string;
@@ -103,11 +104,17 @@ export async function checkout(
     );
   }
 
-  // Look up waitlist / referral discount for this user.
-  const discountPercent = Math.min(await getTotalDiscountForProfile(db, profileId), 100);
-  const discountHalala = discountPercent > 0
-    ? Math.round((subtotalHalala * discountPercent) / 100)
+  // Active promotions (global / category / product based) applied per item.
+  const discounts = await getActiveDiscounts(db);
+  const promo = computePromotionOrderDiscount(cart, discounts, subtotalHalala);
+
+  // Waitlist / referral discount stacks on top of the promoted prices.
+  const waitlistPercent = Math.min(await getTotalDiscountForProfile(db, profileId), 100);
+  const waitlistDiscountHalala = waitlistPercent > 0
+    ? Math.round((promo.effectiveSubtotalHalala * waitlistPercent) / 100)
     : 0;
+
+  const discountHalala = promo.totalDiscountHalala + waitlistDiscountHalala;
   const discountedSubtotal = subtotalHalala - discountHalala;
 
   // Zone delivery pricing (GPS coords preferred, manual zone as fallback).
@@ -129,7 +136,7 @@ export async function checkout(
     profileId,
     subtotalHalala,
     discountHalala,
-    discountPercent,
+    discountPercent: waitlistPercent,
     deliveryFeeHalala: delivery.totalDeliveryFeeHalala,
     totalHalala,
     customerName: input.customerName,
@@ -158,8 +165,11 @@ export async function checkout(
       amount: i.product.priceHalala * i.qty,
     })),
   ];
-  if (discountHalala > 0) {
-    prices.push({ label: `Waitlist discount (${discountPercent}%)`, amount: -discountHalala });
+  for (const line of promo.lines) {
+    prices.push({ label: line.label, amount: -line.discountHalala });
+  }
+  if (waitlistDiscountHalala > 0) {
+    prices.push({ label: `Waitlist discount (${waitlistPercent}%)`, amount: -waitlistDiscountHalala });
   }
   if (delivery.expressSurchargeHalala > 0) {
     if (delivery.baseFeeHalala + delivery.zoneSurchargeHalala > 0) {
