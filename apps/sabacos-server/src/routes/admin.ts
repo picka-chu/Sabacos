@@ -825,6 +825,8 @@ adminRoutes.post("/ai/product-image", async (c) => {
     throw badRequest(`Unsupported image type: ${file.type}. Allowed: JPEG, PNG, WebP, GIF`);
   }
 
+  console.log(`[ai/product-image] Received: ${file.name} (${file.size} bytes, ${file.type})`);
+
   // Read bytes once — File stream is consumed after first read
   const bytes = Buffer.from(await file.arrayBuffer());
   const mime = file.type || "image/jpeg";
@@ -836,12 +838,21 @@ adminRoutes.post("/ai/product-image", async (c) => {
   const url = await storeImage(env, db, path, new File([bytes], safeName, { type: mime }));
 
   let draft = null;
-  if (aiEnabled(env)) {
+  if (aiEnabled(env) || env.GEMINI_API_KEY) {
     try {
-      draft = await llamaVisionProduct(env, `data:${mime};base64,${bytes.toString("base64")}`);
+      const imageDataUrl = `data:${mime};base64,${bytes.toString("base64")}`;
+      console.log(`[ai/product-image] Calling vision AI — base64 ~${Math.round(imageDataUrl.length / 1024)}KB`);
+      draft = await llamaVisionProduct(env, imageDataUrl);
+      if (draft) {
+        console.log(`[ai/product-image] Draft OK: "${draft.nameEn}" / "${draft.nameAm}"`);
+      } else {
+        console.warn("[ai/product-image] Draft returned null — all AI providers failed");
+      }
     } catch (err) {
-      console.error("[ai] product draft failed:", err);
+      console.error("[ai/product-image] Unexpected error:", err);
     }
+  } else {
+    console.log("[ai/product-image] No AI providers configured (CLOUDFLARE or GEMINI_API_KEY)");
   }
   return c.json({ url, draft });
 });
