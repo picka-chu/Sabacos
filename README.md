@@ -72,7 +72,7 @@ See `apps/sabacos-server/.env.example`:
 | `WEBAPP_URL` | URL of the deployed Mini App |
 | `ADMIN_DASHBOARD_URL` | URL of the deployed admin dashboard |
 | `WEBHOOK_URL` | (prod) HTTPS callback URL → `/webhook` |
-| `WEBHOOK_SECRET` | (prod) optional shared secret for webhook auth |
+| `WEBHOOK_SECRET` | Required in production; shared secret for Telegram webhook authentication |
 | `ADMIN_CHANNEL_ID` | optional Telegram channel/chat to notify on orders |
 | `PORT` | default `8788` |
 
