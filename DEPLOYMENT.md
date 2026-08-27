@@ -48,6 +48,8 @@ Production deployment targets:
 
 A `render.yaml` blueprint at the repo root defines all three services (`sabacos-server` web service, `sabacos-web` + `sabacos-admin` static sites).
 
+For external uptime monitors such as UptimeRobot, monitor either the server root URL (`https://<service>.onrender.com/`) or the explicit health endpoint (`https://<service>.onrender.com/health`). Both `GET` and `HEAD` requests return `200` so monitors do not report a false `404` when pointed at the base service URL.
+
 1. Push the repo (with `render.yaml`) to GitHub.
 2. Render → **New +** → **Blueprint** → connect the `picka-chu/Sabacos` repo.
 3. For each service, fill the `sync: false` env vars it needs.

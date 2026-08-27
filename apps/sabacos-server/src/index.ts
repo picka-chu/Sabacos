@@ -107,12 +107,16 @@ app.onError((err, c) => sendError(c, err));
 app.notFound((c) => sendError(c, notFound()));
 
 // ---------------------------------------------------------------------------
-// Health
+// Health / uptime monitors
 // ---------------------------------------------------------------------------
+app.get("/", (c) => c.json({ ok: true, service: "sabacos-server", time: new Date().toISOString() }));
+app.on("HEAD", "/", (c) => c.body(null, 200));
+
 app.get("/health", async (c) => {
-  const { data, error } = await db.from("settings").select("key").limit(1);
+  const { error } = await db.from("settings").select("key").limit(1);
   return c.json({ ok: true, db: !error, time: new Date().toISOString() });
 });
+app.on("HEAD", "/health", (c) => c.body(null, 200));
 
 // ---------------------------------------------------------------------------
 // Telegram webhook — timing-safe secret comparison
