@@ -122,8 +122,20 @@ export async function embedText(
 const COPY_JSON = z.object({ headline: z.string().min(1).max(80), cta: z.string().min(1).max(24) });
 
 function extractJson(text: string): unknown {
-  const match = text.match(/\{[\s\S]*\}/);
-  return match ? JSON.parse(match[0]) : null;
+  // Strip markdown code fences if present
+  const cleaned = text.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (!match) {
+    console.error("[ai/extractJson] No JSON object found in:", cleaned.slice(0, 500));
+    return null;
+  }
+  try {
+    return JSON.parse(match[0]);
+  } catch (err) {
+    console.error("[ai/extractJson] JSON.parse failed:", err instanceof Error ? err.message : err);
+    console.error("[ai/extractJson] Attempted to parse:", match[0].slice(0, 500));
+    return null;
+  }
 }
 
 /** Micro banner copy via Llama. Returns null on any failure (caller falls back to templates). */
@@ -227,24 +239,27 @@ const VISION_PROMPT =
   '"description_am": "the same description in Amharic script"}';
 
 function parseVisionResponse(raw: string): ProductDraft | null {
-  try {
-    const parsed = DRAFT_JSON.safeParse(extractJson(raw));
-    if (!parsed.success) {
-      console.error("[ai/vision] JSON schema validation failed:", parsed.error.format());
-      console.error("[ai/vision] Raw response:", raw.slice(0, 500));
-      return null;
-    }
-    return {
-      nameEn: parsed.data.name_en.slice(0, 80),
-      nameAm: parsed.data.name_am.slice(0, 80),
-      descriptionEn: parsed.data.description_en.slice(0, 1000),
-      descriptionAm: parsed.data.description_am.slice(0, 1000),
-    };
-  } catch (err) {
-    console.error("[ai/vision] JSON parse error:", err instanceof Error ? err.message : err);
-    console.error("[ai/vision] Raw response:", raw.slice(0, 500));
+  console.log("[ai/vision/parse] Input length:", raw.length, "starts with:", raw.slice(0, 80));
+
+  const json = extractJson(raw);
+  if (!json || typeof json !== "object") {
+    console.error("[ai/vision/parse] extractJson returned null or non-object");
     return null;
   }
+
+  const parsed = DRAFT_JSON.safeParse(json);
+  if (!parsed.success) {
+    console.error("[ai/vision/parse] Schema validation failed:", parsed.error.format());
+    console.error("[ai/vision/parse] Parsed object keys:", Object.keys(json as Record<string, unknown>));
+    return null;
+  }
+
+  return {
+    nameEn: parsed.data.name_en.slice(0, 80),
+    nameAm: parsed.data.name_am.slice(0, 80),
+    descriptionEn: parsed.data.description_en.slice(0, 1000),
+    descriptionAm: parsed.data.description_am.slice(0, 1000),
+  };
 }
 
 /** Cloudflare Llama 3.2 11B vision */
@@ -275,7 +290,8 @@ async function cfVisionProduct(env: aiEnv, imageDataUrl: string): Promise<Produc
     return null;
   }
 
-  console.log("[ai/vision/cf] Raw response:", result.response.slice(0, 300));
+  console.log("[ai/vision/cf] Raw response length:", result.response.length);
+  console.log("[ai/vision/cf] Raw response (full):", result.response);
   return parseVisionResponse(result.response);
 }
 
@@ -294,7 +310,7 @@ async function geminiVisionProduct(env: aiEnv, imageDataUrl: string): Promise<Pr
 
   const raw = await geminiGenerate(
     env,
-    "gemini-2.0-flash",
+    "gemini-2.5-flash",
     [
       { text: VISION_PROMPT },
       { inlineData: { mimeType, data: base64Data } },
@@ -307,7 +323,8 @@ async function geminiVisionProduct(env: aiEnv, imageDataUrl: string): Promise<Pr
     return null;
   }
 
-  console.log("[ai/vision/gemini] Raw response:", raw.slice(0, 300));
+  console.log("[ai/vision/gemini] Raw response length:", raw.length);
+  console.log("[ai/vision/gemini] Raw response (full):", raw);
   return parseVisionResponse(raw);
 }
 
