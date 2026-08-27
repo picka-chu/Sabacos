@@ -9,6 +9,7 @@ import {
   updateWaitlistConfig,
   listWaitlistEntries,
   getWaitlistStats,
+  setWaitlistDiscountGracePeriod,
 } from "../db/waitlist.js";
 
 export const waitlistAdminRoutes = new Hono<{ Bindings: AppEnv } & AdminContext>();
@@ -28,12 +29,16 @@ const updateConfigSchema = z.object({
   deadline: z.string().nullable().optional(),
   referralBonusPercent: z.number().int().min(0).max(50).optional(),
   maxReferralDiscount: z.number().int().min(0).max(100).optional(),
+  discountGracePeriodDays: z.number().int().min(0).max(365).optional(),
 });
 
 waitlistAdminRoutes.put("/config", async (c) => {
   const db = getDb(getAppEnv());
   const body = await c.req.json().catch(() => null);
   const input = safeParse(updateConfigSchema, body);
+
+  const previous = await getWaitlistConfig(db);
+
   const config = await updateWaitlistConfig(db, {
     isActive: input.isActive ?? undefined,
     discountPercent: input.discountPercent ?? undefined,
@@ -41,7 +46,15 @@ waitlistAdminRoutes.put("/config", async (c) => {
     deadline: input.deadline !== undefined ? input.deadline : undefined,
     referralBonusPercent: input.referralBonusPercent ?? undefined,
     maxReferralDiscount: input.maxReferralDiscount ?? undefined,
+    discountGracePeriodDays: input.discountGracePeriodDays ?? undefined,
   });
+
+  // Shop launch: waitlist turned off. Give members a grace period after the
+  // launch date to use their discounts before they expire.
+  if (previous.isActive && !config.isActive) {
+    await setWaitlistDiscountGracePeriod(db, config.discountGracePeriodDays);
+  }
+
   return c.json({ config });
 });
 

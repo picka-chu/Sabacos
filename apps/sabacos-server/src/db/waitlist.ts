@@ -10,6 +10,7 @@ export interface WaitlistConfig {
   deadline: string | null;
   referralBonusPercent: number;
   maxReferralDiscount: number;
+  discountGracePeriodDays: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,6 +23,7 @@ const CONFIG_ROW_MAP = {
   deadline: "deadline",
   referral_bonus_percent: "referralBonusPercent",
   max_referral_discount: "maxReferralDiscount",
+  discount_grace_period_days: "discountGracePeriodDays",
   created_at: "createdAt",
   updated_at: "updatedAt",
 } as const;
@@ -35,6 +37,7 @@ function mapConfigRow(row: Record<string, unknown>): WaitlistConfig {
     deadline: (row.deadline as string) ?? null,
     referralBonusPercent: row.referral_bonus_percent as number,
     maxReferralDiscount: row.max_referral_discount as number,
+    discountGracePeriodDays: (row.discount_grace_period_days as number) ?? 30,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -59,6 +62,7 @@ export async function updateWaitlistConfig(
     deadline: string | null;
     referralBonusPercent: number;
     maxReferralDiscount: number;
+    discountGracePeriodDays: number;
   }>,
 ): Promise<WaitlistConfig> {
   const row: Record<string, unknown> = {};
@@ -68,6 +72,7 @@ export async function updateWaitlistConfig(
   if (patch.deadline !== undefined) row.deadline = patch.deadline;
   if (patch.referralBonusPercent !== undefined) row.referral_bonus_percent = patch.referralBonusPercent;
   if (patch.maxReferralDiscount !== undefined) row.max_referral_discount = patch.maxReferralDiscount;
+  if (patch.discountGracePeriodDays !== undefined) row.discount_grace_period_days = patch.discountGracePeriodDays;
 
   const { data, error } = await db
     .from("waitlist_config")
@@ -193,14 +198,14 @@ export async function joinWaitlist(
 
   const entry = mapEntryRow(data as Record<string, unknown>);
 
-  // Create discount for the new user (early bird)
+  // Create discount for the new user (early bird). Expiry is bound later,
+  // when the waitlist ends (launch), to now + grace period days.
   if (isEarlyBird && config.isActive) {
     await db.from("user_discounts").insert({
       profile_id: profileId,
       waitlist_entry_id: entry.id,
       discount_percent: config.discountPercent,
       source: "waitlist_early_bird",
-      expires_at: config.deadline,
     });
   }
 
@@ -234,7 +239,6 @@ export async function joinWaitlist(
           waitlist_entry_id: referrerEntryId,
           discount_percent: bonusCanAdd,
           source: "waitlist_referral",
-          expires_at: config.deadline,
         });
       }
     }
@@ -346,4 +350,21 @@ export async function getTotalDiscountForProfile(
     .or(`expires_at.is.null,expires_at.gt.${now}`);
   if (error) throw new Error(`getTotalDiscountForProfile: ${error.message}`);
   return (data ?? []).reduce((sum, d) => sum + (d.discount_percent as number), 0);
+}
+
+// Bind expiry of all waitlist discounts when the shop launches (waitlist
+// turned off): they become valid until now + graceDays. A grace of 0 means
+// they never expire (expires_at = null).
+export async function setWaitlistDiscountGracePeriod(
+  db: Db,
+  graceDays: number,
+): Promise<void> {
+  const expiresAt = graceDays > 0
+    ? new Date(Date.now() + graceDays * 86_400_000).toISOString()
+    : null;
+  const { error } = await db
+    .from("user_discounts")
+    .update({ expires_at: expiresAt })
+    .in("source", ["waitlist_early_bird", "waitlist_referral"]);
+  if (error) throw new Error(`setWaitlistDiscountGracePeriod: ${error.message}`);
 }

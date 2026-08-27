@@ -30,6 +30,7 @@ waitlistRoutes.get("/status", async (c) => {
       earlyBirdLimit: config.earlyBirdLimit,
       deadline: config.deadline,
       referralBonusPercent: config.referralBonusPercent,
+      discountGracePeriodDays: config.discountGracePeriodDays,
     },
     entry: entry
       ? {

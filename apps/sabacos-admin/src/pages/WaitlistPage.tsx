@@ -11,6 +11,7 @@ interface WaitlistConfig {
   deadline: string | null;
   referralBonusPercent: number;
   maxReferralDiscount: number;
+  discountGracePeriodDays: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,6 +55,7 @@ export function WaitlistPage() {
   const [formDeadline, setFormDeadline] = useState("");
   const [formReferralBonus, setFormReferralBonus] = useState(5);
   const [formMaxReferral, setFormMaxReferral] = useState(30);
+  const [formGraceDays, setFormGraceDays] = useState(30);
 
   const loadAll = () => {
     if (!token) return;
@@ -74,6 +76,7 @@ export function WaitlistPage() {
         setFormDeadline(configRes.config.deadline ? configRes.config.deadline.slice(0, 16) : "");
         setFormReferralBonus(configRes.config.referralBonusPercent);
         setFormMaxReferral(configRes.config.maxReferralDiscount);
+        setFormGraceDays(configRes.config.discountGracePeriodDays);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"));
   };
@@ -96,6 +99,7 @@ export function WaitlistPage() {
           deadline: formDeadline ? new Date(formDeadline).toISOString() : null,
           referralBonusPercent: formReferralBonus,
           maxReferralDiscount: formMaxReferral,
+          discountGracePeriodDays: formGraceDays,
         },
         token,
       );
@@ -158,7 +162,7 @@ export function WaitlistPage() {
               onChange={(e) => setFormActive(e.target.checked)}
               style={{ width: 18, height: 18 }}
             />
-            <span>Waitlist active (users can join, discounts apply at checkout)</span>
+            <span>Waitlist active (users can join; member discounts activate when you turn it off)</span>
           </label>
         </div>
 
@@ -188,13 +192,29 @@ export function WaitlistPage() {
         </div>
 
         <div className="field">
-          <label>Deadline (optional - leave empty for no expiry)</label>
+          <label>Join deadline (optional — stops new signups after this date)</label>
           <input
             className="input"
             type="datetime-local"
             value={formDeadline}
             onChange={(e) => setFormDeadline(e.target.value)}
           />
+        </div>
+
+        <div className="field">
+          <label>Discount validity after launch (days, 0 = never expire)</label>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            max={365}
+            value={formGraceDays}
+            onChange={(e) => setFormGraceDays(Number(e.target.value))}
+          />
+          <p className="muted" style={{ fontSize: 12, margin: "6px 0 0" }}>
+            When you turn the waitlist off, all waitlist discounts apply from that
+            moment for this many days, then expire automatically.
+          </p>
         </div>
 
         <hr className="divider" />
