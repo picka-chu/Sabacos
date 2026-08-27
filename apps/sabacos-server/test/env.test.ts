@@ -24,4 +24,10 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...base, BOT_TOKEN: "" })).toThrow();
     expect(() => loadEnv({ ...base, SUPABASE_URL: "not-a-url" })).toThrow();
   });
+  it("requires a webhook secret in production", () => {
+    expect(() => loadEnv({ ...base, NODE_ENV: "production" })).toThrow(/WEBHOOK_SECRET/);
+    expect(
+      loadEnv({ ...base, NODE_ENV: "production", WEBHOOK_SECRET: "telegram-webhook-secret" }).WEBHOOK_SECRET,
+    ).toBe("telegram-webhook-secret");
+  });
 });

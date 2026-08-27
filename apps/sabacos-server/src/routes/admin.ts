@@ -37,6 +37,7 @@ import { aiEnabled, llamaVisionProduct } from "../services/ai.js";
 import { r2Config, r2Put, r2Delete } from "../services/r2.js";
 
 const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 export const adminRoutes = new Hono<{ Bindings: AppEnv } & AdminContext>();
 
@@ -590,10 +591,11 @@ adminRoutes.post("/products/:id/images", async (c) => {
   const uploaded: string[] = [];
   for (const file of files) {
     if (!(file instanceof File) || file.size === 0) continue;
+    if (file.size > MAX_IMAGE_BYTES) throw badRequest("Image too large (max 10MB)");
     if (file.type && !ALLOWED_IMAGE_MIMES.has(file.type)) {
       throw badRequest(`Unsupported image type: ${file.type}. Allowed: JPEG, PNG, WebP, GIF`);
     }
-    const clean = String(file.name ?? "image").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+    const clean = String(file.name ?? "image").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80) || "image";
     const path = `products/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${clean}`;
     uploaded.push(await storeImage(env, db, path, file));
   }
@@ -820,7 +822,7 @@ adminRoutes.post("/ai/product-image", async (c) => {
   const form = await c.req.parseBody();
   const file = form["image"];
   if (!(file instanceof File)) throw badRequest("image file required");
-  if (file.size > 10 * 1024 * 1024) throw badRequest("Image too large (max 10MB)");
+  if (file.size > MAX_IMAGE_BYTES) throw badRequest("Image too large (max 10MB)");
   if (file.type && !ALLOWED_IMAGE_MIMES.has(file.type)) {
     throw badRequest(`Unsupported image type: ${file.type}. Allowed: JPEG, PNG, WebP, GIF`);
   }
