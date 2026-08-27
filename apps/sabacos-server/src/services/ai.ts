@@ -49,6 +49,7 @@ async function cfRun<T>(env: { CLOUDFLARE_ACCOUNT_ID?: string; CLOUDFLARE_API_TO
       console.error(`[ai/cf] ${model} API error:`, JSON.stringify(json.errors));
       return null;
     }
+    console.log(`[ai/cf] ${model} result type: ${typeof json.result}, keys: ${typeof json.result === "object" && json.result ? Object.keys(json.result).join(", ") : "N/A"}`);
     return json.result;
   } catch (err) {
     console.error(`[ai/cf] ${model} threw:`, err instanceof Error ? err.message : err);
@@ -234,23 +235,33 @@ const VISION_PROMPT =
   "Identify this cosmetics/beauty product from the photo. " +
   "Write a concise product listing. Respond ONLY with JSON: " +
   '{"name_en": "product name in English (max 60 chars)", ' +
-  '"name_am": "the same name in Amharic script", ' +
+  '"name_am": "SAME name, do not translate — keep the brand name as-is. For Amharic script, optionally transliterate but do not translate the meaning.", ' +
   '"description_en": "2 sentence marketing description in English", ' +
-  '"description_am": "the same description in Amharic script"}';
+  '"description_am": "2 sentence marketing description in Amharic script"}';
 
 function parseVisionResponse(raw: string): ProductDraft | null {
-  console.log("[ai/vision/parse] Input length:", raw.length, "starts with:", raw.slice(0, 80));
+  console.log("[ai/vision/parse] Input length:", raw.length, "starts with:", raw.slice(0, 120));
 
-  const json = extractJson(raw);
+  // Try to parse as JSON directly first (in case it's already a clean JSON string)
+  let json: unknown = null;
+  try {
+    json = JSON.parse(raw);
+    console.log("[ai/vision/parse] Direct JSON.parse succeeded");
+  } catch {
+    // Fall back to extractJson (find JSON embedded in text)
+    console.log("[ai/vision/parse] Direct JSON.parse failed, trying extractJson");
+    json = extractJson(raw);
+  }
+
   if (!json || typeof json !== "object") {
-    console.error("[ai/vision/parse] extractJson returned null or non-object");
+    console.error("[ai/vision/parse] Failed to extract JSON object from response");
     return null;
   }
 
   const parsed = DRAFT_JSON.safeParse(json);
   if (!parsed.success) {
     console.error("[ai/vision/parse] Schema validation failed:", parsed.error.format());
-    console.error("[ai/vision/parse] Parsed object keys:", Object.keys(json as Record<string, unknown>));
+    console.error("[ai/vision/parse] Parsed object:", JSON.stringify(json).slice(0, 500));
     return null;
   }
 
@@ -267,7 +278,7 @@ async function cfVisionProduct(env: aiEnv, imageDataUrl: string): Promise<Produc
   const imgSizeKb = Math.round(((imageDataUrl.length * 3) / 4) / 1024);
   console.log(`[ai/vision/cf] Starting — image ~${imgSizeKb}KB base64`);
 
-  const result = await cfRun<{ response: string }>(
+  const result = await cfRun<{ response: unknown }>(
     env,
     "@cf/meta/llama-3.2-11b-vision-instruct",
     {
@@ -285,14 +296,25 @@ async function cfVisionProduct(env: aiEnv, imageDataUrl: string): Promise<Produc
     45_000,
   );
 
-  if (!result?.response) {
+  if (result?.response == null) {
     console.error("[ai/vision/cf] No response returned from Cloudflare");
     return null;
   }
 
-  console.log("[ai/vision/cf] Raw response length:", result.response.length);
-  console.log("[ai/vision/cf] Raw response (full):", result.response);
-  return parseVisionResponse(result.response);
+  // Cloudflare may return response as a string OR as an already-parsed object
+  let rawText: string;
+  if (typeof result.response === "string") {
+    rawText = result.response;
+  } else if (typeof result.response === "object") {
+    rawText = JSON.stringify(result.response);
+    console.log("[ai/vision/cf] Response was an object, stringified for parsing");
+  } else {
+    rawText = String(result.response);
+  }
+
+  console.log("[ai/vision/cf] Raw response type:", typeof result.response);
+  console.log("[ai/vision/cf] Raw response (full):", rawText);
+  return parseVisionResponse(rawText);
 }
 
 /** Gemini 2.0 Flash vision via REST */
@@ -328,38 +350,77 @@ async function geminiVisionProduct(env: aiEnv, imageDataUrl: string): Promise<Pr
   return parseVisionResponse(raw);
 }
 
+/** Translate English description to Amharic via Gemini */
+async function geminiTranslateToAmharic(env: aiEnv, englishText: string): Promise<string | null> {
+  console.log("[ai/translate/am] Translating description to Amharic, length:", englishText.length);
+  const raw = await geminiGenerate(
+    env,
+    "gemini-2.5-flash",
+    [
+      {
+        text:
+          "Translate the following English product description to Amharic (አማርኛ). " +
+          "Keep it natural and marketing-friendly. Only return the translated text, nothing else.\n\n" +
+          englishText,
+      },
+    ],
+    30_000,
+  );
+  if (raw) {
+    console.log("[ai/translate/am] Translation succeeded, length:", raw.length);
+    return raw.trim();
+  }
+  console.error("[ai/translate/am] Translation failed");
+  return null;
+}
+
 /**
  * Analyzes a product photo and drafts bilingual name + description.
  * Tries Cloudflare Llama first, falls back to Gemini Flash.
- * Returns null only if both fail.
+ * Uses Gemini for Amharic description translation (name stays in English).
+ * Returns null only if all providers fail.
  */
 export async function llamaVisionProduct(
   env: aiEnv,
   imageDataUrl: string,
 ): Promise<ProductDraft | null> {
-  // 1. Try Cloudflare
+  let draft: ProductDraft | null = null;
+
+  // 1. Try Cloudflare for vision identification
   if (aiEnabled(env)) {
-    const cf = await cfVisionProduct(env, imageDataUrl);
-    if (cf) {
-      console.log("[ai/vision] Cloudflare succeeded:", cf.nameEn);
-      return cf;
-    }
-    console.warn("[ai/vision] Cloudflare failed, trying Gemini fallback…");
+    draft = await cfVisionProduct(env, imageDataUrl);
+    if (draft) console.log("[ai/vision] Cloudflare succeeded:", draft.nameEn);
+    else console.warn("[ai/vision] Cloudflare failed, trying Gemini…");
   } else {
     console.log("[ai/vision] Cloudflare not configured, going straight to Gemini");
   }
 
-  // 2. Fallback to Gemini
-  if (geminiEnabled(env)) {
-    const gem = await geminiVisionProduct(env, imageDataUrl);
-    if (gem) {
-      console.log("[ai/vision] Gemini succeeded:", gem.nameEn);
-      return gem;
-    }
-    console.error("[ai/vision] Both Cloudflare and Gemini failed");
-  } else {
-    console.error("[ai/vision] No AI provider available (neither Cloudflare nor Gemini configured)");
+  // 2. Fallback to Gemini for vision
+  if (!draft && geminiEnabled(env)) {
+    draft = await geminiVisionProduct(env, imageDataUrl);
+    if (draft) console.log("[ai/vision] Gemini succeeded:", draft.nameEn);
+    else console.error("[ai/vision] Gemini vision also failed");
   }
 
-  return null;
+  if (!draft) {
+    console.error("[ai/vision] All vision providers failed");
+    return null;
+  }
+
+  // 3. Name stays in English (brand names shouldn't be translated).
+  //    Use Gemini to translate ONLY the description to Amharic.
+  draft = { ...draft, nameAm: draft.nameEn };
+
+  if (geminiEnabled(env)) {
+    const amDesc = await geminiTranslateToAmharic(env, draft.descriptionEn);
+    if (amDesc) {
+      draft = { ...draft, descriptionAm: amDesc };
+      console.log("[ai/vision] Amharic description translated via Gemini");
+    } else {
+      console.warn("[ai/vision] Amharic translation failed, keeping original description_am");
+    }
+  }
+
+  console.log("[ai/vision] Final draft:", JSON.stringify(draft).slice(0, 300));
+  return draft;
 }
