@@ -4,6 +4,7 @@ import { ArrowLeft, Save, Trash2, Upload } from "lucide-react";
 import type { Category, Product } from "@sabacos/core";
 import { api, uploadAiImage } from "../lib/api.js";
 import { useAuth } from "../auth.js";
+import { AiStatusIndicator, type AiFileStatus } from "../components/AiStatusIndicator.js";
 
 const etbToHalala = (etb: string) => Math.round((Number(etb) || 0) * 100);
 
@@ -104,32 +105,82 @@ export function ProductEditPage() {
 
   const removeImage = (url: string) => setImages((imgs) => imgs.filter((u) => u !== url));
 
-  const [analyzing, setAnalyzing] = useState(false);
+  const [aiFiles, setAiFiles] = useState<AiFileStatus[]>([]);
 
   const onFiles = async (files: FileList | null) => {
     if (!files || !token || files.length === 0) return;
     setBusy(true);
-    setAnalyzing(true);
     setError(null);
+
+    const fileList = Array.from(files);
+
+    // Initialize all files as uploading
+    setAiFiles(fileList.map((f) => ({ fileName: f.name, step: "uploading" as const })));
+
     try {
-      for (const file of Array.from(files)) {
-        const res = await uploadAiImage(file, token);
-        setImages((imgs) => (imgs.includes(res.url) ? imgs : [...imgs, res.url]));
-        if (res.draft) {
-          setForm((f) => ({
-            ...f,
-            nameEn: f.nameEn.trim() || res.draft!.nameEn,
-            nameAm: f.nameAm.trim() || res.draft!.nameAm,
-            descriptionEn: f.descriptionEn.trim() || res.draft!.descriptionEn,
-            descriptionAm: f.descriptionAm.trim() || res.draft!.descriptionAm,
-          }));
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+
+        // Mark as uploading
+        setAiFiles((prev) =>
+          prev.map((f, idx) => (idx === i ? { ...f, step: "uploading" as const } : f)),
+        );
+
+        // Start upload + AI analysis
+        setAiFiles((prev) =>
+          prev.map((f, idx) => (idx === i ? { ...f, step: "analyzing" as const } : f)),
+        );
+
+        try {
+          const res = await uploadAiImage(file, token);
+
+          setImages((imgs) => (imgs.includes(res.url) ? imgs : [...imgs, res.url]));
+
+          if (res.draft) {
+            setForm((f) => ({
+              ...f,
+              nameEn: f.nameEn.trim() || res.draft!.nameEn,
+              nameAm: f.nameAm.trim() || res.draft!.nameAm,
+              descriptionEn: f.descriptionEn.trim() || res.draft!.descriptionEn,
+              descriptionAm: f.descriptionAm.trim() || res.draft!.descriptionAm,
+            }));
+            setAiFiles((prev) =>
+              prev.map((f, idx) =>
+                idx === i
+                  ? { ...f, step: "complete" as const, draftName: res.draft!.nameEn }
+                  : f,
+              ),
+            );
+          } else {
+            setAiFiles((prev) =>
+              prev.map((f, idx) =>
+                idx === i
+                  ? {
+                      ...f,
+                      step: "complete" as const,
+                      draftName: undefined,
+                      error: "AI could not identify the product",
+                    }
+                  : f,
+              ),
+            );
+          }
+        } catch (err) {
+          setAiFiles((prev) =>
+            prev.map((f, idx) =>
+              idx === i
+                ? {
+                    ...f,
+                    step: "error" as const,
+                    error: err instanceof Error ? err.message : "Upload failed",
+                  }
+                : f,
+            ),
+          );
         }
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setBusy(false);
-      setAnalyzing(false);
     }
   };
 
@@ -243,8 +294,7 @@ export function ProductEditPage() {
         <div className="card" style={{ marginTop: 14 }}>
           <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Images</h3>
           <p className="muted" style={{ margin: "0 0 12px", fontSize: 12 }}>
-            Upload a photo first — the AI drafts the name and description for you.
-            {analyzing && " Analyzing image…"}
+            Upload a photo — the AI drafts the name and description for you.
           </p>
           <div className="thumb-grid">
             {images.map((url) => (
@@ -277,6 +327,8 @@ export function ProductEditPage() {
             Upload images
             <input type="file" multiple accept="image/*" hidden onChange={(e) => onFiles(e.target.files)} />
           </label>
+
+          <AiStatusIndicator files={aiFiles} />
         </div>
 
         <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={busy}>
