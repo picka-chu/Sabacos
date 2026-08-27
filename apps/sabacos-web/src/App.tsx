@@ -31,7 +31,6 @@ function Shell() {
 
   // Waitlist phase state
   const [waitlistActive, setWaitlistActive] = useState<boolean | null>(null);
-  const [waitlistJoined, setWaitlistJoined] = useState(false);
 
   useEffect(() => {
     applyTelegramTheme();
@@ -44,25 +43,17 @@ function Shell() {
       .catch(() => setProfileStatus("error"));
     refreshCart().catch(() => {});
 
-    // Check if waitlist phase is active
+    // Check if waitlist phase is active — server has ONLY /waitlist/status,
+    // which returns { config.isActive, entry, discount }
     api
-      .get<{ active: boolean }>("/shop/status")
+      .get<{ config: { isActive: boolean } | null }>("/waitlist/status")
       .then((res) => {
-        setWaitlistActive(res.active);
+        setWaitlistActive(res.config?.isActive === true);
       })
       .catch(() => {
         setWaitlistActive(false);
       });
   }, [setProfile, setProfileStatus, refreshCart]);
-
-  // If waitlist is active, check if the user has already joined
-  useEffect(() => {
-    if (!waitlistActive) return;
-    api
-      .get<{ joined: boolean }>("/waitlist/status")
-      .then((res) => setWaitlistJoined(res.joined))
-      .catch(() => {});
-  }, [waitlistActive]);
 
   useEffect(() => {
     const bb = getTelegramWebApp()?.BackButton;

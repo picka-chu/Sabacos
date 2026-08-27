@@ -6,14 +6,30 @@ import { api } from "../api.js";
 import { haptic, tg, openExternalLink } from "../telegram.js";
 
 interface WaitlistStatus {
-  joined: boolean;
-  entry?: {
+  config: {
+    isActive: boolean;
+    discountPercent: number;
+    earlyBirdLimit: number;
+    deadline: string | null;
+  } | null;
+  entry: {
     position: number;
     isEarlyBird: boolean;
     referralCode: string;
-    referralCount: number;
-    joinedAt: string;
+    status: string;
+    createdAt: string;
+  } | null;
+  discount: number;
+}
+
+interface JoinResponse {
+  entry: {
+    position: number;
+    isEarlyBird: boolean;
+    referralCode: string;
+    status: string;
   };
+  discount: number;
 }
 
 export function WaitlistPage() {
@@ -33,12 +49,11 @@ export function WaitlistPage() {
       .get<WaitlistStatus>("/waitlist/status")
       .then((res) => {
         setStatus(res);
-        setLoading(false);
       })
       .catch(() => {
-        setStatus({ joined: false });
-        setLoading(false);
-      });
+        setStatus({ config: null, entry: null, discount: 0 });
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -57,21 +72,22 @@ export function WaitlistPage() {
     setError(null);
     haptic("medium");
     try {
-      const res = await api.post<{ entry: { position: number; referralCode: string } }>("/waitlist/join", {
+      const res = await api.post<JoinResponse>("/waitlist/join", {
         firstName: firstName.trim(),
         lastName: lastName.trim() || undefined,
         phone: phone.trim() || undefined,
         referralCode: referralInput.trim().toUpperCase() || undefined,
       });
       setStatus({
-        joined: true,
+        config: status?.config ?? null,
         entry: {
           position: res.entry.position,
-          isEarlyBird: true,
+          isEarlyBird: res.entry.isEarlyBird,
           referralCode: res.entry.referralCode,
-          referralCount: 0,
-          joinedAt: new Date().toISOString(),
+          status: res.entry.status,
+          createdAt: new Date().toISOString(),
         },
+        discount: res.discount,
       });
       haptic("heavy");
     } catch (err) {
@@ -107,7 +123,7 @@ export function WaitlistPage() {
     );
   }
 
-  if (status?.joined && status.entry) {
+  if (status?.entry) {
     return (
       <div className="screen" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 16, paddingBottom: "calc(var(--nav-height) + 32px)" }}>
         <PageTitle title={lang === "am" ? "የቅድመ ምዝገባ" : "Waitlist"} />
@@ -143,16 +159,16 @@ export function WaitlistPage() {
           <div style={{ flex: 1, textAlign: "center", padding: "18px 8px" }}>
             <div style={{ fontSize: 28, fontWeight: 800, color: "var(--accent)" }}>#{status.entry.position}</div>
             <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                {lang === "am" ? "የምዝገባ ተbara" : "Your position"}
+                {lang === "am" ? "ቦታ" : "Your position"}
             </div>
           </div>
           <div style={{ width: 1, background: "var(--line)" }} />
           <div style={{ flex: 1, textAlign: "center", padding: "18px 8px" }}>
             <div style={{ fontSize: 28, fontWeight: 800, color: "var(--success)" }}>
-              {status.entry.referralCount}
+              {status.discount > 0 ? `-${status.discount}%` : "—"}
             </div>
             <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-              {lang === "am" ? "ግብረ ሥርዓት" : "Referrals"}
+              {lang === "am" ? "ቅናሽ" : "Your discount"}
             </div>
           </div>
           {status.entry.isEarlyBird && (
@@ -228,7 +244,7 @@ export function WaitlistPage() {
           <Users size={36} />
         </div>
         <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 800 }}>
-          {lang === "am" ? "በጊዜው ውስጥ ይצטרף!" : "Get in Early!"}
+          {lang === "am" ? "ከመጀመሪያ ይግቡ!" : "Get in Early!"}
         </h2>
         <p className="muted" style={{ fontSize: 14, lineHeight: 1.5, margin: 0 }}>
           {lang === "am"
@@ -299,7 +315,7 @@ export function WaitlistPage() {
       <div className="card" style={{ padding: 18 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {[
-            { icon: "✨", text: lang === "am" ? "በመጀመሪያ የሚመጡት ሰዎች ውስጥ ይضاፉ" : "Be among the first to shop" },
+            { icon: "✨", text: lang === "am" ? "በመጀመሪያ የሚመጡት ሰዎች ውስጥ ይገዙ" : "Be among the first to shop" },
             { icon: "💰", text: lang === "am" ? "ብልጭታ ቅናሽ ያግኙ" : "Get exclusive early-bird discount" },
             { icon: "🎁", text: lang === "am" ? "ጓደያንን አጋሩ ተጨማሪ ሽልማት ያግኙ" : "Refer friends for bonus perks" },
           ].map((item, i) => (
