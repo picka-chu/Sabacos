@@ -14,6 +14,7 @@ const baseSchema = z.object({
   WEBHOOK_SECRET: z.string().trim().optional(),
   ADMIN_CHANNEL_ID: z.string().trim().optional(),
   GEMINI_API_KEY: z.string().trim().optional(),
+  GEMINI_MODEL: z.string().trim().default("gemini-3.6-flash"),
   CLOUDFLARE_ACCOUNT_ID: z.string().trim().optional(),
   CLOUDFLARE_API_TOKEN: z.string().trim().optional(),
   R2_ACCESS_KEY_ID: z.string().trim().optional(),

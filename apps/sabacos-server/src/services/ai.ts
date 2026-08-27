@@ -3,11 +3,16 @@ import { z } from "zod";
 const CF_BASE = "https://api.cloudflare.com/client/v4";
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
-export type aiEnv = { CLOUDFLARE_ACCOUNT_ID?: string; CLOUDFLARE_API_TOKEN?: string; GEMINI_API_KEY?: string };
+export type aiEnv = { CLOUDFLARE_ACCOUNT_ID?: string; CLOUDFLARE_API_TOKEN?: string; GEMINI_API_KEY?: string; GEMINI_MODEL?: string };
 
 export const EMBED_MODEL = "@cf/baai/bge-small-en-v1.5"; // 384 dims
 export const AD_COPY_MODEL = "@cf/meta/llama-3.2-3b-instruct";
 export const NOTIFY_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+export const GEMINI_DEFAULT_MODEL = "gemini-3.6-flash";
+
+function geminiModel(env: aiEnv): string {
+  return env.GEMINI_MODEL || GEMINI_DEFAULT_MODEL;
+}
 
 export function aiEnabled(env: { CLOUDFLARE_ACCOUNT_ID?: string; CLOUDFLARE_API_TOKEN?: string }): boolean {
   return Boolean(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN);
@@ -332,7 +337,7 @@ async function geminiVisionProduct(env: aiEnv, imageDataUrl: string): Promise<Pr
 
   const raw = await geminiGenerate(
     env,
-    "gemini-2.5-flash",
+    geminiModel(env),
     [
       { text: VISION_PROMPT },
       { inlineData: { mimeType, data: base64Data } },
@@ -355,7 +360,7 @@ async function geminiTranslateToAmharic(env: aiEnv, englishText: string): Promis
   console.log("[ai/translate/am] Translating description to Amharic, length:", englishText.length);
   const raw = await geminiGenerate(
     env,
-    "gemini-2.5-flash",
+    geminiModel(env),
     [
       {
         text:
