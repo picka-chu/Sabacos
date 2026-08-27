@@ -46,8 +46,11 @@ function isAllowedOrigin(origin: string | undefined): boolean {
 }
 
 function ipKey(c: { req: { header: (name: string) => string | undefined } }): string {
-  return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("x-real-ip") ?? "unknown";
+  const forwarded = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || c.req.header("x-real-ip") || "unknown";
 }
+
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
 
 const app = new Hono<{ Bindings: typeof env }>();
 
@@ -59,12 +62,29 @@ const app = new Hono<{ Bindings: typeof env }>();
 app.use(
   "*",
   cors({
-    origin: (origin) => (isAllowedOrigin(origin) ? origin : allowedOrigins.values().next().value!),
+    origin: (origin) => (isAllowedOrigin(origin) ? origin : undefined),
     allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization", "X-Telegram-Init-Data"],
     maxAge: 86400,
   }),
 );
+
+// ---------------------------------------------------------------------------
+// Body-size guard: reject requests > 10 MB before body parsing
+// ---------------------------------------------------------------------------
+app.use("*", async (c, next) => {
+  const contentLength = c.req.header("content-length");
+  if (contentLength) {
+    const parsed = Number(contentLength);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return c.json({ error: { code: "bad_request", message: "Invalid Content-Length header" } }, 400);
+    }
+    if (parsed > MAX_BODY_BYTES) {
+      return c.json({ error: { code: "payload_too_large", message: "Request too large (max 10 MB)" } }, 413);
+    }
+  }
+  await next();
+});
 
 // Security response headers
 app.use("*", async (c, next) => {
@@ -87,12 +107,16 @@ app.onError((err, c) => sendError(c, err));
 app.notFound((c) => sendError(c, notFound()));
 
 // ---------------------------------------------------------------------------
-// Health
+// Health / uptime monitors
 // ---------------------------------------------------------------------------
+app.get("/", (c) => c.json({ ok: true, service: "sabacos-server", time: new Date().toISOString() }));
+app.on("HEAD", "/", (c) => c.body(null, 200));
+
 app.get("/health", async (c) => {
-  const { data, error } = await db.from("settings").select("key").limit(1);
+  const { error } = await db.from("settings").select("key").limit(1);
   return c.json({ ok: true, db: !error, time: new Date().toISOString() });
 });
+app.on("HEAD", "/health", (c) => c.body(null, 200));
 
 // ---------------------------------------------------------------------------
 // Telegram webhook — timing-safe secret comparison
@@ -153,17 +177,6 @@ app.use("/api/v1/admin/*", rateLimit({ windowMs: 60_000, limit: 20, keyGenerator
 app.route("/api/v1/admin", adminRoutes);
 app.route("/api/v1/admin/waitlist", waitlistAdminRoutes);
 app.route("/api/v1/admin/discounts", discountAdminRoutes);
-
-// ---------------------------------------------------------------------------
-// Body-size guard: reject requests > 10 MB early
-// ---------------------------------------------------------------------------
-app.use("*", async (c, next) => {
-  const cl = Number(c.req.header("content-length") ?? 0);
-  if (cl > 10 * 1024 * 1024) {
-    return c.json({ error: { code: "payload_too_large", message: "Request too large (max 10 MB)" } }, 413);
-  }
-  await next();
-});
 
 // ---------------------------------------------------------------------------
 // Server lifecycle

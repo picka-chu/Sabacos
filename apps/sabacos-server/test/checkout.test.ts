@@ -1,16 +1,30 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { CartValidationError } from "../src/services/checkout.js";
 
-const { getSettingsMock, getCartMock, clearCartMock, createOrderMock } = vi.hoisted(() => ({
+const {
+  getSettingsMock,
+  getCartMock,
+  clearCartMock,
+  createOrderMock,
+  getActiveDiscountsMock,
+  getTotalDiscountForProfileMock,
+} = vi.hoisted(() => ({
   getSettingsMock: vi.fn(),
   getCartMock: vi.fn(),
   clearCartMock: vi.fn(),
   createOrderMock: vi.fn(),
+  getActiveDiscountsMock: vi.fn(),
+  getTotalDiscountForProfileMock: vi.fn(),
 }));
 
 vi.mock("../src/db/settings.js", () => ({ getSettings: getSettingsMock }));
 vi.mock("../src/db/cart.js", () => ({ getCart: getCartMock, clearCart: clearCartMock }));
 vi.mock("../src/db/orders.js", () => ({ createOrder: createOrderMock }));
+vi.mock("../src/db/discounts.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/db/discounts.js")>()),
+  getActiveDiscounts: getActiveDiscountsMock,
+}));
+vi.mock("../src/db/waitlist.js", () => ({ getTotalDiscountForProfile: getTotalDiscountForProfileMock }));
 
 const { checkout } = await import("../src/services/checkout.js");
 
@@ -68,6 +82,8 @@ const input = {
 beforeEach(() => {
   vi.clearAllMocks();
   getSettingsMock.mockResolvedValue(settings);
+  getActiveDiscountsMock.mockResolvedValue([]);
+  getTotalDiscountForProfileMock.mockResolvedValue(0);
   createOrderMock.mockImplementation(async (_db: never, o: { subtotalHalala: number; deliveryFeeHalala: number; totalHalala: number }) => ({
     id: "00000000-0000-0000-0000-000000000009",
     orderNo: "SB-000001",
