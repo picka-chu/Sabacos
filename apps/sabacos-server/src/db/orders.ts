@@ -94,8 +94,35 @@ export async function createOrder(db: Db, input: CreateOrderInput): Promise<Orde
   return { ...order, invoicePayload: order.id };
 }
 
+const ORDER_COLUMNS = [
+  "id",
+  "order_no",
+  "profile_id",
+  "status",
+  "subtotal_halala",
+  "discount_halala",
+  "discount_percent",
+  "delivery_fee_halala",
+  "total_halala",
+  "customer_name",
+  "phone",
+  "address",
+  "note",
+  "latitude",
+  "longitude",
+  "zone",
+  "delivery_type",
+  "fragile",
+  "invoice_payload",
+  "telegram_payment_charge_id",
+  "provider_payment_charge_id",
+  "payment_status",
+  "created_at",
+  "updated_at",
+].join(", ");
+
 export async function getOrderById(db: Db, id: string): Promise<Order | null> {
-  const { data, error } = await db.from("orders").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await db.from("orders").select(ORDER_COLUMNS).eq("id", id).maybeSingle();
   if (error) throw new Error(`getOrderById: ${error.message}`);
   return data ? orderRowSchema.parse(data) : null;
 }
@@ -103,7 +130,7 @@ export async function getOrderById(db: Db, id: string): Promise<Order | null> {
 export async function getOrdersByProfile(db: Db, profileId: string): Promise<Order[]> {
   const { data, error } = await db
     .from("orders")
-    .select("*")
+    .select(ORDER_COLUMNS)
     .eq("profile_id", profileId)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -139,7 +166,7 @@ export async function updateOrderStatus(
     .from("orders")
     .update({ status })
     .eq("id", orderId)
-    .select("*")
+    .select(ORDER_COLUMNS)
     .single();
   if (error) throw new Error(`updateOrderStatus: ${error.message}`);
   return orderRowSchema.parse(data);
@@ -150,11 +177,13 @@ export async function updatePaymentStatus(
   orderId: string,
   paymentStatus: PaymentStatus,
 ): Promise<Order | null> {
+  const order = await getOrderById(db, orderId);
+  if (!order) return null;
   const { data, error } = await db
     .from("orders")
     .update({ payment_status: paymentStatus })
     .eq("id", orderId)
-    .select("*")
+    .select(ORDER_COLUMNS)
     .single();
   if (error) throw new Error(`updatePaymentStatus: ${error.message}`);
   return orderRowSchema.parse(data);
