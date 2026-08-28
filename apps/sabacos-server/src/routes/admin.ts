@@ -52,6 +52,7 @@ function toProductRow(body: z.infer<typeof createProductSchema>) {
     description_en: body.descriptionEn ?? "",
     description_am: body.descriptionAm ?? "",
     price_halala: body.priceHalala,
+    cost_halala: body.costHalala ?? 0,
     compare_at_halala: body.compareAtHalala ?? null,
     stock: body.stock ?? 0,
     image_urls: body.imageUrls ?? [],
@@ -70,6 +71,7 @@ function toProductPatch(body: z.infer<typeof updateProductSchema>): Record<strin
   if (body.descriptionEn !== undefined) patch.description_en = body.descriptionEn;
   if (body.descriptionAm !== undefined) patch.description_am = body.descriptionAm;
   if (body.priceHalala !== undefined) patch.price_halala = body.priceHalala;
+  if (body.costHalala !== undefined) patch.cost_halala = body.costHalala;
   if (body.compareAtHalala !== undefined) patch.compare_at_halala = body.compareAtHalala;
   if (body.stock !== undefined) patch.stock = body.stock;
   if (body.imageUrls !== undefined) patch.image_urls = body.imageUrls;

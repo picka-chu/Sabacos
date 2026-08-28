@@ -21,6 +21,7 @@ import { sendError, notFound } from "./errors.js";
 import { log } from "./log.js";
 import { rateLimit } from "./rate-limit.js";
 import { startMarketingSweeper, stopMarketingSweeper } from "./services/notifier.js";
+import { startAdaptiveCron, stopAdaptiveCron } from "./cron/adaptive.js";
 
 const env = loadEnv();
 const db = getDb(env);
@@ -209,6 +210,8 @@ async function start(): Promise<void> {
   startMarketingSweeper(bot, env);
   log.info(`Marketing sweeper ${env.MARKETING_SWEEP === "off" ? "disabled" : "running (hourly)"}`);
 
+  startAdaptiveCron(env);
+  log.info("Adaptive referral cron scheduler started");
   server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
     log.info(`Sabacos server listening on http://localhost:${info.port}`);
     log.info(`Mini app URL: ${env.WEBAPP_URL}`);
@@ -222,6 +225,7 @@ async function start(): Promise<void> {
 function shutdown(signal: string): void {
   log.info(`${signal} received — shutting down`);
   stopMarketingSweeper();
+  stopAdaptiveCron();
   server?.close(() => {
     log.info("HTTP server closed");
     process.exit(0);

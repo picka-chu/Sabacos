@@ -35,6 +35,14 @@ export async function processReferralReward(
     return { success: false, error: "referral_program_inactive" };
   }
 
+  // Check daily spend cap
+  if (settings.dailySpendCapEnabled) {
+    const { data: capResult } = await db.rpc("check_daily_spend_cap");
+    if (capResult?.exceeded) {
+      return { success: false, error: "daily_spend_cap_exceeded" };
+    }
+  }
+
   // Check minimum order value
   if (orderTotalHalala < settings.minOrderValueHalala) {
     return { success: false, error: "order_below_minimum" };
@@ -252,4 +260,66 @@ export async function processSpin(
         prize: { name: prize.name, type: prize.prizeType, value: prize.value },
       };
   }
+}
+
+/**
+ * Reverse commission when a referred order is refunded/cancelled.
+ * Debits the commission back from the referrer's wallet.
+ */
+export async function reverseCommissionOnRefund(
+  db: Db,
+  orderId: string,
+  reason: string = "Order refunded",
+): Promise<{ reversed: boolean; amountHalala?: number }> {
+  // Find the referral for this order
+  const { data: referralRow } = await db
+    .from("referrals")
+    .select("id, referrer_id")
+    .eq("referred_id", (await db.from("orders").select("profile_id").eq("id", orderId).single()).data?.profile_id ?? "")
+    .eq("status", "qualified")
+    .single();
+
+  if (!referralRow) return { reversed: false };
+
+  // Find the commission reward for this order
+  const { data: reward } = await db
+    .from("referral_rewards")
+    .select("id, amount_halala, metadata")
+    .eq("referral_id", referralRow.id)
+    .eq("reward_type", "commission")
+    .contains("metadata", { order_id: orderId })
+    .single();
+
+  if (!reward || !reward.amount_halala) return { reversed: false };
+
+  // Check if already reversed
+  const { data: existing } = await db
+    .from("commission_reversals")
+    .select("id")
+    .eq("referral_id", referralRow.id)
+    .eq("order_id", orderId)
+    .single();
+
+  if (existing) return { reversed: false };
+
+  // Debit from referrer's wallet
+  const { debitWallet } = await import("./wallet.js");
+  await debitWallet(
+    db,
+    referralRow.referrer_id,
+    reward.amount_halala,
+    `Commission reversed: ${reason}`,
+    "commission_reversal",
+    referralRow.id,
+  );
+
+  // Log the reversal
+  await db.from("commission_reversals").insert({
+    referral_id: referralRow.id,
+    order_id: orderId,
+    amount_halala: reward.amount_halala,
+    reason,
+  });
+
+  return { reversed: true, amountHalala: reward.amount_halala };
 }

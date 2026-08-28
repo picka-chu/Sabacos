@@ -24,6 +24,7 @@ export function ProductEditPage() {
     descriptionEn: "",
     descriptionAm: "",
     price: "",
+    cost: "",
     compareAt: "",
     stock: "0",
     isActive: true,
@@ -55,6 +56,7 @@ export function ProductEditPage() {
             descriptionEn: p.descriptionEn,
             descriptionAm: p.descriptionAm,
             price: (p.priceHalala / 100).toString(),
+            cost: p.costHalala != null ? (p.costHalala / 100).toString() : "",
             compareAt: p.compareAtHalala != null ? (p.compareAtHalala / 100).toString() : "",
             stock: p.stock.toString(),
             isActive: p.isActive,
@@ -82,6 +84,7 @@ export function ProductEditPage() {
       descriptionEn: form.descriptionEn.trim(),
       descriptionAm: form.descriptionAm.trim(),
       priceHalala: etbToHalala(form.price),
+      costHalala: form.cost.trim() ? etbToHalala(form.cost) : 0,
       compareAtHalala: form.compareAt.trim() ? etbToHalala(form.compareAt) : null,
       stock: Number(form.stock) || 0,
       imageUrls: images,
@@ -259,6 +262,10 @@ export function ProductEditPage() {
             <div className="field">
               <label>Price (ETB)</label>
               <input className="input" type="number" min="0" step="0.01" value={form.price} onChange={(e) => set("price", e.target.value)} required />
+            </div>
+            <div className="field">
+              <label>Cost (ETB, optional)</label>
+              <input className="input" type="number" min="0" step="0.01" value={form.cost} onChange={(e) => set("cost", e.target.value)} placeholder="0.00" />
             </div>
             <div className="field">
               <label>Compare-at price (ETB, optional)</label>

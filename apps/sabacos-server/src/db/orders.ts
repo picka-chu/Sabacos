@@ -162,6 +162,7 @@ export async function updateOrderStatus(
 ): Promise<Order | null> {
   const order = await getOrderById(db, orderId);
   if (!order) return null;
+
   const { data, error } = await db
     .from("orders")
     .update({ status })
@@ -169,6 +170,15 @@ export async function updateOrderStatus(
     .select(ORDER_COLUMNS)
     .single();
   if (error) throw new Error(`updateOrderStatus: ${error.message}`);
+
+  // Reverse commission if order is cancelled after being paid
+  if (status === "cancelled" && order.status !== "cancelled") {
+    const { reverseCommissionOnRefund } = await import("./referral-rewards.js");
+    await reverseCommissionOnRefund(db, orderId, "Order cancelled").catch((err) =>
+      console.error(`Commission reversal failed for order ${orderId}:`, err),
+    );
+  }
+
   return orderRowSchema.parse(data);
 }
 

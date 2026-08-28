@@ -89,6 +89,7 @@ export interface Product {
   descriptionEn: string;
   descriptionAm: string;
   priceHalala: number;
+  costHalala: number;
   compareAtHalala: number | null;
   stock: number;
   imageUrls: string[];
@@ -325,6 +326,23 @@ export interface ReferralSettings {
   maxCouponsPerOrder: number;
   minAccountAgeDays: number;
   minOrderValueHalala: number;
+  // Adaptive engine
+  rewardBudgetPct: number;
+  topPrizeCostHalala: number;
+  adaptiveEnabled: boolean;
+  lastAdjustmentDate: string | null;
+  adjustmentDayOfWeek: number;
+  // Daily spend cap
+  dailySpendCapHalala: number;
+  dailySpendCapEnabled: boolean;
+  // Guardrails
+  guardrailCommissionMin: number;
+  guardrailCommissionMax: number;
+  guardrailSpinCapMin: number;
+  guardrailSpinCapMax: number;
+  guardrailPrizeCostMin: number;
+  guardrailPrizeCostMax: number;
+  guardrailMaxBudgetPct: number;
   createdAt: string;
   updatedAt: string;
 }
