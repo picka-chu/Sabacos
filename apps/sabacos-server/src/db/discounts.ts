@@ -83,7 +83,11 @@ export async function getActiveDiscounts(db: Db): Promise<Discount[]> {
     .or(`starts_at.is.null,starts_at.lte.${now}`)
     .or(`ends_at.is.null,ends_at.gte.${now}`)
     .order("created_at", { ascending: false });
-  if (error) throw new Error(`getActiveDiscounts: ${error.message}`);
+  if (error) {
+    // Table may not exist yet (migration 0009 pending) — treat as no discounts.
+    if (/does not exist|relation .* does not exist/i.test(error.message ?? "")) return [];
+    throw new Error(`getActiveDiscounts: ${error.message}`);
+  }
   return (data ?? []).map((row) => mapDiscountRow(row as Record<string, unknown>));
 }
 

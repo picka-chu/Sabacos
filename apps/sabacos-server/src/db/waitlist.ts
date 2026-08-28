@@ -363,7 +363,11 @@ export async function getTotalDiscountForProfile(
     .select("discount_percent")
     .eq("profile_id", profileId)
     .or(`expires_at.is.null,expires_at.gt.${now}`);
-  if (error) throw new Error(`getTotalDiscountForProfile: ${error.message}`);
+  if (error) {
+    // Table may not exist yet (migration 0007 pending) — treat as no discount.
+    if (/does not exist|relation .* does not exist/i.test(error.message ?? "")) return 0;
+    throw new Error(`getTotalDiscountForProfile: ${error.message}`);
+  }
   return (data ?? []).reduce((sum, d) => sum + (d.discount_percent as number), 0);
 }
 
