@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { badRequest, safeParse } from "../errors.js";
 import { addCartItemSchema, patchCartItemSchema } from "@sabacos/core";
 import { getAppEnv, type AppEnv } from "../env.js";
-import type { UserContext } from "../auth/telegram.js";
+import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
 import { getProductById } from "../db/catalog.js";
 import {
@@ -14,6 +14,8 @@ import {
 } from "../db/cart.js";
 
 export const cartRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
+
+cartRoutes.use("*", requireUser);
 
 cartRoutes.get("/", async (c) => {
   const db = getDb(getAppEnv());

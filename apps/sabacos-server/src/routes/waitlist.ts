@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { badRequest } from "../errors.js";
 import { getAppEnv, type AppEnv } from "../env.js";
-import type { UserContext } from "../auth/telegram.js";
+import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
 import {
   getWaitlistConfig,
@@ -12,6 +12,8 @@ import {
 } from "../db/waitlist.js";
 
 export const waitlistRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
+
+waitlistRoutes.use("*", requireUser);
 
 // Check if the current user is on the waitlist and their discount status.
 waitlistRoutes.get("/status", async (c) => {

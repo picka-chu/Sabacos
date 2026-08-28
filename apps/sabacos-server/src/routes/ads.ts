@@ -3,7 +3,7 @@ import { z } from "zod";
 import { badRequest, safeParse } from "../errors.js";
 import type { Language } from "@sabacos/core";
 import { getAppEnv, type AppEnv } from "../env.js";
-import type { UserContext } from "../auth/telegram.js";
+import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
 import { getProductById } from "../db/catalog.js";
 import { logProductView } from "../db/marketing.js";
@@ -11,6 +11,8 @@ import { pickAdForUser } from "../services/ads.js";
 import { updateUserTasteVector, vectorEnabled } from "../services/vector.js";
 
 export const adRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
+
+adRoutes.use("*", requireUser);
 
 const viewSchema = z.object({ productId: z.string().uuid() });
 

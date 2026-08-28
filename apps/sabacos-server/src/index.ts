@@ -161,15 +161,11 @@ app.get("/api/v1/delivery/config", async (c) => {
 // ---------------------------------------------------------------------------
 // Authenticated user routes — tighter rate limit: 30 req/min
 // ---------------------------------------------------------------------------
-app.use("/api/v1/cart/*", rateLimit({ windowMs: 60_000, limit: 30, keyGenerator: ipKey }), requireUser);
 app.use("/api/v1/checkout", rateLimit({ windowMs: 60_000, limit: 10, keyGenerator: ipKey }), requireUser);
 app.use("/api/v1/profile", requireUser);
 app.use("/api/v1/profile/*", requireUser);
 app.use("/api/v1/auth/telegram", requireUser);
 app.use("/api/v1/track/*", requireUser);
-app.use("/api/v1/ads/*", requireUser);
-app.use("/api/v1/waitlist", requireUser);
-app.use("/api/v1/waitlist/*", requireUser);
 app.route("/api/v1", adRoutes);
 app.route("/api/v1/cart", cartRoutes);
 app.route("/api/v1", orderRoutes);
