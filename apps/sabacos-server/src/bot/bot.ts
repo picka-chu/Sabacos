@@ -6,6 +6,8 @@ import {
   isAdminRole,
   isFullAdmin,
   translateStatus,
+  generateReferralCode,
+  referralDeepLink,
   type Order,
   type OrderWithItems,
   type ProfileRole,
@@ -15,7 +17,7 @@ import { getDb } from "../db/client.js";
 import { getSettings } from "../db/settings.js";
 import { getOrderById, getOrderItems, getOrderWithItems, getOrdersByProfile } from "../db/orders.js";
 import { getProductsByIds } from "../db/catalog.js";
-import { getProfileById, saveProfileContact, upsertTelegramProfile } from "../db/profiles.js";
+import { getProfileById, getProfileByTelegramId, saveProfileContact, upsertTelegramProfile } from "../db/profiles.js";
 import { getWaitlistConfig, getWaitlistEntryByCode } from "../db/waitlist.js";
 
 function escapeHtml(value: string): string {
@@ -63,7 +65,8 @@ function mainMenuKeyboard(env: AppEnv, waitlistActive = false, role: ProfileRole
   }
   const rows: Array<Array<{ text: string; web_app?: { url: string } }>> = [
     [{ text: "🛍  Shop", web_app: { url: env.WEBAPP_URL } }],
-    [{ text: "📦  My Orders" }, { text: "ℹ️  Help" }],
+    [{ text: "📦  My Orders" }, { text: "🎁  Refer a Friend" }],
+    [{ text: "ℹ️  Help" }],
   ];
   if (isAdminRole(role)) {
     rows.push([{ text: "📊  Admin Dashboard", web_app: { url: env.ADMIN_DASHBOARD_URL } }]);
@@ -163,9 +166,10 @@ export function createBot(env: AppEnv): Bot {
     const db = getDb(env);
     const adminIds = parseAdminTelegramIds(env.ADMIN_TELEGRAM_IDS);
     let role: ProfileRole = "customer";
+    let currentProfile = null;
 
     if (ctx.from) {
-      const profile = await upsertTelegramProfile(db, {
+      currentProfile = await upsertTelegramProfile(db, {
         telegramId: ctx.from.id,
         firstName: ctx.from.first_name ?? null,
         lastName: ctx.from.last_name ?? null,
@@ -175,15 +179,15 @@ export function createBot(env: AppEnv): Bot {
         return null;
       });
 
-      if (profile) {
-        role = profile.role;
+      if (currentProfile) {
+        role = currentProfile.role;
         // Auto-promote users whose Telegram ID is in ADMIN_TELEGRAM_IDS
-        if (adminIds.has(ctx.from.id) && !isFullAdmin(profile.role)) {
+        if (adminIds.has(ctx.from.id) && !isFullAdmin(currentProfile.role)) {
           try {
             await db
               .from("profiles")
               .update({ role: "admin" })
-              .eq("id", profile.id);
+              .eq("id", currentProfile.id);
             role = "admin";
           } catch (err) {
             console.error("start: auto-promote failed", err);
@@ -198,14 +202,28 @@ export function createBot(env: AppEnv): Bot {
     const shopName = settings?.shopNameEn ?? "Sabacos";
     const firstName = ctx.from?.first_name ? escapeHtml(ctx.from.first_name) : "";
 
-    // Check for referral deep link: /start ref_CODE
+    // Check for referral deep link: /start ref_<telegramId>
     const payload = ctx.match as string | undefined;
     let referralMsg = "";
-    if (payload?.startsWith("ref_") && waitlistActive) {
-      const code = payload.slice(4).toUpperCase();
-      const referrer = await getWaitlistEntryByCode(db, code).catch(() => null);
-      if (referrer) {
-        referralMsg = "\n\n🔗 You were invited by a friend! Open the shop to claim your early-bird perk.";
+    if (payload?.startsWith("ref_") && currentProfile) {
+      const referrerTelegramId = Number(payload.slice(4));
+      if (referrerTelegramId && referrerTelegramId !== ctx.from?.id) {
+        // Find referrer's profile
+        const referrerProfile = await getProfileByTelegramId(db, referrerTelegramId).catch(() => null);
+        if (referrerProfile) {
+          // Check if already referred
+          const { getReferralByReferredId, createReferral, makeReferralCode } = await import("../db/referrals.js");
+          const existing = await getReferralByReferredId(db, currentProfile.id).catch(() => null);
+          if (!existing) {
+            const code = makeReferralCode(referrerTelegramId);
+            await createReferral(db, {
+              referrerId: referrerProfile.id,
+              referredId: currentProfile.id,
+              referralCode: code,
+            }).catch((err) => console.error("start: referral create failed", err));
+            referralMsg = "\n\n🔗 You were invited by a friend! Complete a purchase to unlock rewards for both of you.";
+          }
+        }
       }
     }
 
@@ -272,6 +290,102 @@ export function createBot(env: AppEnv): Bot {
     await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
       reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer"),
     });
+  });
+
+  // ---- Referral command ----
+  bot.command("refer", async (ctx) => {
+    const from = ctx.from;
+    if (!from) return;
+
+    const db = getDb(env);
+    const profile = await getProfileById(db, String(from.id)).catch(() => null);
+    if (!profile?.telegramId) {
+      await ctx.reply("Please start the bot first with /start");
+      return;
+    }
+
+    const { countQualifiedReferrals } = await import("../db/referrals.js");
+    const { countAvailableSpins, getValidCoupons } = await import("../db/spinner.js");
+    const { getWalletBalance } = await import("../db/wallet.js");
+
+    const deepLink = referralDeepLink(env.BOT_USERNAME || "sabacosbot", profile.telegramId);
+
+    const qualifiedCount = await countQualifiedReferrals(db, profile.id).catch(() => 0);
+    const spins = await countAvailableSpins(db, profile.id).catch(() => 0);
+    const coupons = await getValidCoupons(db, profile.id).catch(() => []);
+    const balance = await getWalletBalance(db, profile.id).catch(() => 0);
+
+    const balanceETB = (balance / 100).toFixed(2);
+
+    await ctx.reply(
+      [
+        "🎁 <b>Your Referral Dashboard</b>",
+        "",
+        `🔗 Your referral link:`,
+        `<code>${deepLink}</code>`,
+        "",
+        `📊 <b>Stats:</b>`,
+        `• Qualified referrals: ${qualifiedCount}`,
+        `• Available spins: ${spins}`,
+        `• Active coupons: ${coupons.length}`,
+        `• Wallet balance: ${balanceETB} ETB`,
+        "",
+        "💰 <b>How it works:</b>",
+        "• Share your link with friends",
+        "• When they make their first purchase, you earn 10% commission",
+        "• Every 3 referrals = 1 free spin on the prize wheel!",
+        "",
+        "Tap the button below to share your link:",
+      ].join("\n"),
+      {
+        parse_mode: "HTML",
+        reply_markup: new InlineKeyboard()
+          .url("📤 Share Referral Link", `https://t.me/share/url?url=${encodeURIComponent(`Join Sabacos cosmetics using my link: ${deepLink}`)}`)
+          .row()
+          .webApp("🎰  Spin the Wheel", env.WEBAPP_URL),
+      },
+    );
+  });
+
+  // "Refer a Friend" keyboard button
+  bot.on("message:text").filter((ctx) => ctx.message.text.trim() === "🎁  Refer a Friend", async (ctx) => {
+    // Redirect to /refer command logic
+    const from = ctx.from;
+    if (!from) return;
+
+    const db = getDb(env);
+    const profile = await getProfileById(db, String(from.id)).catch(() => null);
+    if (!profile?.telegramId) {
+      await ctx.reply("Please start the bot first with /start");
+      return;
+    }
+
+    const { countQualifiedReferrals } = await import("../db/referrals.js");
+    const { countAvailableSpins } = await import("../db/spinner.js");
+    const { getWalletBalance } = await import("../db/wallet.js");
+
+    const deepLink = referralDeepLink(env.BOT_USERNAME || "sabacosbot", profile.telegramId);
+    const qualifiedCount = await countQualifiedReferrals(db, profile.id).catch(() => 0);
+    const spins = await countAvailableSpins(db, profile.id).catch(() => 0);
+    const balance = await getWalletBalance(db, profile.id).catch(() => 0);
+    const balanceETB = (balance / 100).toFixed(2);
+
+    await ctx.reply(
+      [
+        "🎁 <b>Your Referral Dashboard</b>",
+        "",
+        `🔗 <code>${deepLink}</code>`,
+        "",
+        `📊 Referrals: ${qualifiedCount} | Spins: ${spins} | Wallet: ${balanceETB} ETB`,
+      ].join("\n"),
+      {
+        parse_mode: "HTML",
+        reply_markup: new InlineKeyboard()
+          .url("📤 Share Link", `https://t.me/share/url?url=${encodeURIComponent(`Join Sabacos cosmetics using my link: ${deepLink}`)}`)
+          .row()
+          .webApp("🎰  Spin the Wheel", env.WEBAPP_URL),
+      },
+    );
   });
 
   // Reply-keyboard buttons (persistent menu at the bottom of the chat).
@@ -456,6 +570,14 @@ export function createBot(env: AppEnv): Bot {
         return;
       }
 
+      // Process referral reward (commission + spins) — fire-and-forget
+      const { processReferralReward } = await import("../db/referral-rewards.js");
+      await processReferralReward(db, {
+        referredProfileId: order.profileId,
+        orderId: order.id,
+        orderTotalHalala: order.totalHalala,
+      }).catch((err) => console.error("referral reward failed", err));
+
       await notifyAdminChannelWithButtons(env, formatAdminOrderAlert(order), order.id);
       await sendReceipt(ctx, env, order);
     } catch (err) {
@@ -594,6 +716,7 @@ export async function registerBotDefaults(bot: Bot, env: AppEnv): Promise<void> 
       { command: "start", description: "Welcome & main menu 🌸" },
       { command: "shop", description: "Browse the catalog 🛍" },
       { command: "orders", description: "View your orders 📦" },
+      { command: "refer", description: "Refer friends & earn rewards 🎁" },
       { command: "help", description: "How it works ℹ️" },
     ]),
     bot.api.setChatMenuButton({

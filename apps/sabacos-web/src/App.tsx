@@ -20,6 +20,7 @@ import { SettingsPage } from "./pages/SettingsPage.js";
 import { AboutPage } from "./pages/AboutPage.js";
 import { FaqPage } from "./pages/FaqPage.js";
 import { WaitlistPage } from "./pages/WaitlistPage.js";
+import { SpinnerPage } from "./pages/SpinnerPage.js";
 
 function Shell() {
   const setProfile = useShopStore((s) => s.setProfile);
@@ -128,6 +129,7 @@ function Shell() {
         <Route path="/settings" component={SettingsPage} />
         <Route path="/about" component={AboutPage} />
         <Route path="/faq" component={FaqPage} />
+        <Route path="/spinner" component={SpinnerPage} />
         <Route>
           <HomePage />
         </Route>
