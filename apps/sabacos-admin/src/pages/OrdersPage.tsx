@@ -45,11 +45,10 @@ export function OrdersPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = () => {
-    if (!token) return;
     const params = new URLSearchParams();
     if (status) params.set("status", status);
     api
-      .get<OrderPageData>(`/admin/orders?${params.toString()}`, token)
+      .get<OrderPageData>(`/admin/orders?${params.toString()}`, token ?? undefined)
       .then(setData)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load orders"));
   };
@@ -75,46 +74,48 @@ export function OrdersPage() {
         ) : data.items.length === 0 ? (
           <div className="empty">No orders found</div>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Order</th>
-                <th>Customer</th>
-                <th>Status</th>
-                <th>Payment</th>
-                <th>Total</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((order) => (
-                <tr key={order.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/orders/${order.id}`)}>
-                  <td style={{ fontWeight: 600 }}>{order.orderNo}</td>
-                  <td>
-                    <div>{order.customerName}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>{order.phone}</div>
-                  </td>
-                  <td>
-                    <span className={`badge ${badgeClass(order.status)}`}>{order.status.replace("_", " ")}</span>
-                  </td>
-                  <td>
-                    <span className={`badge ${order.paymentStatus === "success" ? "badge-success" : order.paymentStatus === "failed" ? "badge-danger" : ""}`}>
-                      {order.paymentStatus.replace("_", " ")}
-                    </span>
-                  </td>
-                  <td style={{ fontWeight: 600 }}>{formatETB(order.totalHalala)}</td>
-                  <td className="muted">
-                    {new Date(order.createdAt).toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </td>
+          <div style={{ overflowX: "auto" }}>
+            <table className="table responsive-table">
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th>Customer</th>
+                  <th>Status</th>
+                  <th>Payment</th>
+                  <th>Total</th>
+                  <th>Date</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.items.map((order) => (
+                  <tr key={order.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/orders/${order.id}`)}>
+                    <td data-label="Order" style={{ fontWeight: 600 }}>{order.orderNo}</td>
+                    <td data-label="Customer">
+                      <div>{order.customerName}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{order.phone}</div>
+                    </td>
+                    <td data-label="Status">
+                      <span className={`badge ${badgeClass(order.status)}`}>{order.status.replace("_", " ")}</span>
+                    </td>
+                    <td data-label="Payment">
+                      <span className={`badge ${order.paymentStatus === "success" ? "badge-success" : order.paymentStatus === "failed" ? "badge-danger" : ""}`}>
+                        {order.paymentStatus.replace("_", " ")}
+                      </span>
+                    </td>
+                    <td data-label="Total" style={{ fontWeight: 600 }}>{formatETB(order.totalHalala)}</td>
+                    <td data-label="Date" className="muted">
+                      {new Date(order.createdAt).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>
