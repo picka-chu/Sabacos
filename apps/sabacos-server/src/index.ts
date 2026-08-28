@@ -163,7 +163,6 @@ app.get("/api/v1/delivery/config", async (c) => {
 // ---------------------------------------------------------------------------
 app.use("/api/v1/cart/*", rateLimit({ windowMs: 60_000, limit: 30, keyGenerator: ipKey }), requireUser);
 app.use("/api/v1/checkout", rateLimit({ windowMs: 60_000, limit: 10, keyGenerator: ipKey }), requireUser);
-app.use("/api/v1/orders", requireUser);
 app.use("/api/v1/profile", requireUser);
 app.use("/api/v1/profile/*", requireUser);
 app.use("/api/v1/auth/telegram", requireUser);

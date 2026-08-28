@@ -3,7 +3,7 @@ import { z } from "zod";
 import { badRequest, safeParse } from "../errors.js";
 import { checkoutSchema } from "@sabacos/core";
 import { getAppEnv, type AppEnv } from "../env.js";
-import type { UserContext } from "../auth/telegram.js";
+import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
 import { getOrdersByProfile, getOrderWithItems } from "../db/orders.js";
 import { saveProfileContact, getProfileById } from "../db/profiles.js";
@@ -11,6 +11,10 @@ import { checkout, CartValidationError } from "../services/checkout.js";
 import { createBot, makeCreateInvoiceLink, sendShareRequest } from "../bot/bot.js";
 
 export const orderRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
+
+// Apply auth middleware to all routes in this sub-router so that context
+// variables (profile) are guaranteed to be set in the same Hono context.
+orderRoutes.use("*", requireUser);
 
 orderRoutes.post("/auth/telegram", (c) => c.json({ profile: c.get("profile") }));
 
