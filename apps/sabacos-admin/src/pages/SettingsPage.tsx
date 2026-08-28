@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Save } from "lucide-react";
+import { Save, Send } from "lucide-react";
 import type { Settings } from "@sabacos/core";
 import { api } from "../lib/api.js";
 import { useAuth } from "../auth.js";
@@ -123,7 +123,45 @@ export function SettingsPage() {
           </div>
           <div className="field">
             <label>Admin channel ID</label>
-            <input className="input" value={form.adminChannelId} onChange={(e) => set("adminChannelId", e.target.value)} placeholder="Leave blank to disable" />
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                className="input"
+                value={form.adminChannelId}
+                onChange={(e) => setForm((f) => ({ ...f, adminChannelId: e.target.value }))}
+                placeholder="Channel username or numeric id (e.g. mychannel or -100…)"
+              />
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy || !form.adminChannelId.trim()}
+                title="Send a test message to this channel"
+                onClick={async () => {
+                  if (!token) return;
+                  setBusy(true);
+                  setError(null);
+                  setSaved(false);
+                  try {
+                    await api.post<{ ok: boolean; channelId: string }>(
+                      "/admin/settings/test-channel",
+                      undefined,
+                      token,
+                    );
+                    setSaved(true);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Channel test failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                <Send size={14} />
+                Test
+              </button>
+            </div>
+            <small className="muted" style={{ display: "block", marginTop: 6 }}>
+              Use the channel&#39;s @-less username (mychannel) or numeric id (-100…). The bot must
+              be an admin of the channel. New products are auto-posted here.
+            </small>
           </div>
         </div>
 

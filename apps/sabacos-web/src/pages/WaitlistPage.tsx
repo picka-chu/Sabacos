@@ -109,7 +109,7 @@ export function WaitlistPage() {
   const handleShare = () => {
     if (!status?.entry?.referralCode) return;
     haptic("medium");
-    const shareUrl = `https://t.me/share/url?url=https://t.me/${tg?.initDataUnsafe?.user ? "sabacos" : "sabacos"}&text=${encodeURIComponent(
+    const shareUrl = `https://t.me/share/url?url=https://t.me/sabacos&text=${encodeURIComponent(
       `🌸 Join the Sabacos waitlist! Use my code for early-bird perks: ${status.entry.referralCode}`
     )}`;
     openExternalLink(shareUrl);

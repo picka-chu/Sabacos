@@ -46,8 +46,14 @@ function isAllowedOrigin(origin: string | undefined): boolean {
 }
 
 function ipKey(c: { req: { header: (name: string) => string | undefined } }): string {
-  const forwarded = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || c.req.header("x-real-ip") || "unknown";
+  // Prefer the LAST X-Forwarded-For entry: the client can spoof earlier ones,
+  // but the value appended by the hosting proxy (Render) is the real peer.
+  const xff = c.req.header("x-forwarded-for");
+  if (xff) {
+    const parts = xff.split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 0) return parts[parts.length - 1]!;
+  }
+  return c.req.header("x-real-ip") ?? "unknown";
 }
 
 const MAX_BODY_BYTES = 10 * 1024 * 1024;

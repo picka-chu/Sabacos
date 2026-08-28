@@ -16,7 +16,22 @@ import { getProfileById, saveProfileContact, upsertTelegramProfile } from "../db
 import { getWaitlistConfig, getWaitlistEntryByCode } from "../db/waitlist.js";
 
 function escapeHtml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Normalizes a channel id for the Bot API. Telegram accepts either the
+ * numeric chat id (-100…) or the username WITHOUT a leading "@". Most
+ * admins paste the handle from the channel; strip the "@" so it works.
+ */
+export function resolveChannelId(value: string | null | undefined): string {
+  const trimmed = (value ?? "").trim();
+  return trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;
 }
 
 // Persistent bottom-of-chat keyboard (DurgerKing style). "Shop" is a native
@@ -521,11 +536,11 @@ export async function sendReceipt(ctx: Context, env: AppEnv, order: OrderWithIte
 
 export async function notifyAdminChannel(env: AppEnv, text: string): Promise<void> {
   const settings = await getSettings(getDb(env)).catch(() => null);
-  const channelId = settings?.adminChannelId ?? env.ADMIN_CHANNEL_ID;
+  const channelId = resolveChannelId(settings?.adminChannelId ?? env.ADMIN_CHANNEL_ID);
   if (!channelId) return;
   const bot = new Bot(env.BOT_TOKEN);
-  await bot.api.sendMessage(channelId, text, { parse_mode: "Markdown" }).catch((err) => {
-    console.error("admin channel notification failed", err);
+  await bot.api.sendMessage(channelId, text, { parse_mode: "HTML" }).catch((err) => {
+    console.error(`admin channel notification failed (${channelId}):`, err);
   });
 }
 
@@ -534,22 +549,33 @@ export async function postProductToChannel(
   product: { id: string; nameEn: string; nameAm: string; descriptionEn: string; descriptionAm: string; priceHalala: number; imageUrls: string[] },
 ): Promise<void> {
   const settings = await getSettings(getDb(env)).catch(() => null);
-  const channelId = settings?.adminChannelId ?? env.ADMIN_CHANNEL_ID;
+  const channelId = resolveChannelId(settings?.adminChannelId ?? env.ADMIN_CHANNEL_ID);
   if (!channelId) return;
 
   const price = (product.priceHalala / 100).toFixed(2);
+  // HTML parse mode: escape every dynamic field. Using Markdown here fails
+  // whenever product text contains _, *, [, `, etc., silently dropping the post.
   const caption = [
-    `*${escapeHtml(product.nameEn)}*`,
-    product.nameAm ? `_${escapeHtml(product.nameAm)}_` : "",
+    `<b>${escapeHtml(product.nameEn)}</b>`,
+    product.nameAm ? `<i>${escapeHtml(product.nameAm)}</i>` : "",
     "",
     product.descriptionEn ? escapeHtml(product.descriptionEn).slice(0, 300) : "",
     "",
-    `💰 *${price} ETB*`,
+    `💰 <b>${price} ETB</b>`,
   ]
     .filter(Boolean)
     .join("\n");
 
-  const webAppUrl = `${env.WEBAPP_URL}/product/${product.id}`;
+  let webAppUrl: string;
+  try {
+    webAppUrl = `${env.WEBAPP_URL.replace(/\/$/, "")}/product/${product.id}`;
+    // Telegram requires a secure, real https URL for web_app buttons.
+    if (!/^https:\/\//i.test(webAppUrl)) throw new Error("WEBAPP_URL must be https");
+  } catch (err) {
+    console.error("postProductToChannel skipped (no valid WEBAPP_URL):", err);
+    return;
+  }
+
   const bot = new Bot(env.BOT_TOKEN);
 
   try {
@@ -557,16 +583,44 @@ export async function postProductToChannel(
     if (photo) {
       await bot.api.sendPhoto(channelId, photo, {
         caption,
-        parse_mode: "Markdown",
+        parse_mode: "HTML",
         reply_markup: new InlineKeyboard().webApp("🛍  Order now", webAppUrl),
       });
     } else {
       await bot.api.sendMessage(channelId, caption, {
-        parse_mode: "Markdown",
+        parse_mode: "HTML",
         reply_markup: new InlineKeyboard().webApp("🛍  Order now", webAppUrl),
       });
     }
   } catch (err) {
-    console.error("postProductToChannel failed", err);
+    const reason =
+      err instanceof Error && err.message.toLowerCase().includes("chat not found")
+        ? `${channelId} — is the bot an ADMIN of this channel? (Use the channel's @-less username or numeric id -100…)`
+        : `for ${channelId}`;
+    console.error(`postProductToChannel failed ${reason}:`, err);
   }
+}
+
+/**
+ * Sends a test message to the configured channel so the admin can verify the
+ * bot has access before relying on product posts. Returns the resolved
+ * channel id; throws a readable error when the channel is misconfigured.
+ */
+export async function testAdminChannel(env: AppEnv): Promise<{ channelId: string; sent: boolean }> {
+  const settings = await getSettings(getDb(env)).catch(() => null);
+  const channelId = resolveChannelId(settings?.adminChannelId ?? env.ADMIN_CHANNEL_ID);
+  if (!channelId) throw new Error("No admin channel id configured (Settings → Admin channel ID)");
+
+  const bot = new Bot(env.BOT_TOKEN);
+  try {
+    await bot.api.sendMessage(channelId, "✅ Sabacos channel test — product posts will appear here.", {
+      parse_mode: "HTML",
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Could not post to "${channelId}". ${msg} — make sure this is the channel's @-less username (e.g. mychannel) or numeric id (e.g. -1001234567890) and that the bot is an admin of the channel.`,
+    );
+  }
+  return { channelId, sent: true };
 }

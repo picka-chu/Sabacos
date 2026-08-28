@@ -44,6 +44,7 @@ export function CheckoutPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const submittingRef = useRef(false);
 
   const totals = cart.totals;
   const fragile = cart.items.some((i) => i.product.isFragile);
@@ -120,6 +121,8 @@ export function CheckoutPage() {
   };
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setErrorMsg(null);
     try {
       const { order, invoiceUrl } = await checkout({
@@ -141,6 +144,7 @@ export function CheckoutPage() {
         if (pollRef.current) clearInterval(pollRef.current);
         setOrderTotal(order.totalHalala);
         haptic("heavy");
+        await clearCart();
         setPhase("success");
       } else if (status === "failed") {
         if (pollRef.current) clearInterval(pollRef.current);
@@ -151,6 +155,8 @@ export function CheckoutPage() {
     } catch (err) {
       setErrorMsg(apiErrorMessage(err));
       setPhase("failed");
+    } finally {
+      submittingRef.current = false;
     }
   };
 

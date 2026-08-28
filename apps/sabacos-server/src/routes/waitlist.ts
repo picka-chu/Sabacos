@@ -57,7 +57,10 @@ waitlistRoutes.post("/join", async (c) => {
   }
 
   const body = await c.req.json().catch(() => null as { referralCode?: string } | null);
-  const referralCode = (body?.referralCode ?? null) as string | null;
+  const referralCode =
+    typeof body?.referralCode === "string"
+      ? body.referralCode.trim().toUpperCase().slice(0, 16)
+      : null;
 
   const entry = await joinWaitlist(db, profile.id, referralCode);
   const discount = await getTotalDiscountForProfile(db, profile.id);

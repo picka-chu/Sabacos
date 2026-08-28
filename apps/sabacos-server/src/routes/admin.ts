@@ -32,7 +32,7 @@ import {
   updateOrderStatus,
 } from "../db/orders.js";
 import { getSettings, updateSettings } from "../db/settings.js";
-import { notifyAdminChannel, createBot, postProductToChannel } from "../bot/bot.js";
+import { notifyAdminChannel, createBot, postProductToChannel, testAdminChannel } from "../bot/bot.js";
 import { aiEnabled, llamaVisionProduct } from "../services/ai.js";
 import { r2Config, r2Put, r2Delete } from "../services/r2.js";
 
@@ -699,7 +699,7 @@ adminRoutes.patch("/orders/:id/status", async (c) => {
 
   await notifyAdminChannel(
     getAppEnv(),
-    `Order ${updated.orderNo} → *${updated.status.toUpperCase()}*`,
+    `Order ${updated.orderNo} → <b>${updated.status.toUpperCase()}</b>`,
   );
 
   return c.json({ order: updated });
@@ -727,6 +727,17 @@ adminRoutes.put("/settings", async (c) => {
     deliveryConfig: (input.delivery_config as DeliveryConfig | undefined) ?? undefined,
   });
   return c.json({ settings });
+});
+
+// Verify the configured channel before trusting product posts.
+adminRoutes.post("/settings/test-channel", async (c) => {
+  const env = getAppEnv();
+  try {
+    const result = await testAdminChannel(env);
+    return c.json({ ok: true, channelId: result.channelId });
+  } catch (err) {
+    throw badRequest(err instanceof Error ? err.message : "Channel test failed");
+  }
 });
 
 // --------------------------------------------------------------- broadcast
