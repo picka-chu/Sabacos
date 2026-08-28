@@ -11,9 +11,12 @@ import { adminRoutes } from "./routes/admin.js";
 import { adRoutes } from "./routes/ads.js";
 import { waitlistAdminRoutes } from "./routes/waitlist-admin.js";
 import { discountAdminRoutes } from "./routes/discount-admin.js";
+import { userManagementRoutes } from "./routes/user-management.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
+import { referralRoutes } from "./routes/referrals.js";
+import { adminReferralRoutes } from "./routes/admin-referrals.js";
 import { requireUser } from "./auth/telegram.js";
-import { requireAdmin } from "./auth/admin.js";
+import { requireAdmin, adminMeHandler } from "./auth/admin.js";
 import { sendError, notFound } from "./errors.js";
 import { log } from "./log.js";
 import { rateLimit } from "./rate-limit.js";
@@ -166,14 +169,22 @@ app.route("/api/v1", adRoutes);
 app.route("/api/v1/cart", cartRoutes);
 app.route("/api/v1", orderRoutes);
 app.route("/api/v1/waitlist", waitlistRoutes);
+app.route("/api/v1/referral", referralRoutes);
 
 // ---------------------------------------------------------------------------
-// Admin routes — 20 req/min, requires admin bearer
+// Admin auth — lightweight Telegram initData check (no bearer required)
+// ---------------------------------------------------------------------------
+app.get("/api/v1/admin/me", adminMeHandler);
+
+// ---------------------------------------------------------------------------
+// Admin routes — 20 req/min, requires admin bearer or Telegram initData
 // ---------------------------------------------------------------------------
 app.use("/api/v1/admin/*", rateLimit({ windowMs: 60_000, limit: 20, keyGenerator: ipKey }), requireAdmin);
 app.route("/api/v1/admin", adminRoutes);
 app.route("/api/v1/admin/waitlist", waitlistAdminRoutes);
 app.route("/api/v1/admin/discounts", discountAdminRoutes);
+app.route("/api/v1/admin/users", userManagementRoutes);
+app.route("/api/v1/admin/referrals", adminReferralRoutes);
 
 // ---------------------------------------------------------------------------
 // Server lifecycle

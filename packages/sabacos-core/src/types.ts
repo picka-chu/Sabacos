@@ -29,7 +29,23 @@ export const PAYMENT_STATUSES = [
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
-export type ProfileRole = "customer" | "admin";
+export type ProfileRole = "customer" | "staff" | "delivery" | "admin";
+
+export const PROFILE_ROLES: readonly ProfileRole[] = ["customer", "staff", "delivery", "admin"] as const;
+
+/** Roles that can access the admin dashboard (any level). */
+export const ADMIN_ROLES: readonly ProfileRole[] = ["staff", "delivery", "admin"] as const;
+
+/** Roles that have full admin privileges. */
+export const FULL_ADMIN_ROLES: readonly ProfileRole[] = ["admin"] as const;
+
+export function isAdminRole(role: ProfileRole): boolean {
+  return (ADMIN_ROLES as readonly string[]).includes(role);
+}
+
+export function isFullAdmin(role: ProfileRole): boolean {
+  return (FULL_ADMIN_ROLES as readonly string[]).includes(role);
+}
 
 export interface Profile {
   id: string;
@@ -178,3 +194,156 @@ export interface ApiErrorBody {
 }
 
 export type OrderWithItems = Order & { items: OrderItem[]; profile?: Profile | null };
+
+// ──────────────────────────────────────────────────────────────────────
+// Referral & Rewards
+// ──────────────────────────────────────────────────────────────────────
+
+export type ReferralStatus = "pending" | "qualified" | "expired";
+export const REFERRAL_STATUSES: readonly ReferralStatus[] = ["pending", "qualified", "expired"] as const;
+
+export type ReferralRewardType = "commission" | "spin_credit" | "spin_granted";
+export const REFERRAL_REWARD_TYPES: readonly ReferralRewardType[] = ["commission", "spin_credit", "spin_granted"] as const;
+
+export interface Referral {
+  id: string;
+  referrerId: string;
+  referredId: string;
+  referralCode: string;
+  status: ReferralStatus;
+  qualifiedAt: string | null;
+  orderId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReferralReward {
+  id: string;
+  referralId: string;
+  rewardType: ReferralRewardType;
+  amountHalala: number | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Wallet
+// ──────────────────────────────────────────────────────────────────────
+
+export type WalletTransactionType = "credit" | "debit" | "refund";
+export const WALLET_TRANSACTION_TYPES: readonly WalletTransactionType[] = ["credit", "debit", "refund"] as const;
+
+export interface WalletCredit {
+  id: string;
+  profileId: string;
+  balanceHalala: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WalletTransaction {
+  id: string;
+  walletId: string;
+  type: WalletTransactionType;
+  amountHalala: number;
+  description: string | null;
+  referenceType: string | null;
+  referenceId: string | null;
+  createdAt: string;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Spinner
+// ──────────────────────────────────────────────────────────────────────
+
+export type SpinnerSpinStatus = "available" | "used" | "expired";
+export const SPINNER_SPIN_STATUSES: readonly SpinnerSpinStatus[] = ["available", "used", "expired"] as const;
+
+export type SpinnerPrizeType = "coupon_percent" | "coupon_fixed" | "free_product" | "spin_again";
+export const SPINNER_PRIZE_TYPES: readonly SpinnerPrizeType[] = ["coupon_percent", "coupon_fixed", "free_product", "spin_again"] as const;
+
+export interface SpinnerSpin {
+  id: string;
+  profileId: string;
+  status: SpinnerSpinStatus;
+  wonPrizeId: string | null;
+  wonAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+export interface SpinnerPrize {
+  id: string;
+  name: string;
+  prizeType: SpinnerPrizeType;
+  value: number;
+  productId: string | null;
+  weight: number;
+  maxPool: number | null;
+  currentPool: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Spinner Coupons
+// ──────────────────────────────────────────────────────────────────────
+
+export type SpinnerCouponDiscountType = "percent" | "fixed";
+export const SPINNER_COUPON_DISCOUNT_TYPES: readonly SpinnerCouponDiscountType[] = ["percent", "fixed"] as const;
+
+export interface SpinnerCoupon {
+  id: string;
+  profileId: string;
+  spinId: string;
+  code: string;
+  discountType: SpinnerCouponDiscountType;
+  discountValue: number;
+  minOrderHalala: number;
+  isUsed: boolean;
+  usedAt: string | null;
+  orderId: string | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Referral Settings
+// ──────────────────────────────────────────────────────────────────────
+
+export interface ReferralSettings {
+  id: string;
+  isActive: boolean;
+  firstPurchasePercent: number;
+  repeatPurchasePercent: number;
+  monthlyCapHalala: number;
+  referralsPerSpin: number;
+  maxSpinsPerWeek: number;
+  spinExpiryDays: number;
+  couponExpiryDays: number;
+  maxCouponsPerOrder: number;
+  minAccountAgeDays: number;
+  minOrderValueHalala: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Referral Program Helpers
+// ──────────────────────────────────────────────────────────────────────
+
+/** Generate a referral code from a Telegram ID. */
+export function generateReferralCode(telegramId: number): string {
+  return `ref${telegramId}`;
+}
+
+/** Build the bot deep link URL for sharing a referral. */
+export function referralDeepLink(botUsername: string, telegramId: number): string {
+  return `https://t.me/${botUsername}?start=${generateReferralCode(telegramId)}`;
+}
+
+/** Calculate commission amount from order total and percent. */
+export function calculateCommission(orderTotalHalala: number, percent: number): number {
+  return Math.floor((orderTotalHalala * percent) / 100);
+}

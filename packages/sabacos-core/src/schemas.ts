@@ -4,6 +4,12 @@ import { mergeDeliveryConfig } from "./delivery.js";
 import {
   ORDER_STATUSES,
   PAYMENT_STATUSES,
+  REFERRAL_STATUSES,
+  REFERRAL_REWARD_TYPES,
+  WALLET_TRANSACTION_TYPES,
+  SPINNER_SPIN_STATUSES,
+  SPINNER_PRIZE_TYPES,
+  SPINNER_COUPON_DISCOUNT_TYPES,
   type Category,
   type Order,
   type OrderItem,
@@ -11,6 +17,14 @@ import {
   type Product,
   type Profile,
   type Settings,
+  type Referral,
+  type ReferralReward,
+  type WalletCredit,
+  type WalletTransaction,
+  type SpinnerSpin,
+  type SpinnerPrize,
+  type SpinnerCoupon,
+  type ReferralSettings,
 } from "./types.js";
 
 export const uuidSchema = z.uuid();
@@ -29,7 +43,7 @@ export const profileRowSchema = z
     photo_url: z.string().nullable(),
     last_latitude: z.number().nullable().optional(),
     last_longitude: z.number().nullable().optional(),
-    role: z.enum(["customer", "admin"]),
+    role: z.enum(["customer", "staff", "delivery", "admin"]),
     created_at: z.string(),
     updated_at: z.string(),
   })
@@ -332,3 +346,231 @@ export const initDataPayloadSchema = z.object({
 });
 
 export type InitDataPayload = z.infer<typeof initDataPayloadSchema>;
+
+// ──────────────────────────────────────────────────────────────────────
+// Referral & Rewards row schemas
+// ──────────────────────────────────────────────────────────────────────
+
+export const referralRowSchema = z
+  .object({
+    id: z.uuid(),
+    referrer_id: z.uuid(),
+    referred_id: z.uuid(),
+    referral_code: z.string(),
+    status: z.enum(REFERRAL_STATUSES as unknown as [string, ...string[]]),
+    qualified_at: z.string().nullable(),
+    order_id: z.uuid().nullable(),
+    created_at: z.string(),
+    updated_at: z.string(),
+  })
+  .transform(
+    (r): Referral => ({
+      id: r.id,
+      referrerId: r.referrer_id,
+      referredId: r.referred_id,
+      referralCode: r.referral_code,
+      status: r.status as Referral["status"],
+      qualifiedAt: r.qualified_at,
+      orderId: r.order_id,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }),
+  );
+export type ReferralRow = z.infer<typeof referralRowSchema>;
+
+export const referralRewardRowSchema = z
+  .object({
+    id: z.uuid(),
+    referral_id: z.uuid(),
+    reward_type: z.enum(REFERRAL_REWARD_TYPES as unknown as [string, ...string[]]),
+    amount_halala: z.number().int().nullable(),
+    metadata: z.record(z.string(), z.unknown()).nullable(),
+    created_at: z.string(),
+  })
+  .transform(
+    (r): ReferralReward => ({
+      id: r.id,
+      referralId: r.referral_id,
+      rewardType: r.reward_type as ReferralReward["rewardType"],
+      amountHalala: r.amount_halala,
+      metadata: r.metadata,
+      createdAt: r.created_at,
+    }),
+  );
+export type ReferralRewardRow = z.infer<typeof referralRewardRowSchema>;
+
+// ──────────────────────────────────────────────────────────────────────
+// Wallet row schemas
+// ──────────────────────────────────────────────────────────────────────
+
+export const walletCreditRowSchema = z
+  .object({
+    id: z.uuid(),
+    profile_id: z.uuid(),
+    balance_halala: z.number().int(),
+    created_at: z.string(),
+    updated_at: z.string(),
+  })
+  .transform(
+    (r): WalletCredit => ({
+      id: r.id,
+      profileId: r.profile_id,
+      balanceHalala: r.balance_halala,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }),
+  );
+export type WalletCreditRow = z.infer<typeof walletCreditRowSchema>;
+
+export const walletTransactionRowSchema = z
+  .object({
+    id: z.uuid(),
+    wallet_id: z.uuid(),
+    type: z.enum(WALLET_TRANSACTION_TYPES as unknown as [string, ...string[]]),
+    amount_halala: z.number().int(),
+    description: z.string().nullable(),
+    reference_type: z.string().nullable(),
+    reference_id: z.uuid().nullable(),
+    created_at: z.string(),
+  })
+  .transform(
+    (r): WalletTransaction => ({
+      id: r.id,
+      walletId: r.wallet_id,
+      type: r.type as WalletTransaction["type"],
+      amountHalala: r.amount_halala,
+      description: r.description,
+      referenceType: r.reference_type,
+      referenceId: r.reference_id,
+      createdAt: r.created_at,
+    }),
+  );
+export type WalletTransactionRow = z.infer<typeof walletTransactionRowSchema>;
+
+// ──────────────────────────────────────────────────────────────────────
+// Spinner row schemas
+// ──────────────────────────────────────────────────────────────────────
+
+export const spinnerSpinRowSchema = z
+  .object({
+    id: z.uuid(),
+    profile_id: z.uuid(),
+    status: z.enum(SPINNER_SPIN_STATUSES as unknown as [string, ...string[]]),
+    won_prize_id: z.uuid().nullable(),
+    won_at: z.string().nullable(),
+    expires_at: z.string().nullable(),
+    created_at: z.string(),
+  })
+  .transform(
+    (r): SpinnerSpin => ({
+      id: r.id,
+      profileId: r.profile_id,
+      status: r.status as SpinnerSpin["status"],
+      wonPrizeId: r.won_prize_id,
+      wonAt: r.won_at,
+      expiresAt: r.expires_at,
+      createdAt: r.created_at,
+    }),
+  );
+export type SpinnerSpinRow = z.infer<typeof spinnerSpinRowSchema>;
+
+export const spinnerPrizeRowSchema = z
+  .object({
+    id: z.uuid(),
+    name: z.string(),
+    prize_type: z.enum(SPINNER_PRIZE_TYPES as unknown as [string, ...string[]]),
+    value: z.number().int(),
+    product_id: z.uuid().nullable(),
+    weight: z.number(),
+    max_pool: z.number().int().nullable(),
+    current_pool: z.number().int(),
+    is_active: z.boolean(),
+    created_at: z.string(),
+    updated_at: z.string(),
+  })
+  .transform(
+    (r): SpinnerPrize => ({
+      id: r.id,
+      name: r.name,
+      prizeType: r.prize_type as SpinnerPrize["prizeType"],
+      value: r.value,
+      productId: r.product_id,
+      weight: r.weight,
+      maxPool: r.max_pool,
+      currentPool: r.current_pool,
+      isActive: r.is_active,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }),
+  );
+export type SpinnerPrizeRow = z.infer<typeof spinnerPrizeRowSchema>;
+
+export const spinnerCouponRowSchema = z
+  .object({
+    id: z.uuid(),
+    profile_id: z.uuid(),
+    spin_id: z.uuid(),
+    code: z.string(),
+    discount_type: z.enum(SPINNER_COUPON_DISCOUNT_TYPES as unknown as [string, ...string[]]),
+    discount_value: z.number().int(),
+    min_order_halala: z.number().int(),
+    is_used: z.boolean(),
+    used_at: z.string().nullable(),
+    order_id: z.uuid().nullable(),
+    expires_at: z.string(),
+    created_at: z.string(),
+  })
+  .transform(
+    (r): SpinnerCoupon => ({
+      id: r.id,
+      profileId: r.profile_id,
+      spinId: r.spin_id,
+      code: r.code,
+      discountType: r.discount_type as SpinnerCoupon["discountType"],
+      discountValue: r.discount_value,
+      minOrderHalala: r.min_order_halala,
+      isUsed: r.is_used,
+      usedAt: r.used_at,
+      orderId: r.order_id,
+      expiresAt: r.expires_at,
+      createdAt: r.created_at,
+    }),
+  );
+export type SpinnerCouponRow = z.infer<typeof spinnerCouponRowSchema>;
+
+export const referralSettingsRowSchema = z
+  .object({
+    id: z.uuid(),
+    is_active: z.boolean(),
+    first_purchase_percent: z.number().int(),
+    repeat_purchase_percent: z.number().int(),
+    monthly_cap_halala: z.number().int(),
+    referrals_per_spin: z.number().int(),
+    max_spins_per_week: z.number().int(),
+    spin_expiry_days: z.number().int(),
+    coupon_expiry_days: z.number().int(),
+    max_coupons_per_order: z.number().int(),
+    min_account_age_days: z.number().int(),
+    min_order_value_halala: z.number().int(),
+    created_at: z.string(),
+    updated_at: z.string(),
+  })
+  .transform(
+    (r): ReferralSettings => ({
+      id: r.id,
+      isActive: r.is_active,
+      firstPurchasePercent: r.first_purchase_percent,
+      repeatPurchasePercent: r.repeat_purchase_percent,
+      monthlyCapHalala: r.monthly_cap_halala,
+      referralsPerSpin: r.referrals_per_spin,
+      maxSpinsPerWeek: r.max_spins_per_week,
+      spinExpiryDays: r.spin_expiry_days,
+      couponExpiryDays: r.coupon_expiry_days,
+      maxCouponsPerOrder: r.max_coupons_per_order,
+      minAccountAgeDays: r.min_account_age_days,
+      minOrderValueHalala: r.min_order_value_halala,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }),
+  );
+export type ReferralSettingsRow = z.infer<typeof referralSettingsRowSchema>;

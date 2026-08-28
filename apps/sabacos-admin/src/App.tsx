@@ -14,21 +14,29 @@ import { AnalyticsPage } from "./pages/AnalyticsPage.js";
 import { WaitlistPage } from "./pages/WaitlistPage.js";
 import { DiscountsPage } from "./pages/DiscountsPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
+import { UsersPage } from "./pages/UsersPage.js";
+import { ReferralsPage } from "./pages/ReferralsPage.js";
 
 function Gate({ children }: { children: React.ReactNode }) {
   const token = useAuth((s) => s.token);
   const ready = useAuth((s) => s.ready);
   const restore = useAuth((s) => s.restore);
+  const restoreFromTelegram = useAuth((s) => s.restoreFromTelegram);
 
   useEffect(() => {
-    restore();
-  }, [restore]);
+    // Try Supabase session first, then fall back to Telegram auth
+    restore().then(() => {
+      if (!useAuth.getState().token) {
+        restoreFromTelegram();
+      }
+    });
+  }, [restore, restoreFromTelegram]);
 
   if (!ready) {
     return <div className="auth-screen"><div className="card muted">Loading…</div></div>;
   }
 
-  if (!token) {
+  if (!token && !useAuth.getState().profile) {
     return <LoginPage />;
   }
 
@@ -76,6 +84,12 @@ export default function App() {
       </Route>
       <Route path="/settings">
         <Gate><SettingsPage /></Gate>
+      </Route>
+      <Route path="/users">
+        <Gate><UsersPage /></Gate>
+      </Route>
+      <Route path="/referrals">
+        <Gate><ReferralsPage /></Gate>
       </Route>
     </Switch>
   );
