@@ -21,6 +21,7 @@ import { AboutPage } from "./pages/AboutPage.js";
 import { FaqPage } from "./pages/FaqPage.js";
 import { WaitlistPage } from "./pages/WaitlistPage.js";
 import { SpinnerPage } from "./pages/SpinnerPage.js";
+import { ReferralPage } from "./pages/ReferralPage.js";
 
 function Shell() {
   const setProfile = useShopStore((s) => s.setProfile);
@@ -126,6 +127,7 @@ function Shell() {
         <Route path="/orders" component={OrdersPage} />
         <Route path="/orders/:id" component={OrderDetailPage} />
         <Route path="/profile" component={ProfilePage} />
+        <Route path="/referral" component={ReferralPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/about" component={AboutPage} />
         <Route path="/faq" component={FaqPage} />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Search, SlidersHorizontal } from "lucide-react";
+import { ChevronRight, Search, SlidersHorizontal, Wallet } from "lucide-react";
 import { useLocation } from "wouter";
+import { formatETB } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { ProductCard } from "../components/ProductCard.js";
 import { BannerCarousel, type AdBanner } from "../components/BannerCarousel.js";
@@ -24,12 +25,19 @@ export function HomePage() {
   const latestItems = latest.result?.items ?? [];
 
   const [ad, setAd] = useState<AdBanner | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
     api
       .get<{ banner: AdBanner | null }>(`/ads/banner?lang=${lang}`)
       .then((res) => {
         if (!cancelled) setAd(res.banner);
+      })
+      .catch(() => {});
+    api
+      .get<{ walletBalance: number }>("/referral")
+      .then((res) => {
+        if (!cancelled) setWalletBalance(res.walletBalance);
       })
       .catch(() => {});
     return () => {
@@ -71,9 +79,19 @@ export function HomePage() {
               {t("greeting")}{profile?.firstName ? `, ${profile.firstName}` : ""} ✨
             </h1>
           </div>
+          {walletBalance !== null && walletBalance > 0 && (
+            <button
+              className="chip"
+              onClick={() => navigate("/referral")}
+              style={{ height: 36, padding: "0 12px", gap: 6, flexShrink: 0, background: "var(--accent-bg, #e8f5e9)", color: "var(--accent)" }}
+            >
+              <Wallet size={15} />
+              <span style={{ fontWeight: 700, fontSize: 13 }}>{formatETB(walletBalance)}</span>
+            </button>
+          )}
           <button
             className="chip"
-            style={{ marginLeft: "auto", height: 42, padding: "0 14px", flexShrink: 0 }}
+            style={{ height: 42, padding: "0 14px", flexShrink: 0 }}
             aria-label={t("filters")}
             onClick={() => navigate("/shop?filters=1")}
           >

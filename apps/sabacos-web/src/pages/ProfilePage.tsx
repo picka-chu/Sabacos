@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronRight, HelpCircle, Info, Loader2, MapPin, Navigation, Pencil, Phone, Settings } from "lucide-react";
+import { Check, ChevronRight, Gift, HelpCircle, Info, Loader2, MapPin, Navigation, Pencil, Phone, Settings } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatETB, type Order } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
@@ -343,6 +343,7 @@ export function ProfilePage() {
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
         {[
+          { icon: <Gift size={20} strokeWidth={1.75} />, label: t("referrals"), to: "/referral" },
           { icon: <Settings size={20} strokeWidth={1.75} />, label: t("settingsTitle"), to: "/settings" },
           { icon: <Info size={20} strokeWidth={1.75} />, label: t("about"), to: "/about" },
           { icon: <HelpCircle size={20} strokeWidth={1.75} />, label: t("faq"), to: "/faq" },
