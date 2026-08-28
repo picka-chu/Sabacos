@@ -221,3 +221,112 @@ adminReferralRoutes.get("/wallet/:profileId", async (c) => {
 
   return c.json({ wallet, transactions });
 });
+
+// ──────────────────────────────────────────────────────────────────────
+// Adaptive Engine
+// ──────────────────────────────────────────────────────────────────────
+
+/** GET /admin/referrals/metrics — Get daily metrics */
+adminReferralRoutes.get("/metrics", async (c) => {
+  const db = getDb(c.env);
+  const startDate = c.req.query("startDate") ?? undefined;
+  const endDate = c.req.query("endDate") ?? undefined;
+  const limit = Number(c.req.query("limit") ?? "30");
+
+  const { getDailyMetrics } = await import("../db/adaptive.js");
+  const metrics = await getDailyMetrics(db, { startDate, endDate, limit });
+
+  return c.json({ metrics });
+});
+
+/** GET /admin/referrals/metrics/latest — Get latest metrics + rolling averages */
+adminReferralRoutes.get("/metrics/latest", async (c) => {
+  const db = getDb(c.env);
+  const { getLatestMetrics, getRollingAverages } = await import("../db/adaptive.js");
+
+  const latest = await getLatestMetrics(db);
+  const rolling = await getRollingAverages(db);
+
+  return c.json({ latest, rolling });
+});
+
+/** POST /admin/referrals/metrics/aggregate — Run nightly aggregation (manual trigger) */
+adminReferralRoutes.post("/metrics/aggregate", async (c) => {
+  const db = getDb(c.env);
+  const { runNightlyAggregation } = await import("../db/adaptive.js");
+
+  const result = await runNightlyAggregation(db);
+  return c.json(result);
+});
+
+/** POST /admin/referrals/adjust — Run weekly adjustment (manual trigger) */
+adminReferralRoutes.post("/adjust", async (c) => {
+  const db = getDb(c.env);
+  const { runWeeklyAdjustment } = await import("../db/adaptive.js");
+
+  const result = await runWeeklyAdjustment(db);
+  return c.json(result);
+});
+
+/** GET /admin/referrals/adjust/log — Get adjustment log */
+adminReferralRoutes.get("/adjust/log", async (c) => {
+  const db = getDb(c.env);
+  const limit = Number(c.req.query("limit") ?? "50");
+  const flaggedOnly = c.req.query("flagged") === "true";
+
+  const { getAdjustmentLog } = await import("../db/adaptive.js");
+  const log = await getAdjustmentLog(db, { limit, flaggedOnly });
+
+  return c.json({ log });
+});
+
+/** POST /admin/referrals/adjust/manual — Manual adjustment */
+adminReferralRoutes.post("/adjust/manual", async (c) => {
+  const db = getDb(c.env);
+  const body = await c.req.json().catch(() => null);
+
+  if (!body?.reason) {
+    return c.json({ error: { code: "bad_request", message: "reason required" } }, 400);
+  }
+
+  const { manualAdjustment } = await import("../db/adaptive.js");
+  await manualAdjustment(db, {
+    commissionPct: body.commissionPct,
+    weeklySpinCap: body.weeklySpinCap,
+    topPrizeCostHalala: body.topPrizeCostHalala,
+    rewardBudgetPct: body.rewardBudgetPct,
+    reason: body.reason,
+  });
+
+  return c.json({ ok: true });
+});
+
+/** PATCH /admin/referrals/adaptive — Toggle adaptive engine */
+adminReferralRoutes.patch("/adaptive", async (c) => {
+  const db = getDb(c.env);
+  const body = await c.req.json().catch(() => null);
+
+  if (body?.enabled === undefined) {
+    return c.json({ error: { code: "bad_request", message: "enabled required" } }, 400);
+  }
+
+  const { setAdaptiveEnabled } = await import("../db/adaptive.js");
+  await setAdaptiveEnabled(db, body.enabled);
+
+  return c.json({ ok: true, enabled: body.enabled });
+});
+
+/** PATCH /admin/referrals/guardrails — Update guardrails */
+adminReferralRoutes.patch("/guardrails", async (c) => {
+  const db = getDb(c.env);
+  const body = await c.req.json().catch(() => null);
+
+  if (!body) {
+    return c.json({ error: { code: "bad_request", message: "Invalid body" } }, 400);
+  }
+
+  const { updateGuardrails } = await import("../db/adaptive.js");
+  await updateGuardrails(db, body);
+
+  return c.json({ ok: true });
+});
