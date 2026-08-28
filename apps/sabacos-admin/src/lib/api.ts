@@ -10,10 +10,32 @@ export class ApiError extends Error {
   }
 }
 
+/** Get Telegram initData if running inside Telegram WebApp. */
+export function getTelegramInitData(): string | null {
+  try {
+    const tg = (window as unknown as Record<string, unknown>)?.Telegram;
+    if (tg && typeof tg === "object" && "WebApp" in tg) {
+      const webApp = (tg as { WebApp: { initData?: string } }).WebApp;
+      return webApp?.initData ?? null;
+    }
+  } catch {
+    /* not in Telegram */
+  }
+  return null;
+}
+
 async function request<T>(method: string, path: string, body?: unknown, token?: string): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  } else {
+    // Try Telegram initData auth if no bearer token
+    const initData = getTelegramInitData();
+    if (initData) {
+      headers["X-Telegram-Init-Data"] = initData;
+    }
+  }
 
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -46,6 +68,12 @@ export const api = {
   del: <T>(path: string, token?: string) => request<T>("DELETE", path, undefined, token),
 };
 
+export function apiErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof Error) return err.message;
+  return "An unexpected error occurred";
+}
+
 export async function uploadImages(
   productId: string,
   files: File[],
@@ -53,9 +81,16 @@ export async function uploadImages(
 ): Promise<{ product: import("@sabacos/core").Product }> {
   const form = new FormData();
   for (const file of files) form.append("images", file);
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  } else {
+    const initData = getTelegramInitData();
+    if (initData) headers["X-Telegram-Init-Data"] = initData;
+  }
   const res = await fetch(`${BASE}/admin/products/${productId}/images`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers,
     body: form,
   });
   if (!res.ok) {
@@ -99,9 +134,16 @@ export async function uploadAiImage(
   const resized = await resizeImage(file);
   const form = new FormData();
   form.append("image", resized);
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  } else {
+    const initData = getTelegramInitData();
+    if (initData) headers["X-Telegram-Init-Data"] = initData;
+  }
   const res = await fetch(`${BASE}/admin/ai/product-image`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers,
     body: form,
   });
   if (!res.ok) {

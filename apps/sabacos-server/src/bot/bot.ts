@@ -3,9 +3,12 @@ import {
   CURRENCY,
   formatETB,
   formatOrderNo,
+  isAdminRole,
+  isFullAdmin,
   translateStatus,
   type Order,
   type OrderWithItems,
+  type ProfileRole,
 } from "@sabacos/core";
 import type { AppEnv } from "../env.js";
 import { getDb } from "../db/client.js";
@@ -24,6 +27,17 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** Parse comma-separated Telegram user IDs from env var. */
+function parseAdminTelegramIds(raw: string | undefined): Set<number> {
+  if (!raw) return new Set();
+  return new Set(
+    raw
+      .split(",")
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isFinite(n) && n > 0),
+  );
+}
+
 /**
  * Normalizes a channel id for the Bot API. Telegram accepts either the
  * numeric chat id (-100…) or the username WITHOUT a leading "@". Most
@@ -36,7 +50,7 @@ export function resolveChannelId(value: string | null | undefined): string {
 
 // Persistent bottom-of-chat keyboard (DurgerKing style). "Shop" is a native
 // web_app button — it launches the mini app straight from the keyboard.
-function mainMenuKeyboard(env: AppEnv, waitlistActive = false) {
+function mainMenuKeyboard(env: AppEnv, waitlistActive = false, role: ProfileRole = "customer") {
   if (waitlistActive) {
     return {
       keyboard: [
@@ -47,14 +61,14 @@ function mainMenuKeyboard(env: AppEnv, waitlistActive = false) {
       is_persistent: true,
     };
   }
-  return {
-    keyboard: [
-      [{ text: "🛍  Shop", web_app: { url: env.WEBAPP_URL } }],
-      [{ text: "📦  My Orders" }, { text: "ℹ️  Help" }],
-    ],
-    resize_keyboard: true,
-    is_persistent: true,
-  };
+  const rows: Array<Array<{ text: string; web_app?: { url: string } }>> = [
+    [{ text: "🛍  Shop", web_app: { url: env.WEBAPP_URL } }],
+    [{ text: "📦  My Orders" }, { text: "ℹ️  Help" }],
+  ];
+  if (isAdminRole(role)) {
+    rows.push([{ text: "📊  Admin Dashboard", web_app: { url: env.ADMIN_DASHBOARD_URL } }]);
+  }
+  return { keyboard: rows, resize_keyboard: true, is_persistent: true };
 }
 
 const MENU_BUTTON_TEXTS = ["🛍  Shop", "📋  Join Waitlist", "📦  My Orders", "ℹ️  Help"] as const;
@@ -70,7 +84,7 @@ async function sendMyOrders(ctx: Context, env: AppEnv): Promise<void> {
 
   if (orders.length === 0) {
     await ctx.reply("📦 No orders yet — tap 🛍 Shop to place your first one!", {
-      reply_markup: mainMenuKeyboard(env),
+      reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer"),
     });
     return;
   }
@@ -147,13 +161,35 @@ export function createBot(env: AppEnv): Bot {
 
   bot.command("start", async (ctx) => {
     const db = getDb(env);
+    const adminIds = parseAdminTelegramIds(env.ADMIN_TELEGRAM_IDS);
+    let role: ProfileRole = "customer";
+
     if (ctx.from) {
-      await upsertTelegramProfile(db, {
+      const profile = await upsertTelegramProfile(db, {
         telegramId: ctx.from.id,
         firstName: ctx.from.first_name ?? null,
         lastName: ctx.from.last_name ?? null,
         username: ctx.from.username ?? null,
-      }).catch((err) => console.error("start: profile upsert failed", err));
+      }).catch((err) => {
+        console.error("start: profile upsert failed", err);
+        return null;
+      });
+
+      if (profile) {
+        role = profile.role;
+        // Auto-promote users whose Telegram ID is in ADMIN_TELEGRAM_IDS
+        if (adminIds.has(ctx.from.id) && !isFullAdmin(profile.role)) {
+          try {
+            await db
+              .from("profiles")
+              .update({ role: "admin" })
+              .eq("id", profile.id);
+            role = "admin";
+          } catch (err) {
+            console.error("start: auto-promote failed", err);
+          }
+        }
+      }
     }
 
     const settings = await getShopSettings(env);
@@ -192,7 +228,7 @@ export function createBot(env: AppEnv): Bot {
       );
       // Also update the persistent keyboard
       await ctx.reply("Tap below anytime to open the waitlist:", {
-        reply_markup: mainMenuKeyboard(env, true),
+        reply_markup: mainMenuKeyboard(env, true, role),
       });
       return;
     }
@@ -230,8 +266,11 @@ export function createBot(env: AppEnv): Bot {
 
   bot.command("help", async (ctx) => {
     const settings = await getShopSettings(env);
+    const profile = ctx.from
+      ? await getProfileById(getDb(env), String(ctx.from.id)).catch(() => null)
+      : null;
     await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
-      reply_markup: mainMenuKeyboard(env),
+      reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer"),
     });
   });
 
@@ -242,8 +281,9 @@ export function createBot(env: AppEnv): Bot {
 
   bot.on("message:text").filter((ctx) => ctx.message.text.trim() === "ℹ️  Help", async (ctx) => {
     const settings = await getShopSettings(env);
+    const profile = await getProfileById(getDb(env), String(ctx.from.id)).catch(() => null);
     await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
-      reply_markup: mainMenuKeyboard(env),
+      reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer"),
     });
   });
 
@@ -268,9 +308,12 @@ export function createBot(env: AppEnv): Bot {
 
   bot.callbackQuery("show_help", async (ctx) => {
     const settings = await getShopSettings(env);
+    const profile = ctx.from
+      ? await getProfileById(getDb(env), String(ctx.from.id)).catch(() => null)
+      : null;
     await ctx.answerCallbackQuery();
     await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
-      reply_markup: mainMenuKeyboard(env),
+      reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer"),
     });
   });
 
@@ -282,9 +325,10 @@ export function createBot(env: AppEnv): Bot {
     async (ctx) => {
     const settings = await getShopSettings(env);
     const shopName = settings?.shopNameEn ?? "Sabacos";
+    const profile = await getProfileById(getDb(env), String(ctx.from.id)).catch(() => null);
     await ctx.reply(
       `I'm the ${escapeHtml(shopName)} assistant 🌸 — I take orders, payments, and questions about deliveries.\n\nTap a button below to get started:`,
-      { reply_markup: mainMenuKeyboard(env) },
+      { reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer") },
     );
   });
 
@@ -412,12 +456,63 @@ export function createBot(env: AppEnv): Bot {
         return;
       }
 
-      await notifyAdminChannel(env, formatAdminOrderAlert(order));
+      await notifyAdminChannelWithButtons(env, formatAdminOrderAlert(order), order.id);
       await sendReceipt(ctx, env, order);
     } catch (err) {
       console.error("successful_payment error", err);
       await notifyAdminChannel(env, `⚠️ Error finalizing payment: ${String(err)}`);
     }
+  });
+
+  // ---- Order status callback buttons (admin/staff quick actions) ----
+  bot.callbackQuery(/^order:(.+):(.+)$/, async (ctx) => {
+    const match = ctx.match;
+    if (!match) return;
+    const orderId = match[1];
+    const newStatus = match[2];
+    if (!orderId || !newStatus) return;
+    const from = ctx.from;
+    if (!from) return;
+
+    const db = getDb(env);
+    const profile = await getProfileById(db, String(from.id)).catch(() => null);
+
+    // Only admin and staff can use these buttons; delivery can only mark "delivered"
+    const allowedRoles = ["admin", "staff"];
+    if (!profile || (!allowedRoles.includes(profile.role) && !(profile.role === "delivery" && newStatus === "delivered"))) {
+      await ctx.answerCallbackQuery({ text: "Not authorized", show_alert: true });
+      return;
+    }
+
+    // Validate the status transition
+    const { canTransitionOrder } = await import("@sabacos/core");
+    const order = await getOrderById(db, orderId);
+    if (!order) {
+      await ctx.answerCallbackQuery({ text: "Order not found", show_alert: true });
+      return;
+    }
+
+    if (!canTransitionOrder(order.status, newStatus as any)) {
+      await ctx.answerCallbackQuery({
+        text: `Cannot transition from ${order.status} to ${newStatus}`,
+        show_alert: true,
+      });
+      return;
+    }
+
+    // Update order status
+    const { updateOrderStatus } = await import("../db/orders.js");
+    await updateOrderStatus(db, orderId, newStatus as any);
+
+    // Notify admin channel
+    const statusLabel = newStatus.replace(/_/g, " ");
+    await notifyAdminChannel(env, `✅ Order ${order.orderNo} → ${statusLabel} (by ${profile.firstName ?? "staff"})`);
+
+    // Update the callback message
+    await ctx.answerCallbackQuery({ text: `Order marked as ${statusLabel}` });
+    await ctx.editMessageText(
+      `✅ Order ${order.orderNo} updated to: ${statusLabel}\nBy: ${profile.firstName ?? "Staff"}`,
+    ).catch(() => {});
   });
 
   bot.catch((err) => {
@@ -542,6 +637,37 @@ export async function notifyAdminChannel(env: AppEnv, text: string): Promise<voi
   await bot.api.sendMessage(channelId, text, { parse_mode: "HTML" }).catch((err) => {
     console.error(`admin channel notification failed (${channelId}):`, err);
   });
+}
+
+/** Notify admin channel with inline buttons for quick order status updates. */
+export async function notifyAdminChannelWithButtons(
+  env: AppEnv,
+  text: string,
+  orderId: string,
+): Promise<void> {
+  const settings = await getSettings(getDb(env)).catch(() => null);
+  const channelId = resolveChannelId(settings?.adminChannelId ?? env.ADMIN_CHANNEL_ID);
+  if (!channelId) return;
+  const bot = new Bot(env.BOT_TOKEN);
+  await bot.api
+    .sendMessage(channelId, text, {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "⚙️ Processing", callback_data: `order:${orderId}:processing` },
+            { text: "📦 Shipped", callback_data: `order:${orderId}:shipped` },
+          ],
+          [
+            { text: "✅ Delivered", callback_data: `order:${orderId}:delivered` },
+            { text: "❌ Cancel", callback_data: `order:${orderId}:cancelled` },
+          ],
+        ],
+      },
+    })
+    .catch((err) => {
+      console.error(`admin channel notification failed (${channelId}):`, err);
+    });
 }
 
 export async function postProductToChannel(

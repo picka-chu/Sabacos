@@ -13,9 +13,8 @@ export function CategoriesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = () => {
-    if (!token) return;
     api
-      .get<{ categories: Category[] }>("/admin/categories", token)
+      .get<{ categories: Category[] }>("/admin/categories", token ?? undefined)
       .then((res) => setCategories(res.categories))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load categories"));
   };
@@ -34,7 +33,6 @@ export function CategoriesPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!token) return;
     setBusy(true);
     setError(null);
     const body = {
@@ -45,9 +43,9 @@ export function CategoriesPage() {
     };
     try {
       if (editingId) {
-        await api.patch(`/admin/categories/${editingId}`, body, token);
+        await api.patch(`/admin/categories/${editingId}`, body, token ?? undefined);
       } else {
-        await api.post("/admin/categories", body, token);
+        await api.post("/admin/categories", body, token ?? undefined);
       }
       reset();
       load();
@@ -59,10 +57,9 @@ export function CategoriesPage() {
   };
 
   const del = async (c: Category) => {
-    if (!token) return;
     if (!window.confirm(`Delete category "${c.nameEn}"?`)) return;
     try {
-      await api.del(`/admin/categories/${c.id}`, token);
+      await api.del(`/admin/categories/${c.id}`, token ?? undefined);
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
@@ -70,9 +67,8 @@ export function CategoriesPage() {
   };
 
   const toggle = async (c: Category) => {
-    if (!token) return;
     try {
-      await api.patch(`/admin/categories/${c.id}`, { isActive: !c.isActive }, token);
+      await api.patch(`/admin/categories/${c.id}`, { isActive: !c.isActive }, token ?? undefined);
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Update failed");
@@ -87,7 +83,7 @@ export function CategoriesPage() {
 
       {error && <div className="card" style={{ color: "var(--danger)", marginBottom: 14 }}>{error}</div>}
 
-      <div className="grid" style={{ gridTemplateColumns: "320px 1fr", alignItems: "start" }}>
+      <div className="grid grid-form" style={{ alignItems: "start" }}>
         <form onSubmit={submit} className="card">
           <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>
             {editingId ? "Edit category" : "New category"}
@@ -125,44 +121,46 @@ export function CategoriesPage() {
           {categories.length === 0 ? (
             <div className="empty">No categories yet</div>
           ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Slug</th>
-                  <th>Sort</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: "right" }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {categories.map((c) => (
-                  <tr key={c.id}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{c.nameEn}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>{c.nameAm}</div>
-                    </td>
-                    <td><code>{c.slug}</code></td>
-                    <td>{c.sortOrder}</td>
-                    <td>
-                      <button className={`badge ${c.isActive ? "badge-success" : "badge-warn"}`} onClick={() => toggle(c)}>
-                        {c.isActive ? "Active" : "Hidden"}
-                      </button>
-                    </td>
-                    <td>
-                      <div className="row" style={{ justifyContent: "flex-end" }}>
-                        <button className="btn btn-outline btn-sm" onClick={() => startEdit(c)}>
-                          <Pencil size={14} />
-                        </button>
-                        <button className="btn btn-outline btn-sm" style={{ color: "var(--danger)" }} onClick={() => del(c)}>
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
+            <div style={{ overflowX: "auto" }}>
+              <table className="table responsive-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Slug</th>
+                    <th>Sort</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: "right" }}>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {categories.map((c) => (
+                    <tr key={c.id}>
+                      <td data-label="Name">
+                        <div style={{ fontWeight: 600 }}>{c.nameEn}</div>
+                        <div className="muted" style={{ fontSize: 12 }}>{c.nameAm}</div>
+                      </td>
+                      <td data-label="Slug"><code>{c.slug}</code></td>
+                      <td data-label="Sort">{c.sortOrder}</td>
+                      <td data-label="Status">
+                        <button className={`badge ${c.isActive ? "badge-success" : "badge-warn"}`} onClick={() => toggle(c)}>
+                          {c.isActive ? "Active" : "Hidden"}
+                        </button>
+                      </td>
+                      <td data-label="Actions">
+                        <div className="row" style={{ justifyContent: "flex-end" }}>
+                          <button className="btn btn-outline btn-sm" onClick={() => startEdit(c)}>
+                            <Pencil size={14} />
+                          </button>
+                          <button className="btn btn-outline btn-sm" style={{ color: "var(--danger)" }} onClick={() => del(c)}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

@@ -21,15 +21,14 @@ export function ProductsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = () => {
-    if (!token) return;
     const params = new URLSearchParams();
     if (search.trim()) params.set("q", search.trim());
     api
-      .get<{ categories: Category[] }>("/admin/categories", token)
+      .get<{ categories: Category[] }>("/admin/categories", token ?? undefined)
       .then((res) => setCategories(res.categories))
       .catch(() => {});
     api
-      .get<ProductPageData>(`/admin/products?${params.toString()}`, token)
+      .get<ProductPageData>(`/admin/products?${params.toString()}`, token ?? undefined)
       .then(setData)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load products"));
   };
@@ -73,60 +72,62 @@ export function ProductsPage() {
             <div>No products found</div>
           </div>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th></th>
-                <th>Product</th>
-                <th>Category</th>
-                <th>Price</th>
-                <th>Stock</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((product) => {
-                const category = categories.find((c) => c.id === product.categoryId);
-                return (
-                  <tr key={product.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/products/${product.id}`)}>
-                    <td>
-                      {product.imageUrls[0] ? (
-                        <img className="product-thumb" src={product.imageUrls[0]} alt={product.nameEn} />
-                      ) : (
-                        <div className="product-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
-                          <Package size={18} />
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{product.nameEn}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>{product.sku}</div>
-                    </td>
-                    <td>
-                      {category ? (
-                        <span className="row" style={{ gap: 5 }}>
-                          <Tag size={13} className="muted" />
-                          {category.nameEn}
+          <div style={{ overflowX: "auto" }}>
+            <table className="table responsive-table">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Product</th>
+                  <th>Category</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((product) => {
+                  const category = categories.find((c) => c.id === product.categoryId);
+                  return (
+                    <tr key={product.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/products/${product.id}`)}>
+                      <td data-label="">
+                        {product.imageUrls[0] ? (
+                          <img className="product-thumb" src={product.imageUrls[0]} alt={product.nameEn} />
+                        ) : (
+                          <div className="product-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
+                            <Package size={18} />
+                          </div>
+                        )}
+                      </td>
+                      <td data-label="Product">
+                        <div style={{ fontWeight: 600 }}>{product.nameEn}</div>
+                        <div className="muted" style={{ fontSize: 12 }}>{product.sku}</div>
+                      </td>
+                      <td data-label="Category">
+                        {category ? (
+                          <span className="row" style={{ gap: 5 }}>
+                            <Tag size={13} className="muted" />
+                            {category.nameEn}
+                          </span>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                      <td data-label="Price">{formatETB(product.priceHalala)}</td>
+                      <td data-label="Stock">
+                        <span className={`badge ${product.stock <= 5 ? "badge-danger" : ""}`}>{product.stock}</span>
+                      </td>
+                      <td data-label="Status">
+                        <span className={`badge ${product.isActive ? "badge-success" : "badge-warn"}`}>
+                          {product.isActive ? "Active" : "Hidden"}
                         </span>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                    <td>{formatETB(product.priceHalala)}</td>
-                    <td>
-                      <span className={`badge ${product.stock <= 5 ? "badge-danger" : ""}`}>{product.stock}</span>
-                    </td>
-                    <td>
-                      <span className={`badge ${product.isActive ? "badge-success" : "badge-warn"}`}>
-                        {product.isActive ? "Active" : "Hidden"}
-                      </span>
-                      {product.isFeatured && <span className="badge badge-info" style={{ marginLeft: 6 }}>Featured</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        {product.isFeatured && <span className="badge badge-info" style={{ marginLeft: 6 }}>Featured</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>
