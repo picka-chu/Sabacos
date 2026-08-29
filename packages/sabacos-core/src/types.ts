@@ -188,6 +188,11 @@ export interface CartSummary {
   /** Combined halala discount from active promotions applied to this cart. */
   discountHalala?: number;
   discountLabel?: string | null;
+  /** Spinner coupon discount preview when a coupon code is attached to the cart. */
+  couponDiscountHalala?: number;
+  couponDiscountLabel?: string | null;
+  /** Non-null when the attached coupon code is invalid / expired / below min order. */
+  couponError?: string | null;
 }
 
 export interface ApiErrorBody {

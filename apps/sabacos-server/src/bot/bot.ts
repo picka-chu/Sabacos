@@ -17,7 +17,7 @@ import { getDb } from "../db/client.js";
 import { getSettings } from "../db/settings.js";
 import { getOrderById, getOrderItems, getOrderWithItems, getOrdersByProfile } from "../db/orders.js";
 import { getProductsByIds } from "../db/catalog.js";
-import { getProfileById, getProfileByTelegramId, saveProfileContact, upsertTelegramProfile } from "../db/profiles.js";
+import { getProfileByTelegramId, saveProfileContact, upsertTelegramProfile } from "../db/profiles.js";
 import { getWaitlistConfig, getWaitlistEntryByCode } from "../db/waitlist.js";
 
 function escapeHtml(value: string): string {
@@ -80,7 +80,7 @@ async function sendMyOrders(ctx: Context, env: AppEnv): Promise<void> {
   const from = ctx.from;
   if (!from) return;
   const db = getDb(env);
-  const profile = await getProfileById(db, String(from.id)).catch(() => null);
+  const profile = await getProfileByTelegramId(db, from.id).catch(() => null);
   const orders = profile
     ? await getOrdersByProfile(db, profile.id).catch(() => [])
     : [];
@@ -285,7 +285,7 @@ export function createBot(env: AppEnv): Bot {
   bot.command("help", async (ctx) => {
     const settings = await getShopSettings(env);
     const profile = ctx.from
-      ? await getProfileById(getDb(env), String(ctx.from.id)).catch(() => null)
+      ? await getProfileByTelegramId(getDb(env), ctx.from.id).catch(() => null)
       : null;
     await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
       reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer"),
@@ -298,7 +298,7 @@ export function createBot(env: AppEnv): Bot {
     if (!from) return;
 
     const db = getDb(env);
-    const profile = await getProfileById(db, String(from.id)).catch(() => null);
+    const profile = await getProfileByTelegramId(db, from.id).catch(() => null);
     if (!profile?.telegramId) {
       await ctx.reply("Please start the bot first with /start");
       return;
@@ -354,7 +354,7 @@ export function createBot(env: AppEnv): Bot {
     if (!from) return;
 
     const db = getDb(env);
-    const profile = await getProfileById(db, String(from.id)).catch(() => null);
+    const profile = await getProfileByTelegramId(db, from.id).catch(() => null);
     if (!profile?.telegramId) {
       await ctx.reply("Please start the bot first with /start");
       return;
@@ -395,7 +395,7 @@ export function createBot(env: AppEnv): Bot {
 
   bot.on("message:text").filter((ctx) => ctx.message.text.trim() === "ℹ️  Help", async (ctx) => {
     const settings = await getShopSettings(env);
-    const profile = await getProfileById(getDb(env), String(ctx.from.id)).catch(() => null);
+    const profile = await getProfileByTelegramId(getDb(env), ctx.from.id).catch(() => null);
     await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
       reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer"),
     });
@@ -423,7 +423,7 @@ export function createBot(env: AppEnv): Bot {
   bot.callbackQuery("show_help", async (ctx) => {
     const settings = await getShopSettings(env);
     const profile = ctx.from
-      ? await getProfileById(getDb(env), String(ctx.from.id)).catch(() => null)
+      ? await getProfileByTelegramId(getDb(env), ctx.from.id).catch(() => null)
       : null;
     await ctx.answerCallbackQuery();
     await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
@@ -439,7 +439,7 @@ export function createBot(env: AppEnv): Bot {
     async (ctx) => {
     const settings = await getShopSettings(env);
     const shopName = settings?.shopNameEn ?? "Sabacos";
-    const profile = await getProfileById(getDb(env), String(ctx.from.id)).catch(() => null);
+    const profile = await getProfileByTelegramId(getDb(env), ctx.from.id).catch(() => null);
     await ctx.reply(
       `I'm the ${escapeHtml(shopName)} assistant 🌸 — I take orders, payments, and questions about deliveries.\n\nTap a button below to get started:`,
       { reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer") },
@@ -450,7 +450,7 @@ export function createBot(env: AppEnv): Bot {
     const from = ctx.from;
     if (!from) return;
     const db = getDb(env);
-    const profile = await getProfileById(db, String(from.id)).catch(() => null);
+    const profile = await getProfileByTelegramId(db, from.id).catch(() => null);
     if (profile?.role !== "admin") {
       await ctx.reply("You are not authorized to access the admin panel.");
       return;
@@ -465,7 +465,7 @@ export function createBot(env: AppEnv): Bot {
     if (!from || ctx.message.contact.user_id !== from.id) return; // only accept own contact
     const db = getDb(env);
     const profile =
-      (await getProfileById(db, String(from.id)).catch(() => null)) ??
+      (await getProfileByTelegramId(db, from.id).catch(() => null)) ??
       (await upsertTelegramProfile(db, { telegramId: from.id }));
     await saveProfileContact(db, profile.id, {
       phone: ctx.message.contact.phone_number,
@@ -480,7 +480,7 @@ export function createBot(env: AppEnv): Bot {
     if (!from) return;
     const db = getDb(env);
     const profile =
-      (await getProfileById(db, String(from.id)).catch(() => null)) ??
+      (await getProfileByTelegramId(db, from.id).catch(() => null)) ??
       (await upsertTelegramProfile(db, { telegramId: from.id }));
     await saveProfileContact(db, profile.id, {
       lastLatitude: ctx.message.location.latitude,
@@ -597,7 +597,7 @@ export function createBot(env: AppEnv): Bot {
     if (!from) return;
 
     const db = getDb(env);
-    const profile = await getProfileById(db, String(from.id)).catch(() => null);
+    const profile = await getProfileByTelegramId(db, from.id).catch(() => null);
 
     // Only admin and staff can use these buttons; delivery can only mark "delivered"
     const allowedRoles = ["admin", "staff"];

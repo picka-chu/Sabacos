@@ -14,6 +14,8 @@ import { clearCart, getCart } from "../db/cart.js";
 import { createOrder } from "../db/orders.js";
 import { getTotalDiscountForProfile } from "../db/waitlist.js";
 import { computePromotionOrderDiscount, getActiveDiscounts } from "../db/discounts.js";
+import { checkSpinnerCouponForCheckout, useSpinnerCoupon } from "../db/spinner.js";
+import { getWalletBalance } from "../db/wallet.js";
 
 export interface InvoicePriceLine {
   label: string;
@@ -41,18 +43,26 @@ export interface CheckoutInput {
   longitude?: number | null;
   zone?: number | null;
   deliveryType?: "standard" | "express";
+  couponCode?: string;
+  paymentMethod?: "telegram" | "wallet";
 }
 
 export interface CheckoutResult {
   order: Order;
-  invoiceUrl: string;
+  invoiceUrl: string | null;
   delivery: DeliveryBreakdown;
 }
 
 export class CartValidationError extends Error {
   constructor(
     message: string,
-    public code: "empty" | "inactive" | "insufficient_stock" | "min_order",
+    public code:
+      | "empty"
+      | "inactive"
+      | "insufficient_stock"
+      | "min_order"
+      | "invalid_coupon"
+      | "wallet_insufficient",
     public fields?: Record<string, string>,
   ) {
     super(message);
@@ -114,7 +124,34 @@ export async function checkout(
     ? Math.round((promo.effectiveSubtotalHalala * waitlistPercent) / 100)
     : 0;
 
-  const discountHalala = promo.totalDiscountHalala + waitlistDiscountHalala;
+  // Spinner coupon redemption (validated against the promo-discounted subtotal).
+  let coupon: Awaited<ReturnType<typeof checkSpinnerCouponForCheckout>> | null = null;
+  let couponDiscountHalala = 0;
+  let couponLabel: string | null = null;
+  if (input.couponCode) {
+    coupon = await checkSpinnerCouponForCheckout(db, profileId, input.couponCode, promo.effectiveSubtotalHalala);
+    if (!coupon.coupon) {
+      const message =
+        coupon.errorCode === "invalid" ? "Invalid or expired coupon"
+        : coupon.errorCode === "not_owned" ? "This coupon belongs to another account"
+        : coupon.errorCode === "used" ? "This coupon has already been used"
+        : coupon.errorCode === "expired" ? "This coupon has expired"
+        : "This coupon requires a higher order total";
+      throw new CartValidationError(message, "invalid_coupon", { couponCode: coupon.errorCode });
+    }
+    couponDiscountHalala = coupon.discountHalala;
+    couponLabel = coupon.label;
+    const minOrder = coupon.coupon.minOrderHalala;
+    if (minOrder > 0 && promo.effectiveSubtotalHalala < minOrder) {
+      throw new CartValidationError(
+        `Minimum order of ${formatETB(minOrder)} required for this coupon`,
+        "invalid_coupon",
+        { couponCode: "min_order" },
+      );
+    }
+  }
+
+  const discountHalala = promo.totalDiscountHalala + waitlistDiscountHalala + couponDiscountHalala;
   const discountedSubtotal = subtotalHalala - discountHalala;
 
   // Zone delivery pricing (GPS coords preferred, manual zone as fallback).
@@ -159,6 +196,18 @@ export async function checkout(
     })),
   });
 
+  // Redeem the spinner coupon against this order only after the order exists.
+  if (coupon?.coupon) {
+    await useSpinnerCoupon(db, coupon.coupon.id, order.id);
+  }
+
+  // Clear the cart now that the order is locked in (both payment paths).
+  await clearCart(db, profileId);
+
+  if (input.paymentMethod === "wallet") {
+    return await finalizeWithWallet(db, order, totalHalala, delivery);
+  }
+
   const prices: InvoicePriceLine[] = [
     ...cart.map((i) => ({
       label: `${i.product.nameEn} × ${i.qty}`,
@@ -170,6 +219,9 @@ export async function checkout(
   }
   if (waitlistDiscountHalala > 0) {
     prices.push({ label: `Waitlist discount (${waitlistPercent}%)`, amount: -waitlistDiscountHalala });
+  }
+  if (couponDiscountHalala > 0 && couponLabel) {
+    prices.push({ label: couponLabel, amount: -couponDiscountHalala });
   }
   if (delivery.expressSurchargeHalala > 0) {
     if (delivery.baseFeeHalala + delivery.zoneSurchargeHalala > 0) {
@@ -195,9 +247,64 @@ export async function checkout(
       currency: "ETB",
       prices,
     });
-  } finally {
-    await clearCart(db, profileId);
+  } catch {
+    // If the invoice cannot be created the order is void — nothing was charged.
+    try {
+      await db.from("orders").update({ status: "cancelled", payment_status: "failed" }).eq("id", order.id);
+    } catch {
+      // best-effort
+    }
+    throw new CartValidationError("Could not create payment link. Please try again.", "min_order");
   }
 
   return { order, invoiceUrl, delivery };
+}
+
+/**
+ * Pays for an order from the customer's referral wallet, then finalizes it the
+ * same way a successful Telegram charge would (decrement stock, mark paid,
+ * trigger referral rewards).
+ */
+async function finalizeWithWallet(
+  db: Db,
+  order: Order,
+  totalHalala: number,
+  delivery: DeliveryBreakdown,
+): Promise<CheckoutResult> {
+  const balance = await getWalletBalance(db, order.profileId);
+  if (balance < totalHalala) {
+    throw new CartValidationError(
+      `Insufficient wallet balance: ${formatETB(balance)} < ${formatETB(totalHalala)}`,
+      "wallet_insufficient",
+    );
+  }
+
+  const { data: status, error } = await db.rpc("finalize_wallet_payment", {
+    p_order_id: order.id,
+    p_amount_halala: totalHalala,
+  });
+  if (error) {
+    try {
+      await db
+        .from("orders")
+        .update({ status: "cancelled", payment_status: "failed" })
+        .eq("id", order.id);
+    } catch {
+      // Order cancellation is best-effort here.
+    }
+    throw new CartValidationError(`Wallet payment failed: ${error.message}`, "wallet_insufficient");
+  }
+  if (status !== "ok") {
+    throw new CartValidationError(`Wallet payment failed (${status})`, "wallet_insufficient");
+  }
+
+  // Credit referral rewards (commission + spins) just like a paid order.
+  const { processReferralReward } = await import("../db/referral-rewards.js");
+  await processReferralReward(db, {
+    referredProfileId: order.profileId,
+    orderId: order.id,
+    orderTotalHalala: order.totalHalala,
+  }).catch((err) => console.error("wallet checkout: referral reward failed", err));
+
+  return { order, invoiceUrl: null, delivery };
 }

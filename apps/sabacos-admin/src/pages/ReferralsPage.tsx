@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Users, Gift, Wallet, TrendingUp, Settings, Save, Activity, AlertTriangle, Play, Pause } from "lucide-react";
-import { api } from "../lib/api.js";
+import { api, apiErrorMessage } from "../lib/api.js";
 import { useAuth } from "../auth.js";
 
 interface ReferralStats {
@@ -29,6 +29,8 @@ interface ReferralSettings {
   topPrizeCostHalala: number;
   adaptiveEnabled: boolean;
   lastAdjustmentDate: string | null;
+  dailySpendCapHalala: number;
+  dailySpendCapEnabled: boolean;
   guardrailCommissionMin: number;
   guardrailCommissionMax: number;
   guardrailSpinCapMin: number;
@@ -74,6 +76,10 @@ export function ReferralsPage() {
   const [error, setError] = useState<string | null>(null);
   const [aggregating, setAggregating] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
+  const [walletProfileId, setWalletProfileId] = useState("");
+  const [walletAmount, setWalletAmount] = useState(0);
+  const [walletNote, setWalletNote] = useState("");
+  const [walletMsg, setWalletMsg] = useState<string | null>(null);
 
   const load = () => {
     if (!token) return;
@@ -131,7 +137,25 @@ export function ReferralsPage() {
       await api.patch("/admin/referrals/adaptive", { enabled: !settings.adaptiveEnabled }, token);
       setSettings({ ...settings, adaptiveEnabled: !settings.adaptiveEnabled });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Toggle failed");
+      setError(apiErrorMessage(err));
+    }
+  };
+
+  const walletAdjust = async (action: "credit" | "debit") => {
+    if (!token || !walletProfileId.trim() || walletAmount <= 0) return;
+    setWalletMsg(null);
+    try {
+      await api.post(`/admin/referrals/wallet/${action}`, {
+        profileId: walletProfileId.trim(),
+        amountHalala: Math.round(walletAmount * 100),
+        description: walletNote.trim() || `Admin ${action}`,
+      }, token);
+      setWalletMsg(`${action === "credit" ? "Credited" : "Debited"} ${walletAmount.toFixed(2)} ETB`);
+      setWalletAmount(0);
+      setWalletNote("");
+      load();
+    } catch (err) {
+      setWalletMsg(apiErrorMessage(err));
     }
   };
 
@@ -189,6 +213,40 @@ export function ReferralsPage() {
               <div style={{ fontSize: 20, fontWeight: 700 }}>{formatETB(stats?.totalWalletBalance ?? 0)}</div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Wallet Adjustment */}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 15 }}>
+            <Wallet size={16} style={{ marginRight: 6, verticalAlign: "middle" }} />
+            Wallet Adjustment
+          </h3>
+        </div>
+        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+          <div className="field">
+            <label>Profile ID</label>
+            <input className="input" type="text" placeholder="User profile UUID" value={walletProfileId}
+              onChange={(e) => setWalletProfileId(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Amount (ETB)</label>
+            <input className="input" type="number" min="0" step="0.01" value={walletAmount || ""}
+              onChange={(e) => setWalletAmount(Number(e.target.value))} />
+          </div>
+          <div className="field">
+            <label>Note</label>
+            <input className="input" type="text" placeholder="Reason" value={walletNote}
+              onChange={(e) => setWalletNote(e.target.value)} />
+          </div>
+        </div>
+        <div className="row" style={{ gap: 8, marginTop: 12, alignItems: "center" }}>
+          <button className="btn btn-outline btn-sm" onClick={() => walletAdjust("credit")}
+            disabled={!walletProfileId.trim() || walletAmount <= 0}>Credit</button>
+          <button className="btn btn-outline btn-sm" onClick={() => walletAdjust("debit")}
+            disabled={!walletProfileId.trim() || walletAmount <= 0}>Debit</button>
+          {walletMsg && <span style={{ fontSize: 13, color: "var(--muted)" }}>{walletMsg}</span>}
         </div>
       </div>
 
@@ -408,6 +466,21 @@ export function ReferralsPage() {
                 onChange={(e) => setSettings({ ...settings, topPrizeCostHalala: Number(e.target.value) * 100 })} disabled={!editing} />
             </div>
             <div className="field">
+              <label>Repeat Purchase %</label>
+              <input className="input" type="number" min="1" max="50" value={settings.repeatPurchasePercent}
+                onChange={(e) => setSettings({ ...settings, repeatPurchasePercent: Number(e.target.value) })} disabled={!editing} />
+            </div>
+            <div className="field">
+              <label>Min Account Age (days)</label>
+              <input className="input" type="number" min="0" max="365" value={settings.minAccountAgeDays}
+                onChange={(e) => setSettings({ ...settings, minAccountAgeDays: Number(e.target.value) })} disabled={!editing} />
+            </div>
+            <div className="field">
+              <label>Max Coupons per Order</label>
+              <input className="input" type="number" min="1" max="10" value={settings.maxCouponsPerOrder}
+                onChange={(e) => setSettings({ ...settings, maxCouponsPerOrder: Number(e.target.value) })} disabled={!editing} />
+            </div>
+            <div className="field">
               <label>Spin Expiry (days)</label>
               <input className="input" type="number" min="1" max="90" value={settings.spinExpiryDays}
                 onChange={(e) => setSettings({ ...settings, spinExpiryDays: Number(e.target.value) })} disabled={!editing} />
@@ -421,6 +494,19 @@ export function ReferralsPage() {
               <label>Min Order Value (ETB)</label>
               <input className="input" type="number" min="0" value={settings.minOrderValueHalala / 100}
                 onChange={(e) => setSettings({ ...settings, minOrderValueHalala: Number(e.target.value) * 100 })} disabled={!editing} />
+            </div>
+            <div className="field">
+              <label>Daily Spend Cap (ETB)</label>
+              <input className="input" type="number" min="0" value={settings.dailySpendCapHalala / 100}
+                onChange={(e) => setSettings({ ...settings, dailySpendCapHalala: Number(e.target.value) * 100 })} disabled={!editing} />
+            </div>
+            <div className="field">
+              <label>Daily Spend Cap Enabled</label>
+              <select className="input" value={settings.dailySpendCapEnabled ? "true" : "false"}
+                onChange={(e) => setSettings({ ...settings, dailySpendCapEnabled: e.target.value === "true" })} disabled={!editing}>
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+              </select>
             </div>
           </div>
         )}

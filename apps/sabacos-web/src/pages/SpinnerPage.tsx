@@ -1,6 +1,10 @@
 import { useEffect, useState, useRef, useCallback } from "react";
+import { Loader2, Share2 } from "lucide-react";
+import { formatETB } from "@sabacos/core";
 import { api } from "../api.js";
 import { useShopStore } from "../store.js";
+import { useI18n } from "../i18n.js";
+import { PageTitle } from "../components/PageTitle.js";
 
 interface Spin {
   id: string;
@@ -25,8 +29,11 @@ const PRIZE_COLORS = [
   "#FFEAA7", "#DDA0DD", "#98D8C8", "#F7DC6F",
 ];
 
+const SEGMENTS = 8;
+
 export function SpinnerPage() {
   const profile = useShopStore((s) => s.profile);
+  const { t } = useI18n();
   const [availableSpins, setAvailableSpins] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<SpinResult | null>(null);
@@ -38,7 +45,8 @@ export function SpinnerPage() {
     api
       .get<{ availableSpins: number; spins: Spin[] }>("/referral/spinner")
       .then((res) => setAvailableSpins(res.availableSpins))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed to load spins"));
+      .catch(() => setError(t("spinnerLoadFailed")));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(loadSpins, [loadSpins]);
@@ -52,19 +60,12 @@ export function SpinnerPage() {
 
     try {
       const spinsRes = await api.get<{ spins: Spin[] }>("/referral/spinner");
-      if (spinsRes.spins.length === 0) {
-        setError("No available spins");
+      if (!spinsRes.spins.length) {
+        setError(t("spinnerNoAvailableSpins"));
         setSpinning(false);
         return;
       }
-
-      const firstSpin = spinsRes.spins[0];
-      if (!firstSpin) {
-        setError("No available spins");
-        setSpinning(false);
-        return;
-      }
-      const spinId = firstSpin.id;
+      const spinId = spinsRes.spins[0]!.id;
 
       // Animate wheel
       const wheel = wheelRef.current;
@@ -88,8 +89,8 @@ export function SpinnerPage() {
           setResult(null);
         }, 3000);
       }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Spin failed");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("spinnerSpinFailed"));
     } finally {
       setSpinning(false);
     }
@@ -98,7 +99,7 @@ export function SpinnerPage() {
   const shareReferral = async () => {
     try {
       const res = await api.get<{ deepLink: string }>("/referral");
-      const text = encodeURIComponent(`Join Sabacos cosmetics using my link: ${res.deepLink}`);
+      const text = encodeURIComponent(`${t("inviteFriendsHint")} ${res.deepLink}`);
       window.open(`https://t.me/share/url?url=${text}`, "_blank");
     } catch {
       // Ignore
@@ -107,19 +108,32 @@ export function SpinnerPage() {
 
   if (!profile) {
     return (
-      <div style={{ padding: 40, textAlign: "center" }}>
-        <p className="muted">Please log in to use the spinner</p>
+      <div className="screen">
+        <PageTitle title={t("spinnerTitle")} />
+        <div style={{ padding: 40, textAlign: "center" }}>
+          <p className="muted">{t("spinnerLoginRequired")}</p>
+        </div>
       </div>
     );
   }
 
+  const prizeValue = (prize: SpinResult["prize"]) => {
+    if (prize.type === "spin_again") return t("spinnerSpinAgain");
+    if (prize.type === "coupon_percent") return t("couponPercentOff", { value: prize.value });
+    if (prize.type === "coupon_fixed") return t("couponFixedOff", { value: formatETB(prize.value) });
+    return prize.name;
+  };
+
   return (
-    <div style={{ padding: "20px 16px", maxWidth: 400, margin: "0 auto", textAlign: "center" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Spin the Wheel</h1>
-      <p className="muted" style={{ marginBottom: 20 }}>
+    <div className="screen">
+      <PageTitle title={t("spinnerTitle")} />
+
+      <p className="muted" style={{ textAlign: "center", marginBottom: 20 }}>
         {availableSpins > 0
-          ? `You have ${availableSpins} free spin${availableSpins > 1 ? "s" : ""}!`
-          : "Refer friends to earn spins"}
+          ? availableSpins === 1
+            ? t("spinnerSpinsAvailable")
+            : t("spinnerSpinsAvailablePlural", { count: availableSpins })
+          : t("spinnerNoSpinsHint")}
       </p>
 
       {/* Wheel */}
@@ -135,7 +149,7 @@ export function SpinnerPage() {
             height: 0,
             borderLeft: "12px solid transparent",
             borderRight: "12px solid transparent",
-            borderTop: "20px solid #333",
+            borderTop: "20px solid var(--accent, #333)",
             zIndex: 10,
           }}
         />
@@ -146,13 +160,13 @@ export function SpinnerPage() {
             width: 280,
             height: 280,
             borderRadius: "50%",
-            border: "4px solid #333",
+            border: "4px solid var(--accent, #333)",
             position: "relative",
             overflow: "hidden",
             boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
           }}
         >
-          {[...Array(8)].map((_, i) => (
+          {[...Array(SEGMENTS)].map((_, i) => (
             <div
               key={i}
               style={{
@@ -161,7 +175,7 @@ export function SpinnerPage() {
                 height: "50%",
                 background: PRIZE_COLORS[i % PRIZE_COLORS.length],
                 transformOrigin: "100% 100%",
-                transform: `rotate(${i * 45}deg) skewY(-45deg)`,
+                transform: `rotate(${i * (360 / SEGMENTS)}deg) skewY(-${90 - 360 / SEGMENTS}deg)`,
                 left: 0,
                 top: 0,
               }}
@@ -178,7 +192,7 @@ export function SpinnerPage() {
               height: 60,
               borderRadius: "50%",
               background: "#fff",
-              border: "3px solid #333",
+              border: "3px solid var(--accent, #333)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -196,20 +210,25 @@ export function SpinnerPage() {
         className="btn btn-primary"
         onClick={spin}
         disabled={spinning || availableSpins <= 0}
-        style={{
-          width: "100%",
-          padding: "14px 24px",
-          fontSize: 18,
-          fontWeight: 700,
-          marginBottom: 16,
-        }}
+        style={{ width: "100%", padding: "14px 24px", fontSize: 18, fontWeight: 700, marginBottom: 16 }}
       >
-        {spinning ? "Spinning..." : availableSpins > 0 ? "Spin Now!" : "No Spins Available"}
+        {spinning ? (
+          <>
+            <Loader2 size={20} className="spin" style={{ animation: "spin 1.2s linear infinite", verticalAlign: -3, marginRight: 8 }} />
+            {t("spinnerSpinning")}
+          </>
+        ) : availableSpins > 0 ? (
+          t("spinnerSpinNow")
+        ) : (
+          t("spinnerNoSpins")
+        )}
       </button>
 
       {/* Error */}
       {error && (
-        <div style={{ color: "var(--danger)", marginBottom: 16, fontSize: 14 }}>{error}</div>
+        <div style={{ color: "var(--danger)", marginBottom: 16, fontSize: 14, display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
+          <span>{error}</span>
+        </div>
       )}
 
       {/* Result */}
@@ -224,37 +243,38 @@ export function SpinnerPage() {
           {result.spinAgain ? (
             <>
               <div style={{ fontSize: 32, marginBottom: 8 }}>🔄</div>
-              <div style={{ fontWeight: 700, fontSize: 18 }}>Spin Again!</div>
-              <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>You won a free spin!</div>
+              <div style={{ fontWeight: 700, fontSize: 18 }}>{t("spinnerSpinAgain")}</div>
+              <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>{t("spinnerSpinAgainWon")}</div>
             </>
           ) : result.coupon ? (
             <>
               <div style={{ fontSize: 32, marginBottom: 8 }}>🎉</div>
-              <div style={{ fontWeight: 700, fontSize: 18 }}>{result.prize.name}</div>
+              <div style={{ fontWeight: 700, fontSize: 18 }}>{prizeValue(result.prize)}</div>
               <div
                 style={{
                   marginTop: 12,
                   padding: "8px 16px",
                   background: "#fff",
                   borderRadius: 8,
-                  border: "2px dashed var(--primary, #e91e63)",
+                  border: "2px dashed var(--accent, #e91e63)",
                   fontFamily: "monospace",
                   fontSize: 16,
                   fontWeight: 700,
                   letterSpacing: 2,
+                  userSelect: "all",
                 }}
               >
                 {result.coupon.code}
               </div>
               <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                Use at checkout - Expires {new Date(result.coupon.expiresAt).toLocaleDateString()}
+                {t("spinnerUseAtCheckout", { date: new Date(result.coupon.expiresAt).toLocaleDateString() })}
               </div>
             </>
           ) : (
             <>
               <div style={{ fontSize: 32, marginBottom: 8 }}>🏆</div>
-              <div style={{ fontWeight: 700, fontSize: 18 }}>{result.prize.name}</div>
-              <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>Congratulations!</div>
+              <div style={{ fontWeight: 700, fontSize: 18 }}>{prizeValue(result.prize)}</div>
+              <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>{t("spinnerCongratulations")}</div>
             </>
           )}
         </div>
@@ -262,12 +282,13 @@ export function SpinnerPage() {
 
       {/* Referral CTA */}
       <div className="card" style={{ textAlign: "left" }}>
-        <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Earn More Spins</h3>
+        <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>{t("spinnerEarnMoreSpins")}</h3>
         <p className="muted" style={{ margin: "0 0 12px", fontSize: 14 }}>
-          Every 3 friends who make a purchase = 1 free spin!
+          {t("spinnerEarnHint", { n: 3 })}
         </p>
         <button className="btn btn-outline" onClick={shareReferral} style={{ width: "100%" }}>
-          Share Referral Link
+          <Share2 size={16} style={{ verticalAlign: -3, marginRight: 6 }} />
+          {t("shareReferralLink")}
         </button>
       </div>
     </div>

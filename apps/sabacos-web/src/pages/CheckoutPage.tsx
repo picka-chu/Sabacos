@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User, X, Zap, Truck } from "lucide-react";
+import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User, X, Zap, Truck, Tag, Wallet } from "lucide-react";
 import { DEFAULT_DELIVERY_CONFIG, formatETB, quoteDelivery, t } from "@sabacos/core";
 import type { DeliveryConfig } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
@@ -25,6 +25,7 @@ export function CheckoutPage() {
   const profile = useShopStore((s) => s.profile);
   const checkout = useShopStore((s) => s.checkout);
   const clearCart = useShopStore((s) => s.clearCart);
+  const refreshCart = useShopStore((s) => s.refreshCart);
   const refreshProfile = useShopStore((s) => s.refreshProfile);
 
   const [form, setForm] = useState({
@@ -42,6 +43,12 @@ export function CheckoutPage() {
   const [orderNo, setOrderNo] = useState<string | null>(null);
   const [orderTotal, setOrderTotal] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [couponInput, setCouponInput] = useState("");
+  const [couponCode, setCouponCode] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"telegram" | "wallet">("telegram");
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [walletLoading, setWalletLoading] = useState(true);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const submittingRef = useRef(false);
@@ -68,6 +75,43 @@ export function CheckoutPage() {
       .then((res) => res.config && setDeliveryConfig(res.config))
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    api.get<{ walletBalance: number }>("/referral")
+      .then((res) => setWalletBalance(res.walletBalance ?? 0))
+      .catch(() => undefined)
+      .finally(() => setWalletLoading(false));
+  }, []);
+
+  const handleApplyCoupon = async () => {
+    const code = couponInput.trim();
+    if (!code) return;
+    haptic();
+    setCouponCode(code);
+    try {
+      const cartSummary = await refreshCart(code);
+      const err = cartSummary.couponError;
+      if (err === "not_owned") setErrorMsg(t("couponNotOwned"));
+      else if (err === "used") setErrorMsg(t("couponAlreadyUsed"));
+      else if (err === "expired" || err === "invalid") setErrorMsg(t("invalidCoupon"));
+      else if (err === "min_order") setErrorMsg(t("couponMinOrder"));
+      else if (!err) setErrorMsg(null);
+    } catch (err) {
+      setErrorMsg(apiErrorMessage(err));
+    }
+  };
+
+  const handleRemoveCoupon = async () => {
+    haptic();
+    setCouponCode(null);
+    setCouponInput("");
+    setErrorMsg(null);
+    try {
+      await refreshCart("");
+    } catch {
+      // ignore — cart will refresh on next render
+    }
+  };
 
   const grandTotal = totals.subtotalHalala + estimate.totalDeliveryFeeHalala;
 
@@ -134,9 +178,21 @@ export function CheckoutPage() {
         longitude: coords?.lng ?? null,
         zone: coords ? null : manualZone,
         deliveryType,
+        couponCode: couponCode ?? undefined,
+        paymentMethod,
       });
       setOrderId(order.id);
       setOrderNo(order.orderNo);
+
+      // Wallet payments are finalized server-side — no invoice to open.
+      if (!invoiceUrl) {
+        await clearCart();
+        setOrderTotal(order.totalHalala);
+        haptic("heavy");
+        setPhase("success");
+        return;
+      }
+
       startPolling(order.id);
       const status = await payInvoice(invoiceUrl);
       if (status === "paid") {
@@ -271,6 +327,12 @@ export function CheckoutPage() {
                 <span style={{ fontSize: 13, fontWeight: 600 }}>-{formatETB(cart.discountHalala)}</span>
               </div>
             )}
+            {cart.couponDiscountHalala != null && cart.couponDiscountHalala > 0 && (
+              <div className="row" style={{ justifyContent: "space-between", marginTop: 6, color: "var(--success)" }}>
+                <span style={{ fontSize: 13 }}>{cart.couponDiscountLabel ?? "Coupon"}</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>-{formatETB(cart.couponDiscountHalala)}</span>
+              </div>
+            )}
             <div className="row" style={{ justifyContent: "space-between", marginTop: 6 }}>
               <span className="muted">{t("deliveryFee")}</span>
               <span>{estimate.totalDeliveryFeeHalala === 0 ? t("free") : formatETB(estimate.totalDeliveryFeeHalala)}</span>
@@ -324,6 +386,88 @@ export function CheckoutPage() {
                 onChange={(e) => setForm({ ...form, note: e.target.value })}
               />
             </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: 14, padding: 18 }}>
+            <h2 style={{ fontSize: 17, margin: "0 0 12px", fontWeight: 700 }}>{t("couponCode")}</h2>
+            {couponCode ? (
+              <div className="row" style={{ gap: 8 }}>
+                <div className="zone-option active btn-block" style={{ cursor: "default", textTransform: "uppercase" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <Tag size={15} /> {couponCode}
+                  </span>
+                </div>
+                <button type="button" className="btn btn-secondary" style={{ flexShrink: 0, padding: "0 12px" }} onClick={handleRemoveCoupon}>
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <div className="row" style={{ gap: 8 }}>
+                <input
+                  value={couponInput}
+                  placeholder={t("couponPlaceholder")}
+                  style={{ flex: 1, textTransform: "uppercase" }}
+                  onChange={(e) => setCouponInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void handleApplyCoupon();
+                    }
+                  }}
+                />
+                <button type="button" className="btn btn-secondary" style={{ flexShrink: 0, padding: "0 14px" }} onClick={handleApplyCoupon} disabled={!couponInput.trim()}>
+                  {t("apply")}
+                </button>
+              </div>
+            )}
+            <p className="muted" style={{ fontSize: 12.5, margin: "8px 2px 0" }}>
+              💎 {lang === "am" ? "ከሽልማት ማሽከርከር የወጡ ኩፖኖችን እዚህ ይጠቀሙ" : "Win coupons from the reward spinner and use them here"}
+            </p>
+          </div>
+
+          <div className="card" style={{ marginBottom: 14, padding: 18 }}>
+            <h2 style={{ fontSize: 17, margin: "0 0 12px", fontWeight: 700 }}>{t("paymentMethod")}</h2>
+            <div style={{ display: "grid", gap: 6 }}>
+              <button
+                type="button"
+                className={`zone-option${paymentMethod === "telegram" ? " active" : ""}`}
+                onClick={() => {
+                  haptic();
+                  setPaymentMethod("telegram");
+                }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                  <Zap size={15} /> {t("payWithTelegram")}
+                </span>
+                <span className="muted" style={{ fontSize: 12 }}>{t("payWithTelegramHint")}</span>
+              </button>
+              <button
+                type="button"
+                className={`zone-option${paymentMethod === "wallet" ? " active" : ""}`}
+                onClick={() => {
+                  haptic();
+                  setPaymentMethod("wallet");
+                }}
+                disabled={walletLoading}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                  <Wallet size={15} /> {t("payWithWallet")}
+                </span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {walletLoading ? "…" : t("walletPayLabel") + ": " + formatETB(walletBalance)}
+                </span>
+              </button>
+            </div>
+            {paymentMethod === "wallet" && walletBalance < grandTotal && (
+              <p style={{ fontSize: 12.5, margin: "8px 2px 0", color: "var(--danger, #d32f2f)", fontWeight: 600 }}>
+                {t("walletInsufficient")}
+              </p>
+            )}
+            {paymentMethod === "wallet" && walletBalance >= grandTotal && (
+              <p className="muted" style={{ fontSize: 12.5, margin: "8px 2px 0" }}>
+                {t("payWithWalletHint")}
+              </p>
+            )}
           </div>
 
           <div className="card" style={{ marginBottom: 14, padding: 18 }}>
@@ -432,11 +576,17 @@ export function CheckoutPage() {
               <span className="muted">{t("total")}</span>
               <span className="price" style={{ fontSize: 20 }}>{formatETB(grandTotal)}</span>
             </div>
-            <button className="btn btn-primary btn-block" disabled={!canSubmit} onClick={handleSubmit}>
-              {t("payWithTelegram")} · {formatETB(grandTotal)}
+            <button
+              className="btn btn-primary btn-block"
+              disabled={!canSubmit || (paymentMethod === "wallet" && walletBalance < grandTotal)}
+              onClick={handleSubmit}
+            >
+              {paymentMethod === "wallet"
+                ? `${t("payWithWallet")} · ${formatETB(grandTotal)}`
+                : `${t("payWithTelegram")} · ${formatETB(grandTotal)}`}
             </button>
             <p className="muted text-center" style={{ margin: 0, fontSize: 12, fontWeight: 500 }}>
-              {t("payWithTelegramHint")}
+              {paymentMethod === "wallet" ? t("payWithWalletHint") : t("payWithTelegramHint")}
             </p>
           </div>
         </>

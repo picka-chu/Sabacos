@@ -3,6 +3,7 @@ import { computeTotals } from "@sabacos/core";
 import type { Db } from "./client.js";
 import { getSettings } from "./settings.js";
 import { attachPromos, computePromotionOrderDiscount, getActiveDiscounts } from "./discounts.js";
+import { checkSpinnerCouponForCheckout } from "./spinner.js";
 
 interface CartRow {
   id: string;
@@ -71,7 +72,7 @@ export async function clearCart(db: Db, profileId: string): Promise<void> {
   if (error) throw new Error(`clearCart: ${error.message}`);
 }
 
-export async function getCartSummary(db: Db, profileId: string): Promise<CartSummary> {
+export async function getCartSummary(db: Db, profileId: string, couponCode?: string): Promise<CartSummary> {
   const items = await getCart(db, profileId);
   const settings = await getSettings(db);
   const discounts = await getActiveDiscounts(db);
@@ -104,6 +105,20 @@ export async function getCartSummary(db: Db, profileId: string): Promise<CartSum
     settings.freeDeliveryThresholdHalala,
   );
 
+  // Spinner coupon preview (validated but not redeemed at cart time).
+  let couponDiscountHalala: number | undefined;
+  let couponDiscountLabel: string | null | undefined;
+  let couponError: string | null | undefined;
+  if (couponCode) {
+    const check = await checkSpinnerCouponForCheckout(db, profileId, couponCode, promo.effectiveSubtotalHalala);
+    if (check.coupon) {
+      couponDiscountHalala = check.discountHalala;
+      couponDiscountLabel = check.label;
+    } else {
+      couponError = check.errorCode;
+    }
+  }
+
   return {
     items: enriched,
     itemCount: enriched.reduce((n, i) => n + i.qty, 0),
@@ -116,6 +131,9 @@ export async function getCartSummary(db: Db, profileId: string): Promise<CartSum
         : promo.lines.length > 1 ? `${promo.lines.length} promotions`
         : `Promo (-${promo.percent}%)`
       : null,
+    couponDiscountHalala,
+    couponDiscountLabel,
+    couponError,
   };
 }
 

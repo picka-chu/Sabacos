@@ -23,13 +23,50 @@ export async function getReferralSettings(db: Db): Promise<ReferralSettings | nu
   return referralSettingsRowSchema.parse(data);
 }
 
+const SETTINGS_COLUMN_MAP: Record<string, string> = {
+  isActive: "is_active",
+  firstPurchasePercent: "first_purchase_percent",
+  repeatPurchasePercent: "repeat_purchase_percent",
+  monthlyCapHalala: "monthly_cap_halala",
+  referralsPerSpin: "referrals_per_spin",
+  maxSpinsPerWeek: "max_spins_per_week",
+  spinExpiryDays: "spin_expiry_days",
+  couponExpiryDays: "coupon_expiry_days",
+  maxCouponsPerOrder: "max_coupons_per_order",
+  minAccountAgeDays: "min_account_age_days",
+  minOrderValueHalala: "min_order_value_halala",
+  rewardBudgetPct: "reward_budget_pct",
+  topPrizeCostHalala: "top_prize_cost_halala",
+  adaptiveEnabled: "adaptive_enabled",
+  lastAdjustmentDate: "last_adjustment_date",
+  adjustmentDayOfWeek: "adjustment_day_of_week",
+  dailySpendCapHalala: "daily_spend_cap_halala",
+  dailySpendCapEnabled: "daily_spend_cap_enabled",
+  guardrailCommissionMin: "guardrail_commission_min",
+  guardrailCommissionMax: "guardrail_commission_max",
+  guardrailSpinCapMin: "guardrail_spin_cap_min",
+  guardrailSpinCapMax: "guardrail_spin_cap_max",
+  guardrailPrizeCostMin: "guardrail_prize_cost_min",
+  guardrailPrizeCostMax: "guardrail_prize_cost_max",
+  guardrailMaxBudgetPct: "guardrail_max_budget_pct",
+};
+
 export async function updateReferralSettings(
   db: Db,
   settings: Partial<Omit<ReferralSettings, "id" | "createdAt" | "updatedAt">>,
 ): Promise<ReferralSettings> {
+  // The admin dashboard sends camelCase; the table columns are snake_case.
+  const row: Record<string, unknown> = {};
+  for (const [key, col] of Object.entries(SETTINGS_COLUMN_MAP)) {
+    if (key in settings) row[col] = settings[key as keyof typeof settings];
+  }
+  if (Object.keys(row).length === 0) {
+    return (await getReferralSettings(db))!;
+  }
+
   const { data, error } = await db
     .from("referral_settings")
-    .update(settings)
+    .update(row)
     .eq("id", "00000000-0000-0000-0000-000000000001")
     .select()
     .single();

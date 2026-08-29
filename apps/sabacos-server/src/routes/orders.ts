@@ -8,7 +8,7 @@ import { getDb } from "../db/client.js";
 import { getOrdersByProfile, getOrderWithItems } from "../db/orders.js";
 import { saveProfileContact, getProfileById } from "../db/profiles.js";
 import { checkout, CartValidationError } from "../services/checkout.js";
-import { createBot, makeCreateInvoiceLink, sendShareRequest } from "../bot/bot.js";
+import { createBot, makeCreateInvoiceLink, notifyAdminChannelWithButtons, sendShareRequest, formatAdminOrderAlert } from "../bot/bot.js";
 
 export const orderRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
 
@@ -52,6 +52,15 @@ orderRoutes.post("/checkout", async (c) => {
       },
       { createInvoiceLink: makeCreateInvoiceLink(env, bot) },
     );
+
+    // Wallet payments are finalized server-side and need the same admin alert.
+    if (!result.invoiceUrl) {
+      const order = await getOrderWithItems(db, result.order.id).catch(() => null);
+      if (order) {
+        await notifyAdminChannelWithButtons(env, formatAdminOrderAlert(order), order.id).catch(() => undefined);
+      }
+    }
+
     return c.json(result, 201);
   } catch (err) {
     if (err instanceof CartValidationError) {

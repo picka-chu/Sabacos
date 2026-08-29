@@ -20,7 +20,8 @@ cartRoutes.use("*", requireUser);
 cartRoutes.get("/", async (c) => {
   const db = getDb(getAppEnv());
   const profile = c.get("profile");
-  const summary = await getCartSummary(db, profile.id);
+  const coupon = c.req.query("coupon")?.trim() || undefined;
+  const summary = await getCartSummary(db, profile.id, coupon);
   return c.json(summary);
 });
 

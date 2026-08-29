@@ -299,6 +299,10 @@ export const checkoutSchema = z.object({
   /** Manual zone (1-based) when GPS is unavailable. */
   zone: z.number().int().min(1).max(5).optional().nullable(),
   deliveryType: z.enum(["standard", "express"]).optional(),
+  /** Optional spinner coupon code to redeem on this order. */
+  couponCode: z.string().trim().min(1).max(40).optional(),
+  /** Payment method — "wallet" uses the customer's referral wallet balance. */
+  paymentMethod: z.enum(["telegram", "wallet"]).default("telegram").optional(),
 });
 
 export const createProductSchema = z.object({

@@ -254,6 +254,43 @@ export async function getSpinnerCouponByCode(
   return spinnerCouponRowSchema.parse(data);
 }
 
+export type SpinnerCouponCheck =
+  | { coupon: SpinnerCoupon; discountHalala: number; label: string }
+  | { coupon: null; errorCode: "invalid" | "not_owned" | "used" | "expired" | "min_order" };
+
+/**
+ * Validate a spinner coupon code for checkout and compute its discount.
+ * Returns an errorCode instead of throwing so it can be used for cart previews too.
+ * `baseSubtotalHalala` is the subtotal the discount applies to (after promotions).
+ */
+export async function checkSpinnerCouponForCheckout(
+  db: Db,
+  profileId: string,
+  couponCode: string,
+  baseSubtotalHalala: number,
+): Promise<SpinnerCouponCheck> {
+  const coupon = await getSpinnerCouponByCode(db, couponCode);
+  if (!coupon) return { coupon: null, errorCode: "invalid" };
+  if (coupon.profileId !== profileId) return { coupon: null, errorCode: "not_owned" };
+  if (coupon.isUsed) return { coupon: null, errorCode: "used" };
+  if (new Date(coupon.expiresAt).getTime() <= Date.now()) return { coupon: null, errorCode: "expired" };
+  if (baseSubtotalHalala < coupon.minOrderHalala) return { coupon: null, errorCode: "min_order" };
+
+  const discountHalala =
+    coupon.discountType === "percent"
+      ? Math.round((baseSubtotalHalala * coupon.discountValue) / 100)
+      : Math.min(coupon.discountValue, baseSubtotalHalala);
+
+  return {
+    coupon,
+    discountHalala,
+    label:
+      coupon.discountType === "percent"
+        ? `Coupon (${coupon.discountValue}%)`
+        : `Coupon (${coupon.code})`,
+  };
+}
+
 /** Get valid (unused, unexpired) coupons for a user. */
 export async function getValidCoupons(
   db: Db,

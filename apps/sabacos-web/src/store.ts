@@ -9,7 +9,7 @@ interface ShopState {
   cartLoading: boolean;
   setProfile: (profile: Profile) => void;
   setProfileStatus: (status: "loading" | "ready" | "error") => void;
-  refreshCart: () => Promise<CartSummary>;
+  refreshCart: (couponCode?: string) => Promise<CartSummary>;
   addToCart: (product: Product, qty?: number) => Promise<CartSummary>;
   updateQty: (itemId: string, qty: number) => Promise<CartSummary>;
   removeItem: (itemId: string) => Promise<CartSummary>;
@@ -23,9 +23,11 @@ interface ShopState {
     longitude?: number | null;
     zone?: number | null;
     deliveryType?: "standard" | "express";
+    couponCode?: string;
+    paymentMethod?: "telegram" | "wallet";
   }) => Promise<{
     order: Order;
-    invoiceUrl: string;
+    invoiceUrl: string | null;
   }>;
   getOrder: (id: string) => Promise<OrderWithItems | null>;
   updateProfile: (input: { phone?: string; address?: string }) => Promise<Profile>;
@@ -43,10 +45,12 @@ export const useShopStore = create<ShopState>((set, get) => ({
 
   setProfileStatus: (profileStatus) => set({ profileStatus }),
 
-  refreshCart: async () => {
+  refreshCart: async (couponCode?) => {
     set({ cartLoading: true });
     try {
-      const cart = await api.get<CartSummary>("/cart");
+      const cart = await api.get<CartSummary>(
+        `/cart${couponCode ? `?coupon=${encodeURIComponent(couponCode)}` : ""}`,
+      );
       set({ cart, cartLoading: false });
       return cart;
     } catch (err) {
@@ -79,7 +83,7 @@ export const useShopStore = create<ShopState>((set, get) => ({
   },
 
   checkout: async (input) => {
-    const res = await api.post<{ order: Order; invoiceUrl: string }>("/checkout", input);
+    const res = await api.post<{ order: Order; invoiceUrl: string | null }>("/checkout", input);
     return res;
   },
 
