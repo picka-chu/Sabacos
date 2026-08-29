@@ -87,6 +87,16 @@ export async function saveProfileContact(
   return profileRowSchema.parse(data);
 }
 
+export async function setProfileLanguage(
+  db: Db,
+  id: string,
+  language: "en" | "am",
+): Promise<Profile> {
+  const { data, error } = await db.from("profiles").update({ language }).eq("id", id).select("*").single();
+  if (error) throw new Error(`setProfileLanguage: ${error.message}`);
+  return profileRowSchema.parse(data);
+}
+
 export async function getProfileByAuthId(db: Db, authId: string): Promise<Profile | null> {
   const { data, error } = await db.from("profiles").select("*").eq("id", authId).single();
   if (error) {

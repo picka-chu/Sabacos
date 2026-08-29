@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Search, SlidersHorizontal, Wallet } from "lucide-react";
+import { ChevronRight, Search, SlidersHorizontal, Sparkles, Wallet } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatETB } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
@@ -19,13 +19,13 @@ export function HomePage() {
   const featured = useProducts({ featured: true, pageSize: 8 });
   const latest = useProducts({ pageSize: 8, sort: "newest" });
   const addToCart = useShopStore((s) => s.addToCart);
-  const profile = useShopStore((s) => s.profile);
 
   const featuredItems = featured.result?.items ?? [];
   const latestItems = latest.result?.items ?? [];
 
   const [ad, setAd] = useState<AdBanner | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [availableSpins, setAvailableSpins] = useState(0);
   useEffect(() => {
     let cancelled = false;
     api
@@ -35,9 +35,12 @@ export function HomePage() {
       })
       .catch(() => {});
     api
-      .get<{ walletBalance: number }>("/referral")
+      .get<{ walletBalance: number; availableSpins: number }>("/referral")
       .then((res) => {
-        if (!cancelled) setWalletBalance(res.walletBalance);
+        if (!cancelled) {
+          setWalletBalance(res.walletBalance);
+          setAvailableSpins(res.availableSpins);
+        }
       })
       .catch(() => {});
     return () => {
@@ -72,13 +75,8 @@ export function HomePage() {
 
   return (
     <div className="screen">
-      <div style={{ paddingTop: "calc(var(--safe-top) + 12px)", paddingBottom: 4 }}>
-        <div className="flex" style={{ gap: 10, alignItems: "center" }}>
-          <div style={{ minWidth: 0 }}>
-            <h1 className="serif" style={{ fontSize: 24, margin: 0, lineHeight: 1.15, whiteSpace: "nowrap" }}>
-              {t("greeting")}{profile?.firstName ? `, ${profile.firstName}` : ""} ✨
-            </h1>
-          </div>
+      <div style={{ paddingBottom: 4 }}>
+        <div className="flex" style={{ gap: 8, alignItems: "center" }}>
           {walletBalance !== null && walletBalance > 0 && (
             <button
               className="chip"
@@ -89,16 +87,26 @@ export function HomePage() {
               <span style={{ fontWeight: 700, fontSize: 13 }}>{formatETB(walletBalance)}</span>
             </button>
           )}
+          {availableSpins > 0 && (
+            <button
+              className="chip"
+              onClick={() => navigate("/spinner")}
+              style={{ height: 36, padding: "0 12px", gap: 6, flexShrink: 0, background: "var(--warning-bg, #fff3e0)", color: "var(--warning, #f57c00)" }}
+            >
+              <Sparkles size={15} />
+              <span style={{ fontWeight: 700, fontSize: 13 }}>{availableSpins}</span>
+            </button>
+          )}
           <button
             className="chip"
-            style={{ height: 42, padding: "0 14px", flexShrink: 0 }}
+            style={{ height: 42, padding: "0 14px", flexShrink: 0, marginLeft: "auto" }}
             aria-label={t("filters")}
             onClick={() => navigate("/shop?filters=1")}
           >
             <SlidersHorizontal size={18} />
           </button>
         </div>
-        <div style={{ position: "relative", marginTop: 12 }}>
+        <div style={{ position: "relative", marginTop: 10 }}>
           <Search size={17} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "var(--muted)" }} />
           <input
             placeholder={t("searchPlaceholder")}

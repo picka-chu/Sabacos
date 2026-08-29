@@ -6,7 +6,7 @@ import { getAppEnv, type AppEnv } from "../env.js";
 import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
 import { getOrdersByProfile, getOrderWithItems } from "../db/orders.js";
-import { saveProfileContact, getProfileById } from "../db/profiles.js";
+import { saveProfileContact, getProfileById, setProfileLanguage } from "../db/profiles.js";
 import { checkout, CartValidationError } from "../services/checkout.js";
 import { createBot, makeCreateInvoiceLink, notifyAdminChannelWithButtons, sendShareRequest, formatAdminOrderAlert } from "../bot/bot.js";
 
@@ -22,9 +22,10 @@ const saveProfileSchema = z
   .object({
     phone: z.string().trim().min(3).max(30).optional(),
     address: z.string().trim().min(5).max(500).optional(),
+    language: z.enum(["en", "am"]).optional(),
   })
-  .refine((v) => v.phone !== undefined || v.address !== undefined, {
-    message: "phone or address required",
+  .refine((v) => v.phone !== undefined || v.address !== undefined || v.language !== undefined, {
+    message: "phone, address or language required",
   });
 
 orderRoutes.post("/checkout", async (c) => {
@@ -95,10 +96,13 @@ orderRoutes.patch("/profile", async (c) => {
   const profile = c.get("profile");
   const body = await c.req.json().catch(() => null);
   const input = safeParse(saveProfileSchema, body);
-  const updated = await saveProfileContact(db, profile.id, {
+  let updated = await saveProfileContact(db, profile.id, {
     phone: input.phone,
     address: input.address,
   });
+  if (input.language) {
+    updated = await setProfileLanguage(db, profile.id, input.language);
+  }
   return c.json({ profile: updated });
 });
 

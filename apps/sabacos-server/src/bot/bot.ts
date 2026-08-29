@@ -17,7 +17,7 @@ import { getDb } from "../db/client.js";
 import { getSettings } from "../db/settings.js";
 import { getOrderById, getOrderItems, getOrderWithItems, getOrdersByProfile } from "../db/orders.js";
 import { getProductsByIds } from "../db/catalog.js";
-import { getProfileByTelegramId, saveProfileContact, upsertTelegramProfile } from "../db/profiles.js";
+import { getProfileByTelegramId, saveProfileContact, setProfileLanguage, upsertTelegramProfile } from "../db/profiles.js";
 import { getWaitlistConfig, getWaitlistEntryByCode } from "../db/waitlist.js";
 
 function escapeHtml(value: string): string {
@@ -72,6 +72,53 @@ function mainMenuKeyboard(env: AppEnv, waitlistActive = false, role: ProfileRole
     rows.push([{ text: "📊  Admin Dashboard", web_app: { url: env.ADMIN_DASHBOARD_URL } }]);
   }
   return { keyboard: rows, resize_keyboard: true, is_persistent: true };
+}
+
+/** Inline keyboard shown on the very first /start so users pick their language. */
+function languageKeyboard() {
+  return new InlineKeyboard().text("🇪🇹 አማርኛ", "lang:am").text("🇬🇧 English", "lang:en");
+}
+
+/** Single-language welcome sent once the user picked a language. */
+function welcomeMessage(lang: "en" | "am", shopName: string, firstName: string): string {
+  const safeShop = escapeHtml(shopName);
+  if (lang === "am") {
+    return [
+      `🌸 <b>እንኳን ወደ ${safeShop} በደህና መጡ!</b>${firstName ? `፣ ${firstName}` : ""}`,
+      "",
+      "ፕሪሚየም መዋቢያዎች፣ እስከ ቤትዎ ድረስ እናደርሳለን — ሁሉም በቴሌግራም ውስጥ።",
+      "",
+      "✨ የተመረጡ የቆዳ እንክብካቤ፣ የመዋቢያ እና የሽቶ ምርቶች",
+      "💳 ደህንነቱ የተጠበቀ ክፍያ",
+      "🚚 የትዕዛዝዎን እንቅስቃሴ እስከ ማድረስ ድረስ",
+    ].join("\n");
+  }
+  return [
+    `🌸 Welcome to <b>${safeShop}</b>${firstName ? `, ${firstName}` : ""}!`,
+    "",
+    "Premium cosmetics, delivered to your door — all inside Telegram.",
+    "",
+    "✨ Curated skincare, makeup & fragrance",
+    "💳 Secure checkout powered by Chapa",
+    "🚚 Live order tracking until delivery",
+  ].join("\n");
+}
+
+/** First-run welcome: both languages side by side, then a language choice. */
+function bilingualWelcome(shopName: string, firstName: string): string {
+  const safeShop = escapeHtml(shopName);
+  return [
+    `🌸 <b>Welcome to ${safeShop} / እንኳን ወደ ${safeShop} በደህና መጡ!</b>${firstName ? `, ${firstName}` : ""}`,
+    "",
+    "Premium cosmetics, delivered to your door — all inside Telegram.",
+    "ፕሪሚየም መዋቢያዎች፣ እስከ ቤትዎ ድረስ እናደርሳለን — ሁሉም በቴሌግራም ውስጥ።",
+    "",
+    "✨ Curated skincare, makeup & fragrance",
+    "💳 Secure checkout powered by Chapa",
+    "🚚 Live order tracking until delivery",
+    "",
+    "Choose your language / ቋንቋዎን ይምረጡ 👇",
+  ].join("\n");
 }
 
 const MENU_BUTTON_TEXTS = ["🛍  Shop", "📋  Join Waitlist", "📦  My Orders", "ℹ️  Help"] as const;
@@ -197,12 +244,10 @@ export function createBot(env: AppEnv): Bot {
     }
 
     const settings = await getShopSettings(env);
-    const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
+const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     const waitlistActive = waitlistConfig?.isActive === true;
     const shopName = settings?.shopNameEn ?? "Sabacos";
     const firstName = ctx.from?.first_name ? escapeHtml(ctx.from.first_name) : "";
-
-    // Check for referral deep link: /start ref_<telegramId>
     const payload = ctx.match as string | undefined;
     let referralMsg = "";
     if (payload?.startsWith("ref_") && currentProfile) {
@@ -226,6 +271,18 @@ export function createBot(env: AppEnv): Bot {
         }
       }
     }
+
+    // First run: bilingual welcome, then the user picks a language. They get
+    // the shop (and the rest of the menu) only after that choice.
+    if (currentProfile && !currentProfile.language) {
+      await ctx.reply(`${bilingualWelcome(shopName, firstName)}${referralMsg}`, {
+        parse_mode: "HTML",
+        reply_markup: languageKeyboard(),
+      });
+      return;
+    }
+
+    const lang: "en" | "am" = currentProfile?.language === "am" ? "am" : "en";
 
     if (waitlistActive) {
       await ctx.reply(
@@ -251,18 +308,50 @@ export function createBot(env: AppEnv): Bot {
       return;
     }
 
-    await ctx.reply(
-      [
-        `🌸 Welcome to <b>${escapeHtml(shopName)}</b>${firstName ? `, ${firstName}` : ""}!`,
-        "",
-        `Premium cosmetics, delivered to your door — all inside Telegram.`,
-        "",
-        `✨ Curated skincare, makeup & fragrance`,
-        `💳 Secure checkout powered by Chapa`,
-        `🚚 Live order tracking until delivery`,
-      ].join("\n"),
-      { parse_mode: "HTML", reply_markup: new InlineKeyboard().webApp("🛍  Shop now", env.WEBAPP_URL) },
-    );
+    // Returning user: localized welcome with the persistent menu below it.
+    // The first keyboard row is the Shop web_app button, so the shop is one
+    // tap away.
+    await ctx.reply(`${welcomeMessage(lang, shopName, firstName)}${referralMsg}`, {
+      parse_mode: "HTML",
+      reply_markup: mainMenuKeyboard(env, false, role),
+    });
+  });
+
+  // Language picker (first /start, or /start before any other reply).
+  bot.callbackQuery(/^lang:(en|am)$/, async (ctx) => {
+    const from = ctx.from;
+    if (!from) return;
+    const lang = ctx.match[1] as "en" | "am";
+    await ctx.answerCallbackQuery();
+
+    const db = getDb(env);
+    const profile =
+      (await getProfileByTelegramId(db, from.id).catch(() => null)) ??
+      (await upsertTelegramProfile(db, { telegramId: from.id }).catch(() => null));
+    if (!profile) return;
+    await setProfileLanguage(db, profile.id, lang).catch(() => null);
+
+    const settings = await getShopSettings(env);
+    const shopName = settings?.shopNameEn ?? "Sabacos";
+    const firstName = from.first_name ? escapeHtml(from.first_name) : "";
+
+    const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
+    if (waitlistConfig?.isActive) {
+      await ctx.reply(
+        [
+          `🌸 <b>${escapeHtml(shopName)}</b> is coming soon!`,
+          "",
+          `We're launching soon — join the waitlist to get exclusive early-bird discounts.`,
+        ].join("\n"),
+        { parse_mode: "HTML", reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", env.WEBAPP_URL) },
+      );
+      return;
+    }
+
+    await ctx.reply(welcomeMessage(lang, shopName, firstName), {
+      parse_mode: "HTML",
+      reply_markup: mainMenuKeyboard(env, false, profile.role),
+    });
   });
 
   bot.command("shop", async (ctx) => {

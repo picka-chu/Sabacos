@@ -59,6 +59,8 @@ export interface Profile {
   /** Latest GPS pin the user shared with the bot (powers zone pricing). */
   lastLatitude: number | null;
   lastLongitude: number | null;
+  /** Interface language chosen in the bot (or mini app). */
+  language: "en" | "am" | null;
   role: ProfileRole;
   createdAt: string;
   updatedAt: string;

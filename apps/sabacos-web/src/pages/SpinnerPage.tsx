@@ -35,6 +35,7 @@ export function SpinnerPage() {
   const profile = useShopStore((s) => s.profile);
   const { t } = useI18n();
   const [availableSpins, setAvailableSpins] = useState(0);
+  const [referralsPerSpin, setReferralsPerSpin] = useState(3);
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<SpinResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,8 +44,11 @@ export function SpinnerPage() {
 
   const loadSpins = useCallback(() => {
     api
-      .get<{ availableSpins: number; spins: Spin[] }>("/referral/spinner")
-      .then((res) => setAvailableSpins(res.availableSpins))
+      .get<{ availableSpins: number; spins: Spin[]; referralsPerSpin?: number }>("/referral/spinner")
+      .then((res) => {
+        setAvailableSpins(res.availableSpins);
+        if (res.referralsPerSpin) setReferralsPerSpin(res.referralsPerSpin);
+      })
       .catch(() => setError(t("spinnerLoadFailed")));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -99,8 +103,9 @@ export function SpinnerPage() {
   const shareReferral = async () => {
     try {
       const res = await api.get<{ deepLink: string }>("/referral");
-      const text = encodeURIComponent(`${t("inviteFriendsHint")} ${res.deepLink}`);
-      window.open(`https://t.me/share/url?url=${text}`, "_blank");
+      const url = encodeURIComponent(res.deepLink);
+      const text = encodeURIComponent(t("inviteFriendsHint"));
+      window.open(`https://t.me/share/url?url=${url}&text=${text}`, "_blank");
     } catch {
       // Ignore
     }
@@ -284,7 +289,7 @@ export function SpinnerPage() {
       <div className="card" style={{ textAlign: "left" }}>
         <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>{t("spinnerEarnMoreSpins")}</h3>
         <p className="muted" style={{ margin: "0 0 12px", fontSize: 14 }}>
-          {t("spinnerEarnHint", { n: 3 })}
+          {t("spinnerEarnHint", { n: referralsPerSpin })}
         </p>
         <button className="btn btn-outline" onClick={shareReferral} style={{ width: "100%" }}>
           <Share2 size={16} style={{ verticalAlign: -3, marginRight: 6 }} />

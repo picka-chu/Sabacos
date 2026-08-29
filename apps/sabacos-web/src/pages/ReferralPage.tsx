@@ -93,6 +93,14 @@ export function ReferralPage() {
     }).catch(() => {});
   };
 
+  const copyLink = () => {
+    if (!info?.deepLink) return;
+    navigator.clipboard.writeText(info.deepLink).then(() => {
+      haptic("light");
+      toast(t("copied"));
+    }).catch(() => {});
+  };
+
   const shareLink = () => {
     if (!info?.deepLink) return;
     haptic("light");
@@ -111,22 +119,6 @@ export function ReferralPage() {
   return (
     <div className="screen">
       <PageTitle title={t("referralTitle")} />
-
-      {/* Header */}
-      <div style={{ paddingTop: "calc(var(--safe-top) + 8px)", paddingBottom: 4 }}>
-        <div className="flex" style={{ gap: 10, alignItems: "center" }}>
-          <button
-            className="btn btn-ghost"
-            onClick={() => navigate("/profile")}
-            style={{ padding: 8, minWidth: 0 }}
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <h1 className="serif" style={{ fontSize: 22, margin: 0, flex: 1 }}>
-            {t("referralTitle")}
-          </h1>
-        </div>
-      </div>
 
       {/* Tabs */}
       <div className="chip-scroll" style={{ marginTop: 8, marginBottom: 12 }}>
@@ -147,7 +139,7 @@ export function ReferralPage() {
           <div className="skeleton" style={{ width: 150, height: 16, margin: "0 auto" }} />
         </div>
       ) : tab === "overview" ? (
-        <OverviewTab info={info} copyCode={copyCode} shareLink={shareLink} navigate={navigate} />
+        <OverviewTab info={info} copyCode={copyCode} copyLink={copyLink} shareLink={shareLink} navigate={navigate} onWalletTap={() => setTab("wallet")} />
       ) : tab === "wallet" ? (
         <WalletTab balance={info?.walletBalance ?? 0} transactions={transactions} />
       ) : (
@@ -236,11 +228,13 @@ export function ReferralPage() {
   );
 }
 
-function OverviewTab({ info, copyCode, shareLink, navigate }: {
+function OverviewTab({ info, copyCode, copyLink, shareLink, navigate, onWalletTap }: {
   info: ReferralInfo | null;
   copyCode: () => void;
+  copyLink: () => void;
   shareLink: () => void;
   navigate: (path: string) => void;
+  onWalletTap: () => void;
 }) {
   const { t } = useI18n();
   if (!info) return null;
@@ -272,6 +266,28 @@ function OverviewTab({ info, copyCode, shareLink, navigate }: {
           </div>
         ) : (
           <div className="muted" style={{ fontSize: 14, marginBottom: 12 }}>—</div>
+        )}
+        {info.deepLink && (
+          <div style={{ marginBottom: 12 }}>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>{t("yourReferralLink")}</div>
+            <div className="flex" style={{ gap: 6, alignItems: "center", justifyContent: "center" }}>
+              <span
+                style={{
+                  flex: 1,
+                  fontSize: 12,
+                  fontFamily: "monospace",
+                  color: "var(--muted)",
+                  wordBreak: "break-all",
+                  textAlign: "left",
+                }}
+              >
+                {info.deepLink}
+              </span>
+              <button className="btn btn-ghost" onClick={copyLink} style={{ padding: 6, flexShrink: 0 }} aria-label={t("copy")}>
+                <Copy size={14} />
+              </button>
+            </div>
+          </div>
         )}
         <div className="flex" style={{ gap: 8 }}>
           <button className="btn btn-outline" onClick={copyCode} style={{ flex: 1 }}>
@@ -340,7 +356,7 @@ function OverviewTab({ info, copyCode, shareLink, navigate }: {
       <button
         className="card profile-menu-row"
         style={{ width: "100%", textAlign: "left", marginTop: 12, display: "flex", alignItems: "center" }}
-        onClick={() => {}}
+        onClick={onWalletTap}
       >
         <Wallet size={20} strokeWidth={1.75} />
         <span style={{ fontWeight: 600, flex: 1 }}>{t("walletBalance")}</span>

@@ -2,9 +2,17 @@ import { Languages, Info } from "lucide-react";
 import { useI18n } from "../i18n.js";
 import { PageTitle } from "../components/PageTitle.js";
 import { haptic } from "../telegram.js";
+import { api } from "../api.js";
 
 export function SettingsPage() {
   const { t, lang, setLang } = useI18n();
+
+  const changeLang = (code: "en" | "am") => {
+    haptic("light");
+    setLang(code);
+    // Persist on the server so the bot uses the same language on /start.
+    api.patch("/profile", { language: code }).catch(() => {});
+  };
 
   return (
     <div className="screen">
@@ -19,10 +27,7 @@ export function SettingsPage() {
             key={code}
             className={`chip ${lang === code ? "active" : ""}`}
             style={{ flex: 1, justifyContent: "center", padding: "11px 12px" }}
-            onClick={() => {
-              haptic("light");
-              setLang(code);
-            }}
+            onClick={() => changeLang(code)}
           >
             <Languages size={16} />
             {code === "en" ? t("languageEnglish") : t("languageAmharic")}

@@ -28,7 +28,7 @@ function Shell() {
   const setProfileStatus = useShopStore((s) => s.setProfileStatus);
   const refreshCart = useShopStore((s) => s.refreshCart);
   const [location] = useLocation();
-  const { t } = useI18n();
+  const { t, setLang } = useI18n();
   const inTelegram = isTelegramSession();
 
   // Waitlist phase state
@@ -41,7 +41,14 @@ function Shell() {
 
     api
       .post<{ profile: import("@sabacos/core").Profile }>("/auth/telegram", {})
-      .then((res) => setProfile(res.profile))
+      .then((res) => {
+        setProfile(res.profile);
+        // The language chosen in the bot (or previously in the mini app)
+        // drives the mini app too.
+        if (res.profile.language === "en" || res.profile.language === "am") {
+          setLang(res.profile.language);
+        }
+      })
       .catch(() => setProfileStatus("error"));
     refreshCart().catch(() => {});
 

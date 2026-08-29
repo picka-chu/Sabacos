@@ -48,7 +48,7 @@ referralRoutes.get("/", async (c) => {
 
   const code = profile.telegramId ? makeReferralCode(profile.telegramId) : null;
   const deepLink = profile.telegramId
-    ? referralDeepLink("sabacosbot", profile.telegramId)
+    ? referralDeepLink(c.env.BOT_USERNAME || "sabacosbot", profile.telegramId)
     : null;
 
   return c.json({
@@ -120,6 +120,7 @@ referralRoutes.get("/spinner", async (c) => {
     availableSpins: availableSpins.length,
     spins: availableSpins,
     maxSpinsPerWeek: settings?.maxSpinsPerWeek ?? 5,
+    referralsPerSpin: settings?.referralsPerSpin ?? 3,
   });
 });
 
