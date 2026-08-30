@@ -10,6 +10,7 @@ import {
   referralDeepLink,
   type Order,
   type OrderWithItems,
+  type Profile,
   type ProfileRole,
 } from "@sabacos/core";
 import type { AppEnv } from "../env.js";
@@ -41,6 +42,29 @@ function parseAdminTelegramIds(raw: string | undefined): Set<number> {
 }
 
 /**
+ * Ensures a Telegram user listed in ADMIN_TELEGRAM_IDS is promoted to the
+ * "admin" role in the DB, regardless of their previous role. Returns the
+ * effective role. Call this on every entry path (/start, language choice,
+ * /admin) so an admin is recognized even before their row was promoted.
+ */
+async function ensureAdminRole(
+  db: ReturnType<typeof getDb>,
+  adminIds: Set<number>,
+  profile: Profile | null,
+): Promise<ProfileRole> {
+  if (!profile) return "customer";
+  if (adminIds.has(profile.telegramId ?? -1) && !isFullAdmin(profile.role)) {
+    try {
+      await db.from("profiles").update({ role: "admin" }).eq("id", profile.id);
+      return "admin";
+    } catch (err) {
+      console.error("ensureAdminRole: promote failed", err);
+    }
+  }
+  return profile.role as ProfileRole;
+}
+
+/**
  * Normalizes a channel id for the Bot API. Telegram accepts either the
  * numeric chat id (-100…) or the username WITHOUT a leading "@". Most
  * admins paste the handle from the channel; strip the "@" so it works.
@@ -54,14 +78,14 @@ export function resolveChannelId(value: string | null | undefined): string {
 // web_app button — it launches the mini app straight from the keyboard.
 function mainMenuKeyboard(env: AppEnv, waitlistActive = false, role: ProfileRole = "customer") {
   if (waitlistActive) {
-    return {
-      keyboard: [
-        [{ text: "📋  Join Waitlist", web_app: { url: env.WEBAPP_URL } }],
-        [{ text: "ℹ️  Help" }],
-      ],
-      resize_keyboard: true,
-      is_persistent: true,
-    };
+    const rows: Array<Array<{ text: string; web_app?: { url: string } }>> = [
+      [{ text: "📋  Join Waitlist", web_app: { url: env.WEBAPP_URL } }],
+      [{ text: "ℹ️  Help" }],
+    ];
+    if (isAdminRole(role)) {
+      rows.push([{ text: "📊  Admin Dashboard", web_app: { url: env.ADMIN_DASHBOARD_URL } }]);
+    }
+    return { keyboard: rows, resize_keyboard: true, is_persistent: true };
   }
   const rows: Array<Array<{ text: string; web_app?: { url: string } }>> = [
     [{ text: "🛍  Shop", web_app: { url: env.WEBAPP_URL } }],
@@ -227,19 +251,7 @@ export function createBot(env: AppEnv): Bot {
       });
 
       if (currentProfile) {
-        role = currentProfile.role;
-        // Auto-promote users whose Telegram ID is in ADMIN_TELEGRAM_IDS
-        if (adminIds.has(ctx.from.id) && !isFullAdmin(currentProfile.role)) {
-          try {
-            await db
-              .from("profiles")
-              .update({ role: "admin" })
-              .eq("id", currentProfile.id);
-            role = "admin";
-          } catch (err) {
-            console.error("start: auto-promote failed", err);
-          }
-        }
+        role = await ensureAdminRole(db, adminIds, currentProfile);
       }
     }
 
@@ -325,11 +337,13 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     await ctx.answerCallbackQuery();
 
     const db = getDb(env);
+    const adminIds = parseAdminTelegramIds(env.ADMIN_TELEGRAM_IDS);
     const profile =
       (await getProfileByTelegramId(db, from.id).catch(() => null)) ??
       (await upsertTelegramProfile(db, { telegramId: from.id }).catch(() => null));
     if (!profile) return;
     await setProfileLanguage(db, profile.id, lang).catch(() => null);
+    const role = await ensureAdminRole(db, adminIds, profile);
 
     const settings = await getShopSettings(env);
     const shopName = settings?.shopNameEn ?? "Sabacos";
@@ -350,7 +364,7 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
 
     await ctx.reply(welcomeMessage(lang, shopName, firstName), {
       parse_mode: "HTML",
-      reply_markup: mainMenuKeyboard(env, false, profile.role),
+      reply_markup: mainMenuKeyboard(env, false, role),
     });
   });
 
@@ -539,12 +553,18 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     const from = ctx.from;
     if (!from) return;
     const db = getDb(env);
-    const profile = await getProfileByTelegramId(db, from.id).catch(() => null);
-    if (profile?.role !== "admin") {
+    const adminIds = parseAdminTelegramIds(env.ADMIN_TELEGRAM_IDS);
+    const profile =
+      (await getProfileByTelegramId(db, from.id).catch(() => null)) ??
+      (await upsertTelegramProfile(db, { telegramId: from.id }).catch(() => null));
+    const role = await ensureAdminRole(db, adminIds, profile);
+    if (!isAdminRole(role)) {
       await ctx.reply("You are not authorized to access the admin panel.");
       return;
     }
-    await ctx.reply(`Admin Dashboard: ${env.ADMIN_DASHBOARD_URL}`);
+    await ctx.reply(`Admin Dashboard: ${env.ADMIN_DASHBOARD_URL}`, {
+      reply_markup: mainMenuKeyboard(env, false, role),
+    });
   });
 
   // User shared their number via the bot's request keyboard → save it and
