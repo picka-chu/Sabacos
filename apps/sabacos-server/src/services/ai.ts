@@ -72,6 +72,7 @@ async function geminiGenerate(
   model: string,
   parts: { text?: string; inlineData?: { mimeType: string; data: string } }[],
   timeoutMs = 60_000,
+  maxOutputTokens = 800,
 ): Promise<string | null> {
   if (!geminiEnabled(env)) return null;
   const url = `${GEMINI_BASE}/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
@@ -81,7 +82,7 @@ async function geminiGenerate(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 800 },
+        generationConfig: { temperature: 0.4, maxOutputTokens },
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
@@ -359,6 +360,7 @@ async function geminiVisionProduct(env: aiEnv, imageDataUrl: string): Promise<Pr
         { inlineData: { mimeType, data: base64Data } },
       ],
       60_000,
+      2048,
     );
 
     if (!raw) {
@@ -393,6 +395,7 @@ async function geminiTranslateToAmharic(env: aiEnv, englishText: string): Promis
       },
     ],
     30_000,
+    1024,
   );
   if (raw) {
     console.log("[ai/translate/am] Translation succeeded, length:", raw.length);
