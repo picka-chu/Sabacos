@@ -6,19 +6,33 @@ import { getProfileByTelegramId, upsertTelegramProfile } from "../db/profiles.js
 import { listActiveCategories } from "../db/catalog.js";
 import { getSettings } from "../db/settings.js";
 import { r2Config, r2Put } from "../services/r2.js";
+import { aiEnabled, llamaVisionProduct } from "../services/ai.js";
 
 /**
  * /addproduct — admin-only guided wizard for creating a product from
- * Telegram. Self-contained on purpose (no imports from bot.ts at load time)
- * to avoid a module cycle; postProductToChannel is imported lazily.
+ * Telegram. The product photo comes first so the AI vision pipeline can
+ * auto-fill name + description; the admin then sets price, stock and the
+ * category (chosen from the available categories). Self-contained on purpose
+ * (no imports from bot.ts at load time) to avoid a module cycle;
+ * postProductToChannel is imported lazily.
  */
 
-type DraftStep = "name" | "nameAm" | "price" | "stock" | "category" | "photo" | "confirm";
+type DraftStep =
+  | "photo" // waiting for a photo / image URL / manual name / /skip
+  | "aiReview" // waiting for the AI-draft buttons
+  | "name"
+  | "description"
+  | "price"
+  | "stock"
+  | "category"
+  | "confirm";
 
 interface ProductDraft {
   step: DraftStep;
   nameEn?: string;
   nameAm?: string;
+  descriptionEn?: string;
+  descriptionAm?: string;
   priceHalala?: number;
   stock?: number;
   categoryId?: string | null;
@@ -97,8 +111,8 @@ async function askName(ctx: Context): Promise<void> {
   await ctx.reply("📝 Send the product name (English):");
 }
 
-async function askNameAm(ctx: Context): Promise<void> {
-  await ctx.reply("🗣  Send the Amharic name — or /skip to use the English name.");
+async function askDescription(ctx: Context): Promise<void> {
+  await ctx.reply("📄 Send a short marketing description — or /skip for none.");
 }
 
 async function askPrice(ctx: Context): Promise<void> {
@@ -117,9 +131,9 @@ async function askCategory(ctx: Context, env: AppEnv): Promise<void> {
     if (draft) {
       draft.categoryId = null;
       draft.categoryLabel = "None";
-      draft.step = "photo";
+      draft.step = "confirm";
     }
-    await askPhoto(ctx);
+    await sendConfirm(ctx, env);
     return;
   }
   const visible = cats.slice(0, 20);
@@ -135,13 +149,6 @@ async function askCategory(ctx: Context, env: AppEnv): Promise<void> {
   await ctx.reply("🏷  Pick a category:", { reply_markup: kb });
 }
 
-async function askPhoto(ctx: Context): Promise<void> {
-  const draft = getDraft(ctx.chat!.id);
-  if (!draft) return;
-  draft.step = "photo";
-  await ctx.reply("🖼  Send a photo, or paste an image URL — or /skip for no photo.");
-}
-
 async function sendConfirm(ctx: Context, env: AppEnv): Promise<void> {
   const draft = getDraft(ctx.chat!.id);
   if (!draft) return;
@@ -151,6 +158,7 @@ async function sendConfirm(ctx: Context, env: AppEnv): Promise<void> {
     "",
     `Name (EN): ${htmlEsc(draft.nameEn ?? "")}`,
     `Name (AM): ${htmlEsc(draft.nameAm ?? draft.nameEn ?? "")}`,
+    `Description: ${htmlEsc((draft.descriptionEn ?? "none").slice(0, 120))}`,
     `Price: ${formatETB(draft.priceHalala ?? 0)} ETB`,
     `Stock: ${draft.stock ?? 0}`,
     `Category: ${htmlEsc(draft.categoryLabel ?? "None")}`,
@@ -162,6 +170,65 @@ async function sendConfirm(ctx: Context, env: AppEnv): Promise<void> {
       .text("✅  Create", "ap:confirm")
       .text("❌  Cancel", "ap:cancel"),
   });
+}
+
+/** Runs the AI vision pipeline on the captured image and shows the draft. */
+async function runVision(ctx: Context, env: AppEnv): Promise<void> {
+  const draft = getDraft(ctx.chat!.id);
+  if (!draft || !draft.imageBytes) return;
+
+  const aiAvailable = aiEnabled(env) || Boolean(env.GEMINI_API_KEY);
+
+  if (!aiAvailable) {
+    draft.step = "name";
+    await ctx.reply("AI isn't configured on this server — enter the details manually.");
+    await askName(ctx);
+    return;
+  }
+
+  await ctx.reply("🤖 Analyzing the image — this can take up to a minute…");
+
+  try {
+    const dataUrl = `data:${draft.imageMime ?? "image/jpeg"};base64,${Buffer.from(draft.imageBytes).toString("base64")}`;
+    const ai = await llamaVisionProduct(env, dataUrl);
+    if (!ai) throw new Error("vision returned no draft");
+
+    draft.nameEn = ai.nameEn;
+    draft.nameAm = ai.nameAm;
+    draft.descriptionEn = ai.descriptionEn;
+    draft.descriptionAm = ai.descriptionAm;
+    draft.step = "aiReview";
+
+    await ctx.reply(
+      [
+        "🤖 <b>AI draft from the image</b>",
+        "",
+        `📛 <b>${htmlEsc(ai.nameEn)}</b>`,
+        `🗣  ${htmlEsc(ai.nameAm)}`,
+        `📄 ${htmlEsc(ai.descriptionEn).slice(0, 220)}`,
+        "",
+        "Do you want to use these details?",
+      ].join("\n"),
+      {
+        parse_mode: "HTML",
+        reply_markup: new InlineKeyboard()
+          .text("✅  Use it", "ap:ai:use")
+          .text("✏️  Edit", "ap:ai:edit")
+          .row()
+          .text("🔁  Retry", "ap:ai:retry")
+          .text("🚫  Skip AI", "ap:ai:skip"),
+      },
+    );
+  } catch (err) {
+    console.error("addproduct: vision failed", err);
+    draft.step = "aiReview";
+    await ctx.reply("🤖 I couldn't read that image. What do you want to do?", {
+      reply_markup: new InlineKeyboard()
+        .text("✏️  Enter manually", "ap:ai:edit")
+        .text("🔁  Retry", "ap:ai:retry")
+        .text("🚫  Skip AI", "ap:ai:skip"),
+    });
+  }
 }
 
 /** Stores image bytes in Cloudflare R2 when configured, else Supabase Storage. */
@@ -218,8 +285,8 @@ async function createProduct(ctx: Context, env: AppEnv): Promise<void> {
       sku,
       name_en: nameEn,
       name_am: nameAm,
-      description_en: "",
-      description_am: "",
+      description_en: draft.descriptionEn ?? "",
+      description_am: draft.descriptionAm ?? "",
       price_halala: draft.priceHalala ?? 0,
       cost_halala: 0,
       compare_at_halala: null,
@@ -235,7 +302,14 @@ async function createProduct(ctx: Context, env: AppEnv): Promise<void> {
 
   const product = data as unknown as ProductRowShape;
 
-  if (draft.imageBytes) {
+  if (draft.imageUrl) {
+    const { error: imgErr } = await db
+      .from("products")
+      .update({ image_urls: [draft.imageUrl] })
+      .eq("id", product.id);
+    if (imgErr) console.error("addproduct: attach image url failed", imgErr);
+    product.image_urls = [draft.imageUrl];
+  } else if (draft.imageBytes) {
     try {
       const path = `products/${product.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
       const url = await storeImageBytes(env, db, path, draft.imageBytes, draft.imageMime ?? "image/jpeg");
@@ -254,7 +328,7 @@ async function createProduct(ctx: Context, env: AppEnv): Promise<void> {
   await ctx.reply(
     [
       `✅ <b>${htmlEsc(nameEn)}</b> created!`,
-      `💰 ${formatETB(product.price_halala)} ETB · Stock ${draft.stock ?? 0}`,
+      `💰 ${formatETB(product.price_halala)} ETB · Stock ${draft.stock ?? 0} · ${htmlEsc(draft.categoryLabel ?? "No category")}`,
     ].join("\n"),
     {
       parse_mode: "HTML",
@@ -282,22 +356,18 @@ export function registerAddProductWizard(bot: Bot, env: AppEnv): void {
       return;
     }
 
-    const draft: ProductDraft = { step: "name" };
-    const args = (ctx.match as string | undefined)?.trim();
-    if (args) {
-      draft.nameEn = args.slice(0, 200);
-      draft.nameAm = args.slice(0, 200);
-      draft.step = "price";
-    }
-    setDraft(ctx.chat!.id, draft);
-    await ctx.reply("🛍  Add a product — type /cancel anytime.", {
-      reply_markup: { force_reply: true } as never,
-    });
-    if (args) {
-      await askPrice(ctx);
-    } else {
-      await askName(ctx);
-    }
+    setDraft(ctx.chat!.id, { step: "photo" });
+    await ctx.reply(
+      [
+        "🛍  <b>Add a product</b> — I'll guide you through it.",
+        "",
+        "Send a <b>photo</b> of the product (or paste an image URL), and I'll use AI to fill the name & description for you.",
+        "",
+        "Or send <code>/skip</code> to enter everything manually.",
+        "Type <code>/cancel</code> anytime to stop.",
+      ].join("\n"),
+      { parse_mode: "HTML" },
+    );
   });
 
   bot.callbackQuery(/^ap:/, async (ctx) => {
@@ -326,6 +396,42 @@ export function registerAddProductWizard(bot: Bot, env: AppEnv): void {
       return;
     }
 
+    if (data === "ap:ai:use") {
+      await ctx.answerCallbackQuery();
+      if (!draft) return;
+      draft.step = "price";
+      await askPrice(ctx);
+      return;
+    }
+
+    if (data === "ap:ai:edit") {
+      await ctx.answerCallbackQuery();
+      if (!draft) return;
+      draft.step = "name";
+      await askName(ctx);
+      return;
+    }
+
+    if (data === "ap:ai:retry") {
+      await ctx.answerCallbackQuery();
+      if (draft?.imageBytes) {
+        await runVision(ctx, env);
+      }
+      return;
+    }
+
+    if (data === "ap:ai:skip") {
+      await ctx.answerCallbackQuery();
+      if (!draft) return;
+      draft.nameEn = undefined;
+      draft.nameAm = undefined;
+      draft.descriptionEn = undefined;
+      draft.descriptionAm = undefined;
+      draft.step = "name";
+      await askName(ctx);
+      return;
+    }
+
     if (data.startsWith("ap:cat:")) {
       await ctx.answerCallbackQuery();
       if (draft) {
@@ -333,7 +439,7 @@ export function registerAddProductWizard(bot: Bot, env: AppEnv): void {
         draft.categoryId = id === "skip" ? null : id;
         draft.categoryLabel = id === "skip" ? "None" : draft.categoryLabel;
       }
-      await askPhoto(ctx);
+      await sendConfirm(ctx, env);
       return;
     }
   });
@@ -350,21 +456,56 @@ export function registerAddProductWizard(bot: Bot, env: AppEnv): void {
 
     try {
       switch (draft.step) {
-        case "name":
-          if (text.length === 0) {
+        case "photo": {
+          if (text.toLowerCase() === SKIP) {
+            draft.step = "name";
             await askName(ctx);
+            return;
+          }
+          if (/^https?:\/\//i.test(text)) {
+            await ctx.reply("🔍 Downloading image…");
+            try {
+              const res = await fetch(text);
+              if (!res.ok) throw new Error(`fetch failed (${res.status})`);
+              const buf = await res.arrayBuffer();
+              draft.imageUrl = text;
+              draft.imageBytes = new Uint8Array(buf);
+              draft.imageMime = res.headers.get("content-type") ?? "image/jpeg";
+              await runVision(ctx, env);
+            } catch (err) {
+              console.error("addproduct: url download failed", err);
+              await ctx.reply("⚠️ Couldn't download that URL. Send the photo directly as an image, or /skip to enter the details manually.");
+            }
             return;
           }
           draft.nameEn = text.slice(0, 200);
           draft.nameAm = text.slice(0, 200);
-          draft.step = "nameAm";
-          await askNameAm(ctx);
+          draft.step = "description";
+          await askDescription(ctx);
           return;
-        case "nameAm":
-          if (text.toLowerCase() === SKIP) {
-            draft.nameAm = draft.nameEn;
+        }
+        case "aiReview":
+        case "confirm":
+          await ctx.reply("Use the buttons below, or /cancel to stop.");
+          return;
+        case "name":
+          draft.nameEn = text.slice(0, 200);
+          draft.nameAm = text.slice(0, 200);
+          if (!draft.descriptionEn) {
+            draft.step = "description";
+            await askDescription(ctx);
           } else {
-            draft.nameAm = text.slice(0, 200);
+            draft.step = "price";
+            await askPrice(ctx);
+          }
+          return;
+        case "description":
+          if (text.toLowerCase() === SKIP) {
+            draft.descriptionEn = "";
+            draft.descriptionAm = "";
+          } else {
+            draft.descriptionEn = text.slice(0, 2000);
+            draft.descriptionAm = text.slice(0, 2000);
           }
           draft.step = "price";
           await askPrice(ctx);
@@ -395,22 +536,6 @@ export function registerAddProductWizard(bot: Bot, env: AppEnv): void {
           await askCategory(ctx, env);
           return;
         }
-        case "photo": {
-          if (text.toLowerCase() === SKIP) {
-            draft.imageUrl = null;
-            draft.imageBytes = undefined;
-            await sendConfirm(ctx, env);
-            return;
-          }
-          if (/^https?:\/\//i.test(text)) {
-            draft.imageUrl = text;
-            draft.imageBytes = undefined;
-            await sendConfirm(ctx, env);
-            return;
-          }
-          await ctx.reply("📷 Send a photo or an image URL — or /skip for no photo.");
-          return;
-        }
         default:
           await ctx.reply("Use the buttons below, or /cancel to stop.");
       }
@@ -424,7 +549,8 @@ export function registerAddProductWizard(bot: Bot, env: AppEnv): void {
     const draft = drafts.get(ctx.chat.id);
     return !!draft && draft.step === "photo";
   }, async (ctx) => {
-    const draft = drafts.get(ctx.chat.id)!;
+    const chatId = ctx.chat.id;
+    const draft = drafts.get(chatId)!;
     try {
       const photo = ctx.message.photo?.[ctx.message.photo.length - 1];
       if (!photo) throw new Error("no photo");
@@ -433,13 +559,13 @@ export function registerAddProductWizard(bot: Bot, env: AppEnv): void {
       const res = await fetch(`https://api.telegram.org/file/bot${env.BOT_TOKEN}/${file.file_path}`);
       if (!res.ok) throw new Error(`download failed (${res.status})`);
       const buf = await res.arrayBuffer();
+      draft.imageUrl = null;
       draft.imageBytes = new Uint8Array(buf);
       draft.imageMime = (file as { mime_type?: string }).mime_type ?? "image/jpeg";
-      draft.imageUrl = null;
-      await sendConfirm(ctx, env);
+      await runVision(ctx, env);
     } catch (err) {
       console.error("addproduct: photo download failed", err);
-      await ctx.reply("⚠️ Could not download that photo. Send it again, paste a URL, or /skip.");
+      await ctx.reply("⚠️ Could not download that photo. Send it again, paste a URL, /skip to enter manually, or /cancel.");
     }
   });
 }
