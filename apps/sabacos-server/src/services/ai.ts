@@ -438,9 +438,10 @@ export async function llamaVisionProduct(
     return null;
   }
 
-  // 3. Name stays in English (brand names shouldn't be translated).
-  //    Use Gemini to translate ONLY the description to Amharic.
-  draft = { ...draft, nameAm: draft.nameEn };
+  // 3. Keep the model's Amharic name/description when provided — only fall
+  //    back to the English name if the model left name_am empty, and use
+  //    Gemini to refresh the Amharic description translation.
+  draft = { ...draft, nameAm: (draft.nameAm ?? "").trim() ? draft.nameAm : draft.nameEn };
 
   if (geminiEnabled(env)) {
     const amDesc = await geminiTranslateToAmharic(env, draft.descriptionEn);
