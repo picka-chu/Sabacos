@@ -438,16 +438,17 @@ export async function llamaVisionProduct(
     return null;
   }
 
-  // 3. Keep the model's Amharic name/description when provided — only fall
-  //    back to the English name if the model left name_am empty, and use
-  //    Gemini to refresh the Amharic description translation.
+  // 3. Fill the draft fields straight from the model's JSON response:
+  //    name_en / name_am / description_en / description_am. Only fall back
+  //    to the English name when name_am is empty, and only translate the
+  //    description to Amharic when the model didn't return one.
   draft = { ...draft, nameAm: (draft.nameAm ?? "").trim() ? draft.nameAm : draft.nameEn };
 
-  if (geminiEnabled(env)) {
+  if (geminiEnabled(env) && !(draft.descriptionAm ?? "").trim()) {
     const amDesc = await geminiTranslateToAmharic(env, draft.descriptionEn);
     if (amDesc) {
       draft = { ...draft, descriptionAm: amDesc };
-      console.log("[ai/vision] Amharic description translated via Gemini");
+      console.log("[ai/vision] Amharic description translated via Gemini (model returned none)");
     } else {
       console.warn("[ai/vision] Amharic translation failed, keeping original description_am");
     }
