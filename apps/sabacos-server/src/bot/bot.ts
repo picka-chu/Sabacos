@@ -20,6 +20,7 @@ import { getOrderById, getOrderItems, getOrderWithItems, getOrdersByProfile } fr
 import { getProductsByIds } from "../db/catalog.js";
 import { getProfileByTelegramId, saveProfileContact, setProfileLanguage, upsertTelegramProfile } from "../db/profiles.js";
 import { getWaitlistConfig, getWaitlistEntryByCode } from "../db/waitlist.js";
+import { registerAddProductWizard } from "./addProduct.js";
 
 function escapeHtml(value: string): string {
   return value
@@ -749,6 +750,8 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
   bot.catch((err) => {
     console.error("bot error", err.error);
   });
+
+  registerAddProductWizard(bot, env);
 
   return bot;
 }
