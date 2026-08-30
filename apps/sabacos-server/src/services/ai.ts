@@ -8,8 +8,8 @@ export type aiEnv = { CLOUDFLARE_ACCOUNT_ID?: string; CLOUDFLARE_API_TOKEN?: str
 export const EMBED_MODEL = "@cf/baai/bge-small-en-v1.5"; // 384 dims
 export const AD_COPY_MODEL = "@cf/meta/llama-3.2-3b-instruct";
 export const NOTIFY_MODEL = "@cf/meta/llama-3.1-8b-instruct";
-export const GEMINI_DEFAULT_MODEL = "gemini-3.6-flash";
-export const GEMINI_VISION_FALLBACKS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+export const GEMINI_DEFAULT_MODEL = "gemini-3.5-flash-lite";
+export const GEMINI_VISION_FALLBACKS = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
 
 function geminiModel(env: aiEnv): string {
   return env.GEMINI_MODEL || GEMINI_DEFAULT_MODEL;
