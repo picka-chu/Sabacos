@@ -103,6 +103,11 @@ function clearDraft(chatId: number): void {
   drafts.delete(chatId);
 }
 
+/** True while a /addproduct wizard session is open for a chat. */
+export function hasActiveDraft(chatId: number): boolean {
+  return drafts.has(chatId);
+}
+
 function formatETB(halala: number): string {
   return (halala / 100).toFixed(2);
 }

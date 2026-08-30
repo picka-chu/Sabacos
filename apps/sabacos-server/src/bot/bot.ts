@@ -20,7 +20,7 @@ import { getOrderById, getOrderItems, getOrderWithItems, getOrdersByProfile } fr
 import { getProductsByIds } from "../db/catalog.js";
 import { getProfileByTelegramId, saveProfileContact, setProfileLanguage, upsertTelegramProfile } from "../db/profiles.js";
 import { getWaitlistConfig, getWaitlistEntryByCode } from "../db/waitlist.js";
-import { registerAddProductWizard } from "./addProduct.js";
+import { registerAddProductWizard, hasActiveDraft } from "./addProduct.js";
 
 function escapeHtml(value: string): string {
   return value
@@ -535,11 +535,14 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     });
   });
 
-  // Friendly fallback for any non-command text that isn't a menu button
+  // Friendly fallback for any non-command text that isn't a menu button.
+  // Silent while an /addproduct wizard session is active so it can't
+  // swallow wizard input (name / price / stock replies, etc.).
   bot.on("message:text").filter(
     (ctx) =>
       !ctx.message.text.startsWith("/") &&
-      !MENU_BUTTON_TEXTS.includes(ctx.message.text.trim() as (typeof MENU_BUTTON_TEXTS)[number]),
+      !MENU_BUTTON_TEXTS.includes(ctx.message.text.trim() as (typeof MENU_BUTTON_TEXTS)[number]) &&
+      !hasActiveDraft(ctx.chat.id),
     async (ctx) => {
     const settings = await getShopSettings(env);
     const shopName = settings?.shopNameEn ?? "Sabacos";
