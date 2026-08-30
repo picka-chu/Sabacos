@@ -9,6 +9,7 @@ export const EMBED_MODEL = "@cf/baai/bge-small-en-v1.5"; // 384 dims
 export const AD_COPY_MODEL = "@cf/meta/llama-3.2-3b-instruct";
 export const NOTIFY_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 export const GEMINI_DEFAULT_MODEL = "gemini-3.6-flash";
+export const GEMINI_VISION_FALLBACKS = ["gemini-2.5-flash", "gemini-2.0-flash"];
 
 function geminiModel(env: aiEnv): string {
   return env.GEMINI_MODEL || GEMINI_DEFAULT_MODEL;
@@ -322,7 +323,11 @@ async function cfVisionProduct(env: aiEnv, imageDataUrl: string): Promise<Produc
   return parseVisionResponse(rawText);
 }
 
-/** Gemini 2.0 Flash vision via REST */
+/**
+ * Gemini vision via REST — tries the configured model first, then falls back
+ * through the known-good vision models so one bad/partial model name can't
+ * sink the whole pipeline.
+ */
 async function geminiVisionProduct(env: aiEnv, imageDataUrl: string): Promise<ProductDraft | null> {
   // Parse data:image/jpeg;base64,... → mime + base64
   const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -335,24 +340,42 @@ async function geminiVisionProduct(env: aiEnv, imageDataUrl: string): Promise<Pr
   const imgSizeKb = Math.round((base64Data.length * 3) / 4 / 1024);
   console.log(`[ai/vision/gemini] Starting — image ~${imgSizeKb}KB, mime: ${mimeType}`);
 
-  const raw = await geminiGenerate(
-    env,
+  const models = [
     geminiModel(env),
-    [
-      { text: VISION_PROMPT },
-      { inlineData: { mimeType, data: base64Data } },
-    ],
-    60_000,
-  );
+    ...GEMINI_VISION_FALLBACKS,
+  ];
 
-  if (!raw) {
-    console.error("[ai/vision/gemini] No response returned from Gemini");
-    return null;
+  const seen = new Set<string>();
+  for (const model of models) {
+    if (seen.has(model)) continue;
+    seen.add(model);
+    console.log(`[ai/vision/gemini] Trying model ${model}`);
+
+    const raw = await geminiGenerate(
+      env,
+      model,
+      [
+        { text: VISION_PROMPT },
+        { inlineData: { mimeType, data: base64Data } },
+      ],
+      60_000,
+    );
+
+    if (!raw) {
+      console.error(`[ai/vision/gemini] No response from ${model}`);
+      continue;
+    }
+
+    console.log(`[ai/vision/gemini] ${model} raw response length:`, raw.length);
+    const parsed = parseVisionResponse(raw);
+    if (parsed) {
+      console.log(`[ai/vision/gemini] ${model} succeeded`);
+      return parsed;
+    }
   }
 
-  console.log("[ai/vision/gemini] Raw response length:", raw.length);
-  console.log("[ai/vision/gemini] Raw response (full):", raw);
-  return parseVisionResponse(raw);
+  console.error("[ai/vision/gemini] All models failed");
+  return null;
 }
 
 /** Translate English description to Amharic via Gemini */
@@ -381,9 +404,9 @@ async function geminiTranslateToAmharic(env: aiEnv, englishText: string): Promis
 
 /**
  * Analyzes a product photo and drafts bilingual name + description.
- * Tries Cloudflare Llama first, falls back to Gemini Flash.
- * Uses Gemini for Amharic description translation (name stays in English).
- * Returns null only if all providers fail.
+ * Tries Gemini first (most reliable, best quality), falls back to
+ * Cloudflare Llama vision. Uses Gemini for Amharic description translation
+ * (name stays in English). Returns null only if all providers fail.
  */
 export async function llamaVisionProduct(
   env: aiEnv,
@@ -391,20 +414,20 @@ export async function llamaVisionProduct(
 ): Promise<ProductDraft | null> {
   let draft: ProductDraft | null = null;
 
-  // 1. Try Cloudflare for vision identification
-  if (aiEnabled(env)) {
-    draft = await cfVisionProduct(env, imageDataUrl);
-    if (draft) console.log("[ai/vision] Cloudflare succeeded:", draft.nameEn);
-    else console.warn("[ai/vision] Cloudflare failed, trying Gemini…");
-  } else {
-    console.log("[ai/vision] Cloudflare not configured, going straight to Gemini");
-  }
-
-  // 2. Fallback to Gemini for vision
-  if (!draft && geminiEnabled(env)) {
+  // 1. Try Gemini first — best quality, most reliable
+  if (geminiEnabled(env)) {
     draft = await geminiVisionProduct(env, imageDataUrl);
     if (draft) console.log("[ai/vision] Gemini succeeded:", draft.nameEn);
-    else console.error("[ai/vision] Gemini vision also failed");
+    else console.warn("[ai/vision] Gemini failed, trying Cloudflare…");
+  } else {
+    console.log("[ai/vision] Gemini not configured, going straight to Cloudflare");
+  }
+
+  // 2. Fallback to Cloudflare Llama for vision
+  if (!draft && aiEnabled(env)) {
+    draft = await cfVisionProduct(env, imageDataUrl);
+    if (draft) console.log("[ai/vision] Cloudflare succeeded:", draft.nameEn);
+    else console.error("[ai/vision] Cloudflare vision also failed");
   }
 
   if (!draft) {
