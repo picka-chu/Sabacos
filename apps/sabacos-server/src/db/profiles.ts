@@ -98,7 +98,7 @@ export async function setProfileLanguage(
 }
 
 export async function getProfileByAuthId(db: Db, authId: string): Promise<Profile | null> {
-  const { data, error } = await db.from("profiles").select("*").eq("id", authId).single();
+  const { data, error } = await db.from("profiles").select("*").eq("auth_id", authId).single();
   if (error) {
     if (error.code === "PGRST116") return null;
     throw new Error(`getProfileByAuthId: ${error.message}`);
