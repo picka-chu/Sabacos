@@ -195,7 +195,8 @@ async function runVision(ctx: Context, env: AppEnv): Promise<void> {
 
   try {
     const dataUrl = `data:${draft.imageMime ?? "image/jpeg"};base64,${Buffer.from(draft.imageBytes).toString("base64")}`;
-    const ai = await llamaVisionProduct(env, dataUrl);
+    const settings = await getSettings(getDb(env)).catch(() => null);
+    const ai = await llamaVisionProduct(env, dataUrl, settings?.aiVisionModel ?? undefined);
     if (!ai) throw new Error("vision returned no draft");
 
     draft.nameEn = ai.nameEn;

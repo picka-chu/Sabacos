@@ -726,6 +726,7 @@ adminRoutes.put("/settings", async (c) => {
     shopNameAm: input.shop_name_am,
     shopPhone: input.shop_phone,
     adminChannelId: input.admin_channel_id,
+    aiVisionModel: input.ai_vision_model ?? undefined,
     deliveryConfig: (input.delivery_config as DeliveryConfig | undefined) ?? undefined,
   });
   return c.json({ settings });
@@ -857,7 +858,8 @@ adminRoutes.post("/ai/product-image", async (c) => {
     try {
       const imageDataUrl = `data:${mime};base64,${bytes.toString("base64")}`;
       console.log(`[ai/product-image] Calling vision AI — base64 ~${Math.round(imageDataUrl.length / 1024)}KB`);
-      draft = await llamaVisionProduct(env, imageDataUrl);
+      const settings = await getSettings(db).catch(() => null);
+      draft = await llamaVisionProduct(env, imageDataUrl, settings?.aiVisionModel ?? undefined);
       if (draft) {
         console.log(`[ai/product-image] Draft OK: "${draft.nameEn}" / "${draft.nameAm}"`);
       } else {

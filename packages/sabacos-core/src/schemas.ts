@@ -244,6 +244,7 @@ const settingsFieldsSchema = z.object({
   shop_name_am: z.string().min(1),
   shop_phone: z.string(),
   admin_channel_id: z.string().nullable(),
+  ai_vision_model: z.string().max(80).nullable().optional(),
   delivery_config: z.unknown().optional(),
 });
 
@@ -255,6 +256,7 @@ export const settingsRowSchema = settingsFieldsSchema.transform(
     shopNameAm: r.shop_name_am,
     shopPhone: r.shop_phone,
     adminChannelId: r.admin_channel_id,
+    aiVisionModel: r.ai_vision_model ?? null,
     deliveryConfig:
       r.delivery_config != null ? mergeDeliveryConfig(r.delivery_config) : null,
   }),

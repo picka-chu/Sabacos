@@ -6,6 +6,14 @@ import { useAuth } from "../auth.js";
 
 const etbToHalala = (etb: string) => Math.round((Number(etb) || 0) * 100);
 
+export const AI_VISION_MODELS = [
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+];
+
 export function SettingsPage() {
   const token = useAuth((s) => s.token);
   const [form, setForm] = useState({
@@ -15,6 +23,7 @@ export function SettingsPage() {
     shopNameAm: "",
     shopPhone: "",
     adminChannelId: "",
+    aiVisionModel: "",
   });
   const [deliveryConfigJson, setDeliveryConfigJson] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,6 +43,7 @@ export function SettingsPage() {
           shopNameAm: s.shopNameAm,
           shopPhone: s.shopPhone,
           adminChannelId: s.adminChannelId ?? "",
+          aiVisionModel: s.aiVisionModel ?? "",
         });
         setDeliveryConfigJson(
           JSON.stringify(s.deliveryConfig ?? null, null, 2),
@@ -69,6 +79,7 @@ export function SettingsPage() {
           shop_name_am: form.shopNameAm.trim(),
           shop_phone: form.shopPhone.trim(),
           admin_channel_id: form.adminChannelId.trim() || null,
+          ai_vision_model: form.aiVisionModel.trim() || null,
           ...(deliveryConfig !== undefined ? { delivery_config: deliveryConfig } : {}),
         },
         token,
@@ -163,6 +174,25 @@ export function SettingsPage() {
               be an admin of the channel. New products are auto-posted here.
             </small>
           </div>
+        </div>
+
+        <h3 style={{ margin: "20px 0 12px", fontSize: 15 }}>AI</h3>
+        <div className="field">
+          <label>Gemini vision model (product AI analysis)</label>
+          <select
+            className="input"
+            value={form.aiVisionModel}
+            onChange={(e) => setForm((f) => ({ ...f, aiVisionModel: e.target.value }))}
+          >
+            <option value="">Default (env GEMINI_MODEL)</option>
+            {AI_VISION_MODELS.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+          <small className="muted" style={{ display: "block", marginTop: 6 }}>
+            Used by the dashboard &amp; the /addproduct bot command. If the chosen model fails,
+            it automatically falls back to gemini-3.5-flash-lite → gemini-2.5-flash.
+          </small>
         </div>
 
         <h3 style={{ margin: "20px 0 12px", fontSize: 15 }}>Zone pricing (JSON)</h3>

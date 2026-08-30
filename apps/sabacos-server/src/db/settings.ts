@@ -32,6 +32,8 @@ export async function updateSettings(db: Db, patch: Partial<Settings>): Promise<
     shopPhone: patch.shopPhone ?? current.shopPhone,
     adminChannelId:
       patch.adminChannelId === undefined ? current.adminChannelId : patch.adminChannelId,
+    aiVisionModel:
+      patch.aiVisionModel === undefined ? (current.aiVisionModel ?? null) : patch.aiVisionModel,
     deliveryConfig:
       patch.deliveryConfig === undefined
         ? (current.deliveryConfig ?? null)
@@ -48,6 +50,7 @@ export async function updateSettings(db: Db, patch: Partial<Settings>): Promise<
         shop_name_am: merged.shopNameAm,
         shop_phone: merged.shopPhone,
         admin_channel_id: merged.adminChannelId,
+        ai_vision_model: merged.aiVisionModel ?? null,
         ...(merged.deliveryConfig ? { delivery_config: merged.deliveryConfig } : {}),
       },
     })

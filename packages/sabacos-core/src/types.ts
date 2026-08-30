@@ -172,6 +172,7 @@ export interface Settings {
   shopNameAm: string;
   shopPhone: string;
   adminChannelId: string | null;
+  aiVisionModel?: string | null;
   deliveryConfig?: DeliveryConfig | null;
 }
 

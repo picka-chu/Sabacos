@@ -9,7 +9,12 @@ export const EMBED_MODEL = "@cf/baai/bge-small-en-v1.5"; // 384 dims
 export const AD_COPY_MODEL = "@cf/meta/llama-3.2-3b-instruct";
 export const NOTIFY_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 export const GEMINI_DEFAULT_MODEL = "gemini-3.5-flash-lite";
-export const GEMINI_VISION_FALLBACKS = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
+export const GEMINI_VISION_FALLBACKS = [
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+];
 
 function geminiModel(env: aiEnv): string {
   return env.GEMINI_MODEL || GEMINI_DEFAULT_MODEL;
@@ -325,11 +330,16 @@ async function cfVisionProduct(env: aiEnv, imageDataUrl: string): Promise<Produc
 }
 
 /**
- * Gemini vision via REST — tries the configured model first, then falls back
- * through the known-good vision models so one bad/partial model name can't
- * sink the whole pipeline.
+ * Gemini vision via REST — tries the configured/preferred model first, then
+ * falls back through the known-good vision models so one bad/partial model
+ * name can't sink the whole pipeline. `preferredModel` (from the admin
+ * "AI vision model" setting) wins over the env var when provided.
  */
-async function geminiVisionProduct(env: aiEnv, imageDataUrl: string): Promise<ProductDraft | null> {
+async function geminiVisionProduct(
+  env: aiEnv,
+  imageDataUrl: string,
+  preferredModel?: string,
+): Promise<ProductDraft | null> {
   // Parse data:image/jpeg;base64,... → mime + base64
   const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match || !match[1] || !match[2]) {
@@ -342,7 +352,8 @@ async function geminiVisionProduct(env: aiEnv, imageDataUrl: string): Promise<Pr
   console.log(`[ai/vision/gemini] Starting — image ~${imgSizeKb}KB, mime: ${mimeType}`);
 
   const models = [
-    geminiModel(env),
+    (preferredModel ?? "").trim() || geminiModel(env),
+    GEMINI_DEFAULT_MODEL,
     ...GEMINI_VISION_FALLBACKS,
   ];
 
@@ -414,12 +425,15 @@ async function geminiTranslateToAmharic(env: aiEnv, englishText: string): Promis
 export async function llamaVisionProduct(
   env: aiEnv,
   imageDataUrl: string,
+  preferredModel?: string,
 ): Promise<ProductDraft | null> {
   let draft: ProductDraft | null = null;
 
-  // 1. Try Gemini first — best quality, most reliable
+  // 1. Try Gemini first — best quality, most reliable. The admin can pick
+  //    the model ("AI vision model" setting); otherwise env.GEMINI_MODEL or
+  //    the default is used.
   if (geminiEnabled(env)) {
-    draft = await geminiVisionProduct(env, imageDataUrl);
+    draft = await geminiVisionProduct(env, imageDataUrl, preferredModel);
     if (draft) console.log("[ai/vision] Gemini succeeded:", draft.nameEn);
     else console.warn("[ai/vision] Gemini failed, trying Cloudflare…");
   } else {
