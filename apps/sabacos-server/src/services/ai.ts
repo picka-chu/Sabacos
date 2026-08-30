@@ -239,11 +239,11 @@ const DRAFT_JSON = z.object({
 
 const VISION_PROMPT =
   "Identify this cosmetics/beauty product from the photo. " +
-  "Write a concise product listing. Respond ONLY with JSON: " +
+  "Write a full e-commerce product listing. Respond ONLY with JSON: " +
   '{"name_en": "product name in English (max 60 chars)", ' +
   '"name_am": "SAME name, do not translate — keep the brand name as-is. For Amharic script, optionally transliterate but do not translate the meaning.", ' +
-  '"description_en": "2 sentence marketing description in English", ' +
-  '"description_am": "2 sentence marketing description in Amharic script"}';
+  '"description_en": "An e-commerce product description in English: 3-4 sentences covering the main benefit, key features (formula/notes/finish/coverage as visible or commonly known for this type), how to use it briefly, and who it is ideal for. Write persuasively to drive a purchase decision, never a generic mention of the product name to describe itself.", ' +
+  '"description_am": "The same e-commerce description in natural, marketing-friendly Amharic script (not a literal translation)".}';
 
 function parseVisionResponse(raw: string): ProductDraft | null {
   console.log("[ai/vision/parse] Input length:", raw.length, "starts with:", raw.slice(0, 120));
