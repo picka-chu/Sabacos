@@ -163,6 +163,22 @@ app.get("/api/v1/delivery/config", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Admin auth + routes — registered BEFORE the user routers below, otherwise
+// their global requireUser middleware (mounted loosely at /api/v1) shadows
+// /api/v1/admin/* and rejects browser bearer logins with the shop's
+// "Open Sabacos from inside Telegram" message. Admin accepts either a
+// Telegram initData session or a Supabase bearer token.
+// ---------------------------------------------------------------------------
+app.get("/api/v1/admin/me", adminMeHandler);
+
+app.use("/api/v1/admin/*", rateLimit({ windowMs: 60_000, limit: 20, keyGenerator: ipKey }), requireAdmin);
+app.route("/api/v1/admin", adminRoutes);
+app.route("/api/v1/admin/waitlist", waitlistAdminRoutes);
+app.route("/api/v1/admin/discounts", discountAdminRoutes);
+app.route("/api/v1/admin/users", userManagementRoutes);
+app.route("/api/v1/admin/referrals", adminReferralRoutes);
+
+// ---------------------------------------------------------------------------
 // Authenticated user routes — tighter rate limit: 30 req/min
 // ---------------------------------------------------------------------------
 app.use("/api/v1/checkout", rateLimit({ windowMs: 60_000, limit: 10, keyGenerator: ipKey }), requireUser);
@@ -171,21 +187,6 @@ app.route("/api/v1/cart", cartRoutes);
 app.route("/api/v1", orderRoutes);
 app.route("/api/v1/waitlist", waitlistRoutes);
 app.route("/api/v1/referral", referralRoutes);
-
-// ---------------------------------------------------------------------------
-// Admin auth — lightweight Telegram initData check (no bearer required)
-// ---------------------------------------------------------------------------
-app.get("/api/v1/admin/me", adminMeHandler);
-
-// ---------------------------------------------------------------------------
-// Admin routes — 20 req/min, requires admin bearer or Telegram initData
-// ---------------------------------------------------------------------------
-app.use("/api/v1/admin/*", rateLimit({ windowMs: 60_000, limit: 20, keyGenerator: ipKey }), requireAdmin);
-app.route("/api/v1/admin", adminRoutes);
-app.route("/api/v1/admin/waitlist", waitlistAdminRoutes);
-app.route("/api/v1/admin/discounts", discountAdminRoutes);
-app.route("/api/v1/admin/users", userManagementRoutes);
-app.route("/api/v1/admin/referrals", adminReferralRoutes);
 
 // ---------------------------------------------------------------------------
 // Server lifecycle
