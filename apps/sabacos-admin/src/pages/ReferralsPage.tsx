@@ -2,67 +2,34 @@ import { useEffect, useState } from "react";
 import { Users, Gift, Wallet, TrendingUp, Settings, Save, Activity, AlertTriangle, Play, Pause } from "lucide-react";
 import { api, apiErrorMessage } from "../lib/api.js";
 import { useAuth } from "../auth.js";
+import { useToast } from "../components/toast.js";
+import { SkeletonCard } from "../components/ui.js";
 
 interface ReferralStats {
-  totalReferrals: number;
-  qualifiedReferrals: number;
-  pendingReferrals: number;
-  monthlyCommissionHalala: number;
-  totalSpinsUsed: number;
-  totalCoupons: number;
-  totalWalletBalance: number;
+  totalReferrals: number; qualifiedReferrals: number; pendingReferrals: number;
+  monthlyCommissionHalala: number; totalSpinsUsed: number; totalCoupons: number; totalWalletBalance: number;
 }
-
 interface ReferralSettings {
-  isActive: boolean;
-  firstPurchasePercent: number;
-  repeatPurchasePercent: number;
-  monthlyCapHalala: number;
-  referralsPerSpin: number;
-  maxSpinsPerWeek: number;
-  spinExpiryDays: number;
-  couponExpiryDays: number;
-  maxCouponsPerOrder: number;
-  minAccountAgeDays: number;
-  minOrderValueHalala: number;
-  rewardBudgetPct: number;
-  topPrizeCostHalala: number;
-  adaptiveEnabled: boolean;
-  lastAdjustmentDate: string | null;
-  dailySpendCapHalala: number;
-  dailySpendCapEnabled: boolean;
-  guardrailCommissionMin: number;
-  guardrailCommissionMax: number;
-  guardrailSpinCapMin: number;
-  guardrailSpinCapMax: number;
-  guardrailPrizeCostMin: number;
-  guardrailPrizeCostMax: number;
-  guardrailMaxBudgetPct: number;
+  isActive: boolean; firstPurchasePercent: number; repeatPurchasePercent: number;
+  monthlyCapHalala: number; referralsPerSpin: number; maxSpinsPerWeek: number;
+  spinExpiryDays: number; couponExpiryDays: number; maxCouponsPerOrder: number;
+  minAccountAgeDays: number; minOrderValueHalala: number; rewardBudgetPct: number;
+  topPrizeCostHalala: number; adaptiveEnabled: boolean; lastAdjustmentDate: string | null;
+  dailySpendCapHalala: number; dailySpendCapEnabled: boolean;
+  guardrailCommissionMin: number; guardrailCommissionMax: number;
+  guardrailSpinCapMin: number; guardrailSpinCapMax: number;
+  guardrailPrizeCostMin: number; guardrailPrizeCostMax: number; guardrailMaxBudgetPct: number;
 }
-
 interface RollingAverages {
-  rollingRevenue7d: number;
-  rollingCogs7d: number;
-  rollingRefunds7d: number;
-  rollingGrossProfit7d: number;
-  rollingRewardSpend7d: number;
-  targetRewardSpend7d: number;
-  dailyPool: number;
-  spendRatio: number;
+  rollingRevenue7d: number; rollingCogs7d: number; rollingRefunds7d: number;
+  rollingGrossProfit7d: number; rollingRewardSpend7d: number; targetRewardSpend7d: number;
+  dailyPool: number; spendRatio: number;
 }
-
 interface AdjustmentLogEntry {
-  id: string;
-  date: string;
-  triggerType: string;
-  spendRatio: number | null;
-  oldCommissionPct: number | null;
-  newCommissionPct: number | null;
-  oldWeeklySpinCap: number | null;
-  newWeeklySpinCap: number | null;
-  reason: string | null;
-  flaggedForReview: boolean;
-  createdAt: string;
+  id: string; date: string; triggerType: string; spendRatio: number | null;
+  oldCommissionPct: number | null; newCommissionPct: number | null;
+  oldWeeklySpinCap: number | null; newWeeklySpinCap: number | null;
+  reason: string | null; flaggedForReview: boolean; createdAt: string;
 }
 
 export function ReferralsPage() {
@@ -80,55 +47,46 @@ export function ReferralsPage() {
   const [walletAmount, setWalletAmount] = useState(0);
   const [walletNote, setWalletNote] = useState("");
   const [walletMsg, setWalletMsg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const toast = useToast((s) => s.add);
 
   const load = () => {
     if (!token) return;
     api.get<ReferralStats>("/admin/referrals/stats", token).then(setStats).catch(() => {});
     api.get<{ settings: ReferralSettings }>("/admin/referrals/settings", token).then((res) => setSettings(res.settings)).catch(() => {});
     api.get<{ rolling: RollingAverages }>("/admin/referrals/metrics/latest", token).then((res) => setRolling(res.rolling)).catch(() => {});
-    api.get<{ log: AdjustmentLogEntry[] }>("/admin/referrals/adjust/log?limit=10", token).then((res) => setAdjustLog(res.log)).catch(() => {});
+    api.get<{ log: AdjustmentLogEntry[] }>("/admin/referrals/adjust/log?limit=10", token).then((res) => setAdjustLog(res.log)).catch(() => {})
+      .finally(() => setLoading(false));
   };
 
   useEffect(load, [token]);
 
   const saveSettings = async () => {
     if (!token || !settings) return;
-    setSaving(true);
-    setError(null);
+    setSaving(true); setError(null);
     try {
       await api.patch("/admin/referrals/settings", settings, token);
-      setEditing(false);
+      setEditing(false); toast("success", "Settings saved");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
+      toast("error", err instanceof Error ? err.message : "Save failed");
+    } finally { setSaving(false); }
   };
 
   const runAggregation = async () => {
     if (!token) return;
     setAggregating(true);
-    try {
-      await api.post("/admin/referrals/metrics/aggregate", {}, token);
-      load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Aggregation failed");
-    } finally {
-      setAggregating(false);
-    }
+    try { await api.post("/admin/referrals/metrics/aggregate", {}, token); load(); }
+    catch (err) { setError(err instanceof Error ? err.message : "Aggregation failed"); }
+    finally { setAggregating(false); }
   };
 
   const runAdjustment = async () => {
     if (!token) return;
     setAdjusting(true);
-    try {
-      await api.post("/admin/referrals/adjust", {}, token);
-      load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Adjustment failed");
-    } finally {
-      setAdjusting(false);
-    }
+    try { await api.post("/admin/referrals/adjust", {}, token); load(); }
+    catch (err) { setError(err instanceof Error ? err.message : "Adjustment failed"); }
+    finally { setAdjusting(false); }
   };
 
   const toggleAdaptive = async () => {
@@ -136,9 +94,7 @@ export function ReferralsPage() {
     try {
       await api.patch("/admin/referrals/adaptive", { enabled: !settings.adaptiveEnabled }, token);
       setSettings({ ...settings, adaptiveEnabled: !settings.adaptiveEnabled });
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    }
+    } catch (err) { setError(apiErrorMessage(err)); }
   };
 
   const walletAdjust = async (action: "credit" | "debit") => {
@@ -146,25 +102,20 @@ export function ReferralsPage() {
     setWalletMsg(null);
     try {
       await api.post(`/admin/referrals/wallet/${action}`, {
-        profileId: walletProfileId.trim(),
-        amountHalala: Math.round(walletAmount * 100),
+        profileId: walletProfileId.trim(), amountHalala: Math.round(walletAmount * 100),
         description: walletNote.trim() || `Admin ${action}`,
       }, token);
-      setWalletMsg(`${action === "credit" ? "Credited" : "Debited"} ${walletAmount.toFixed(2)} ETB`);
-      setWalletAmount(0);
-      setWalletNote("");
-      load();
-    } catch (err) {
-      setWalletMsg(apiErrorMessage(err));
-    }
+      const msg = `${action === "credit" ? "Credited" : "Debited"} ${walletAmount.toFixed(2)} ETB`;
+      setWalletMsg(msg); toast("success", msg);
+      setWalletAmount(0); setWalletNote(""); load();
+    } catch (err) { setWalletMsg(apiErrorMessage(err)); }
   };
 
   const formatETB = (halala: number) => `${(halala / 100).toFixed(2)} ETB`;
-
   const spendRatioColor = (ratio: number) => {
     if (ratio > 1.5) return "var(--danger)";
-    if (ratio > 1.1) return "var(--warning, #f59e0b)";
-    if (ratio < 0.5) return "var(--info, #3b82f6)";
+    if (ratio > 1.1) return "var(--warning)";
+    if (ratio < 0.5) return "var(--info)";
     return "var(--success)";
   };
 
@@ -174,56 +125,45 @@ export function ReferralsPage() {
         <h1 className="page-title">Referral & Rewards</h1>
       </div>
 
-      {error && <div className="card" style={{ color: "var(--danger)", marginBottom: 14 }}>{error}</div>}
+      {error && (
+        <div style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", background: "var(--danger-soft)", color: "var(--danger)", fontSize: 13, marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
 
-      {/* Stats Overview */}
-      <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginBottom: 24 }}>
-        <div className="card">
-          <div className="row" style={{ alignItems: "center", gap: 10 }}>
-            <Users size={20} className="muted" />
-            <div>
-              <div className="muted" style={{ fontSize: 12 }}>Referrals</div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>{stats?.totalReferrals ?? 0}</div>
-            </div>
+      {loading ? (
+        <div className="stagger">
+          <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginBottom: 24 }}>
+            {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
           </div>
         </div>
-        <div className="card">
-          <div className="row" style={{ alignItems: "center", gap: 10 }}>
-            <TrendingUp size={20} className="muted" />
-            <div>
-              <div className="muted" style={{ fontSize: 12 }}>Qualified</div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>{stats?.qualifiedReferrals ?? 0}</div>
+      ) : (
+        <div className="grid stagger" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginBottom: 24 }}>
+          {[
+            { icon: Users, label: "Referrals", value: stats?.totalReferrals ?? 0 },
+            { icon: TrendingUp, label: "Qualified", value: stats?.qualifiedReferrals ?? 0 },
+            { icon: Gift, label: "Spins Used", value: stats?.totalSpinsUsed ?? 0 },
+            { icon: Wallet, label: "Wallet Balance", value: formatETB(stats?.totalWalletBalance ?? 0) },
+          ].map((s, i) => (
+            <div key={i} className="card stat-card">
+              <div className="row" style={{ alignItems: "center", gap: 10 }}>
+                <s.icon size={20} className="muted" />
+                <div>
+                  <div className="muted" style={{ fontSize: 11 }}>{s.label}</div>
+                  <div style={{ fontSize: 20, fontWeight: 700 }}>{s.value}</div>
+                </div>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
-        <div className="card">
-          <div className="row" style={{ alignItems: "center", gap: 10 }}>
-            <Gift size={20} className="muted" />
-            <div>
-              <div className="muted" style={{ fontSize: 12 }}>Spins Used</div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>{stats?.totalSpinsUsed ?? 0}</div>
-            </div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="row" style={{ alignItems: "center", gap: 10 }}>
-            <Wallet size={20} className="muted" />
-            <div>
-              <div className="muted" style={{ fontSize: 12 }}>Wallet Balance</div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>{formatETB(stats?.totalWalletBalance ?? 0)}</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Wallet Adjustment */}
       <div className="card" style={{ marginBottom: 24 }}>
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 15 }}>
-            <Wallet size={16} style={{ marginRight: 6, verticalAlign: "middle" }} />
-            Wallet Adjustment
-          </h3>
-        </div>
+        <h3 style={{ margin: "0 0 16px", fontSize: 15 }}>
+          <Wallet size={16} style={{ marginRight: 6, verticalAlign: "middle" }} />
+          Wallet Adjustment
+        </h3>
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
           <div className="field">
             <label>Profile ID</label>
@@ -250,7 +190,7 @@ export function ReferralsPage() {
         </div>
       </div>
 
-      {/* Adaptive Engine Dashboard */}
+      {/* Adaptive Engine */}
       <div className="card" style={{ marginBottom: 24 }}>
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 15 }}>
@@ -258,10 +198,7 @@ export function ReferralsPage() {
             Adaptive Engine
           </h3>
           <div className="row" style={{ gap: 8 }}>
-            <button
-              className={`btn btn-sm ${settings?.adaptiveEnabled ? "btn-primary" : "btn-outline"}`}
-              onClick={toggleAdaptive}
-            >
+            <button className={`btn btn-sm ${settings?.adaptiveEnabled ? "btn-primary" : "btn-outline"}`} onClick={toggleAdaptive}>
               {settings?.adaptiveEnabled ? <><Pause size={14} /> Enabled</> : <><Play size={14} /> Disabled</>}
             </button>
             <button className="btn btn-outline btn-sm" onClick={runAggregation} disabled={aggregating}>
@@ -273,30 +210,21 @@ export function ReferralsPage() {
           </div>
         </div>
 
-        {/* Rolling Averages */}
         {rolling && (
           <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
-            <div style={{ padding: 12, background: "var(--bg-secondary, #f8fafc)", borderRadius: 8 }}>
-              <div className="muted" style={{ fontSize: 11 }}>7d Revenue</div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>{formatETB(rolling.rollingRevenue7d)}</div>
-            </div>
-            <div style={{ padding: 12, background: "var(--bg-secondary, #f8fafc)", borderRadius: 8 }}>
-              <div className="muted" style={{ fontSize: 11 }}>7d Gross Profit</div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>{formatETB(rolling.rollingGrossProfit7d)}</div>
-            </div>
-            <div style={{ padding: 12, background: "var(--bg-secondary, #f8fafc)", borderRadius: 8 }}>
-              <div className="muted" style={{ fontSize: 11 }}>7d Reward Spend</div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>{formatETB(rolling.rollingRewardSpend7d)}</div>
-            </div>
-            <div style={{ padding: 12, background: "var(--bg-secondary, #f8fafc)", borderRadius: 8 }}>
-              <div className="muted" style={{ fontSize: 11 }}>Target Spend</div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>{formatETB(rolling.targetRewardSpend7d)}</div>
-            </div>
-            <div style={{ padding: 12, background: "var(--bg-secondary, #f8fafc)", borderRadius: 8 }}>
-              <div className="muted" style={{ fontSize: 11 }}>Daily Pool</div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>{formatETB(rolling.dailyPool)}</div>
-            </div>
-            <div style={{ padding: 12, background: "var(--bg-secondary, #f8fafc)", borderRadius: 8, borderLeft: `4px solid ${spendRatioColor(rolling.spendRatio)}` }}>
+            {[
+              { label: "7d Revenue", value: formatETB(rolling.rollingRevenue7d) },
+              { label: "7d Gross Profit", value: formatETB(rolling.rollingGrossProfit7d) },
+              { label: "7d Reward Spend", value: formatETB(rolling.rollingRewardSpend7d) },
+              { label: "Target Spend", value: formatETB(rolling.targetRewardSpend7d) },
+              { label: "Daily Pool", value: formatETB(rolling.dailyPool) },
+            ].map((m, i) => (
+              <div key={i} style={{ padding: 12, background: "var(--surface-2)", borderRadius: "var(--radius-sm)" }}>
+                <div className="muted" style={{ fontSize: 11 }}>{m.label}</div>
+                <div style={{ fontSize: 16, fontWeight: 600 }}>{m.value}</div>
+              </div>
+            ))}
+            <div style={{ padding: 12, background: "var(--surface-2)", borderRadius: "var(--radius-sm)", borderLeft: `4px solid ${spendRatioColor(rolling.spendRatio)}` }}>
               <div className="muted" style={{ fontSize: 11 }}>Spend Ratio</div>
               <div style={{ fontSize: 16, fontWeight: 600, color: spendRatioColor(rolling.spendRatio) }}>
                 {(rolling.spendRatio * 100).toFixed(1)}%
@@ -308,53 +236,38 @@ export function ReferralsPage() {
           </div>
         )}
 
-        {/* Guardrails */}
         {settings && (
           <details style={{ marginTop: 12 }}>
-            <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--muted)" }}>
-              Guardrails & Configuration
-            </summary>
+            <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--muted)" }}>Guardrails & Configuration</summary>
             <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginTop: 12 }}>
-              <div className="field">
-                <label>Reward Budget %</label>
-                <input className="input" type="number" min="1" max="50" value={settings.rewardBudgetPct}
-                  onChange={(e) => setSettings({ ...settings, rewardBudgetPct: Number(e.target.value) })} disabled={!editing} />
-              </div>
-              <div className="field">
-                <label>Commission Min %</label>
-                <input className="input" type="number" min="1" max="20" value={settings.guardrailCommissionMin}
-                  onChange={(e) => setSettings({ ...settings, guardrailCommissionMin: Number(e.target.value) })} disabled={!editing} />
-              </div>
-              <div className="field">
-                <label>Commission Max %</label>
-                <input className="input" type="number" min="1" max="20" value={settings.guardrailCommissionMax}
-                  onChange={(e) => setSettings({ ...settings, guardrailCommissionMax: Number(e.target.value) })} disabled={!editing} />
-              </div>
-              <div className="field">
-                <label>Spin Cap Min</label>
-                <input className="input" type="number" min="1" max="10" value={settings.guardrailSpinCapMin}
-                  onChange={(e) => setSettings({ ...settings, guardrailSpinCapMin: Number(e.target.value) })} disabled={!editing} />
-              </div>
-              <div className="field">
-                <label>Spin Cap Max</label>
-                <input className="input" type="number" min="1" max="20" value={settings.guardrailSpinCapMax}
-                  onChange={(e) => setSettings({ ...settings, guardrailSpinCapMax: Number(e.target.value) })} disabled={!editing} />
-              </div>
-              <div className="field">
-                <label>Prize Cost Min (ETB)</label>
-                <input className="input" type="number" min="0" value={settings.guardrailPrizeCostMin / 100}
-                  onChange={(e) => setSettings({ ...settings, guardrailPrizeCostMin: Number(e.target.value) * 100 })} disabled={!editing} />
-              </div>
-              <div className="field">
-                <label>Prize Cost Max (ETB)</label>
-                <input className="input" type="number" min="0" value={settings.guardrailPrizeCostMax / 100}
-                  onChange={(e) => setSettings({ ...settings, guardrailPrizeCostMax: Number(e.target.value) * 100 })} disabled={!editing} />
-              </div>
-              <div className="field">
-                <label>Max Budget %</label>
-                <input className="input" type="number" min="1" max="50" value={settings.guardrailMaxBudgetPct}
-                  onChange={(e) => setSettings({ ...settings, guardrailMaxBudgetPct: Number(e.target.value) })} disabled={!editing} />
-              </div>
+              {[
+                { label: "Reward Budget %", key: "rewardBudgetPct" as const, min: 1, max: 50 },
+                { label: "Commission Min %", key: "guardrailCommissionMin" as const, min: 1, max: 20 },
+                { label: "Commission Max %", key: "guardrailCommissionMax" as const, min: 1, max: 20 },
+                { label: "Spin Cap Min", key: "guardrailSpinCapMin" as const, min: 1, max: 10 },
+                { label: "Spin Cap Max", key: "guardrailSpinCapMax" as const, min: 1, max: 20 },
+                { label: "Max Budget %", key: "guardrailMaxBudgetPct" as const, min: 1, max: 50 },
+              ].map((f) => (
+                <div key={f.key} className="field">
+                  <label>{f.label}</label>
+                  <input className="input" type="number" min={f.min} max={f.max}
+                    value={settings[f.key] ?? 0}
+                    onChange={(e) => setSettings({ ...settings, [f.key]: Number(e.target.value) })}
+                    disabled={!editing} />
+                </div>
+              ))}
+              {[
+                { label: "Prize Cost Min (ETB)", key: "guardrailPrizeCostMin" as const, div: 100 },
+                { label: "Prize Cost Max (ETB)", key: "guardrailPrizeCostMax" as const, div: 100 },
+              ].map((f) => (
+                <div key={f.key} className="field">
+                  <label>{f.label}</label>
+                  <input className="input" type="number" min="0"
+                    value={(settings[f.key] ?? 0) / f.div}
+                    onChange={(e) => setSettings({ ...settings, [f.key]: Number(e.target.value) * f.div })}
+                    disabled={!editing} />
+                </div>
+              ))}
             </div>
           </details>
         )}
@@ -362,46 +275,35 @@ export function ReferralsPage() {
 
       {/* Adjustment Log */}
       {adjustLog.length > 0 && (
-        <div className="card" style={{ marginBottom: 24 }}>
-          <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>
-            <AlertTriangle size={16} style={{ marginRight: 6, verticalAlign: "middle" }} />
-            Recent Adjustments
-          </h3>
+        <div className="card" style={{ marginBottom: 24, padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-light)" }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>
+              <AlertTriangle size={16} style={{ marginRight: 6, verticalAlign: "middle" }} />
+              Recent Adjustments
+            </h3>
+          </div>
           <div style={{ overflowX: "auto" }}>
             <table className="table responsive-table" style={{ fontSize: 13 }}>
               <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Type</th>
-                  <th>Spend Ratio</th>
-                  <th>Commission</th>
-                  <th>Spin Cap</th>
-                  <th>Reason</th>
-                </tr>
+                <tr><th>Date</th><th>Type</th><th>Spend Ratio</th><th>Commission</th><th>Spin Cap</th><th>Reason</th></tr>
               </thead>
               <tbody>
                 {adjustLog.map((entry) => (
-                  <tr key={entry.id} style={entry.flaggedForReview ? { background: "#fef2f2" } : {}}>
+                  <tr key={entry.id} style={entry.flaggedForReview ? { background: "var(--danger-soft)" } : {}}>
                     <td data-label="Date">{entry.date}</td>
                     <td data-label="Type">
                       <span className={`badge ${entry.triggerType === "manual" ? "badge-info" : entry.flaggedForReview ? "badge-danger" : "badge-success"}`}>
                         {entry.triggerType}
                       </span>
                     </td>
-                    <td data-label="Spend Ratio">
-                      {entry.spendRatio != null ? `${(entry.spendRatio * 100).toFixed(1)}%` : "—"}
-                    </td>
+                    <td data-label="Spend Ratio">{entry.spendRatio != null ? `${(entry.spendRatio * 100).toFixed(1)}%` : "—"}</td>
                     <td data-label="Commission">
                       {entry.oldCommissionPct}%
-                      {entry.newCommissionPct != null && entry.newCommissionPct !== entry.oldCommissionPct && (
-                        <> → {entry.newCommissionPct}%</>
-                      )}
+                      {entry.newCommissionPct != null && entry.newCommissionPct !== entry.oldCommissionPct && <> → {entry.newCommissionPct}%</>}
                     </td>
                     <td data-label="Spin Cap">
                       {entry.oldWeeklySpinCap}
-                      {entry.newWeeklySpinCap != null && entry.newWeeklySpinCap !== entry.oldWeeklySpinCap && (
-                        <> → {entry.newWeeklySpinCap}</>
-                      )}
+                      {entry.newWeeklySpinCap != null && entry.newWeeklySpinCap !== entry.oldWeeklySpinCap && <> → {entry.newWeeklySpinCap}</>}
                     </td>
                     <td data-label="Reason" style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {entry.reason ?? "—"}
@@ -414,7 +316,7 @@ export function ReferralsPage() {
         </div>
       )}
 
-      {/* Manual Settings */}
+      {/* Program Settings */}
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 15 }}>
@@ -425,6 +327,7 @@ export function ReferralsPage() {
             <button className="btn btn-outline btn-sm" onClick={() => setEditing(true)}>Edit</button>
           ) : (
             <button className="btn btn-primary btn-sm" onClick={saveSettings} disabled={saving}>
+              {saving && <span className="spinner" />}
               <Save size={14} /> {saving ? "Saving..." : "Save"}
             </button>
           )}

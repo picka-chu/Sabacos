@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Tags } from "lucide-react";
 import type { Category } from "@sabacos/core";
 import { api } from "../lib/api.js";
 import { useAuth } from "../auth.js";
+import { useToast } from "../components/toast.js";
+import { SkeletonTable, EmptyState } from "../components/ui.js";
 
 export function CategoriesPage() {
   const token = useAuth((s) => s.token);
@@ -11,12 +13,15 @@ export function CategoriesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const toast = useToast((s) => s.add);
 
   const load = () => {
     api
       .get<{ categories: Category[] }>("/admin/categories", token ?? undefined)
       .then((res) => setCategories(res.categories))
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load categories"));
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load categories"))
+      .finally(() => setLoading(false));
   };
 
   useEffect(load, [token]);
@@ -44,13 +49,16 @@ export function CategoriesPage() {
     try {
       if (editingId) {
         await api.patch(`/admin/categories/${editingId}`, body, token ?? undefined);
+        toast("success", "Category updated");
       } else {
         await api.post("/admin/categories", body, token ?? undefined);
+        toast("success", "Category created");
       }
       reset();
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
+      toast("error", err instanceof Error ? err.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -60,15 +68,18 @@ export function CategoriesPage() {
     if (!window.confirm(`Delete category "${c.nameEn}"?`)) return;
     try {
       await api.del(`/admin/categories/${c.id}`, token ?? undefined);
+      toast("success", "Category deleted");
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
+      toast("error", "Delete failed");
     }
   };
 
   const toggle = async (c: Category) => {
     try {
       await api.patch(`/admin/categories/${c.id}`, { isActive: !c.isActive }, token ?? undefined);
+      toast("success", c.isActive ? "Category hidden" : "Category activated");
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Update failed");
@@ -81,11 +92,15 @@ export function CategoriesPage() {
         <h1 className="page-title">Categories</h1>
       </div>
 
-      {error && <div className="card" style={{ color: "var(--danger)", marginBottom: 14 }}>{error}</div>}
+      {error && (
+        <div style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", background: "var(--danger-soft)", color: "var(--danger)", fontSize: 13, marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-form" style={{ alignItems: "start" }}>
         <form onSubmit={submit} className="card">
-          <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15 }}>
             {editingId ? "Edit category" : "New category"}
           </h3>
           <div className="field">
@@ -106,20 +121,23 @@ export function CategoriesPage() {
           </div>
           <div className="row">
             <button className="btn btn-primary" disabled={busy}>
+              {busy && <span className="spinner" />}
               <Plus size={15} />
               {editingId ? "Save" : "Add"}
             </button>
             {editingId && (
-              <button type="button" className="btn btn-outline" onClick={reset}>
-                Cancel
-              </button>
+              <button type="button" className="btn btn-outline" onClick={reset}>Cancel</button>
             )}
           </div>
         </form>
 
-        <div className="card" style={{ padding: 0 }}>
-          {categories.length === 0 ? (
-            <div className="empty">No categories yet</div>
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          {loading ? (
+            <SkeletonTable rows={4} cols={4} />
+          ) : categories.length === 0 ? (
+            <EmptyState icon={<Tags size={40} strokeWidth={1.25} />} title="No categories yet">
+              <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>Create your first category to organize products.</p>
+            </EmptyState>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table className="table responsive-table">

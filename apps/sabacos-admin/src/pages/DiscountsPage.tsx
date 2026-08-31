@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Power } from "lucide-react";
+import { Plus, Pencil, Trash2, Power, Percent } from "lucide-react";
 import { formatETB } from "@sabacos/core";
 import { api } from "../lib/api.js";
 import { useAuth } from "../auth.js";
+import { useToast } from "../components/toast.js";
+import { SkeletonTable, EmptyState } from "../components/ui.js";
 
 type DiscountType = "percent" | "fixed";
 type DiscountScope = "all" | "category" | "products";
@@ -24,17 +26,8 @@ interface Discount {
   updatedAt: string;
 }
 
-interface Category {
-  id: string;
-  nameEn: string;
-  nameAm: string;
-}
-
-interface ProductLite {
-  id: string;
-  nameEn: string;
-  nameAm: string;
-}
+interface Category { id: string; nameEn: string; nameAm: string; }
+interface ProductLite { id: string; nameEn: string; nameAm: string; }
 
 interface FormState {
   name: string;
@@ -51,17 +44,9 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  name: "",
-  description: "",
-  discountType: "percent",
-  discountValue: 10,
-  scope: "all",
-  categoryId: null,
-  productIds: [],
-  minSubtotal: "",
-  startsAt: "",
-  endsAt: "",
-  isActive: true,
+  name: "", description: "", discountType: "percent", discountValue: 10,
+  scope: "all", categoryId: null, productIds: [], minSubtotal: "",
+  startsAt: "", endsAt: "", isActive: true,
 };
 
 function scopeLabel(scope: DiscountScope): string {
@@ -84,95 +69,56 @@ export function DiscountsPage() {
   const [products, setProducts] = useState<ProductLite[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Discount | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
   const now = Date.now();
+  const toast = useToast((s) => s.add);
 
   const load = useCallback(() => {
     if (!token) return;
     api
       .get<{ discounts: Discount[] }>("/admin/discounts", token)
       .then((res) => setDiscounts(res.discounts))
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load discounts"));
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load discounts"))
+      .finally(() => setLoading(false));
   }, [token]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     if (!token) return;
-    api
-      .get<{ categories: Category[] }>("/admin/categories", token)
-      .then((res) => setCategories(res.categories))
-      .catch(() => undefined);
-    api
-      .get<{ items: ProductLite[] }>("/admin/products?pageSize=500", token)
-      .then((res) => setProducts(res.items))
-      .catch(() => undefined);
+    api.get<{ categories: Category[] }>("/admin/categories", token).then((res) => setCategories(res.categories)).catch(() => undefined);
+    api.get<{ items: ProductLite[] }>("/admin/products?pageSize=500", token).then((res) => setProducts(res.items)).catch(() => undefined);
   }, [token]);
 
-  const startCreate = () => {
-    setEditing(null);
-    setForm(EMPTY_FORM);
-    setShowForm(true);
-    setError(null);
-  };
-
+  const startCreate = () => { setEditing(null); setForm(EMPTY_FORM); setShowForm(true); setError(null); };
   const startEdit = (d: Discount) => {
     setEditing(d);
     setForm({
-      name: d.name,
-      description: d.description ?? "",
-      discountType: d.discountType,
-      discountValue: d.discountValue,
-      scope: d.scope,
-      categoryId: d.categoryId ?? "",
-      productIds: d.productIds,
-      minSubtotal: d.minSubtotalHalala != null ? (d.minSubtotalHalala / 100).toString() : "",
-      startsAt: d.startsAt ? d.startsAt.slice(0, 16) : "",
-      endsAt: d.endsAt ? d.endsAt.slice(0, 16) : "",
+      name: d.name, description: d.description ?? "", discountType: d.discountType,
+      discountValue: d.discountValue, scope: d.scope, categoryId: d.categoryId ?? "",
+      productIds: d.productIds, minSubtotal: d.minSubtotalHalala != null ? (d.minSubtotalHalala / 100).toString() : "",
+      startsAt: d.startsAt ? d.startsAt.slice(0, 16) : "", endsAt: d.endsAt ? d.endsAt.slice(0, 16) : "",
       isActive: d.isActive,
     });
-    setShowForm(true);
-    setError(null);
+    setShowForm(true); setError(null);
   };
 
   const saveForm = async () => {
     if (!token) return;
-    if (!form.name.trim()) {
-      setError("Name is required");
-      return;
-    }
-    if (form.discountType === "percent" && (form.discountValue <= 0 || form.discountValue > 100)) {
-      setError("Percentage must be between 1 and 100");
-      return;
-    }
-    if (form.discountType === "fixed" && form.discountValue <= 0) {
-      setError("Discount amount must be greater than 0");
-      return;
-    }
-    if (form.scope === "category" && !form.categoryId) {
-      setError("Pick a category");
-      return;
-    }
-    if (form.scope === "products" && form.productIds.length === 0) {
-      setError("Pick at least one product");
-      return;
-    }
-    if (form.startsAt && form.endsAt && new Date(form.startsAt) > new Date(form.endsAt)) {
-      setError("Start date must be before the end date");
-      return;
-    }
+    if (!form.name.trim()) { setError("Name is required"); return; }
+    if (form.discountType === "percent" && (form.discountValue <= 0 || form.discountValue > 100)) { setError("Percentage must be between 1 and 100"); return; }
+    if (form.discountType === "fixed" && form.discountValue <= 0) { setError("Discount amount must be greater than 0"); return; }
+    if (form.scope === "category" && !form.categoryId) { setError("Pick a category"); return; }
+    if (form.scope === "products" && form.productIds.length === 0) { setError("Pick at least one product"); return; }
+    if (form.startsAt && form.endsAt && new Date(form.startsAt) > new Date(form.endsAt)) { setError("Start date must be before the end date"); return; }
 
     const payload = {
-      name: form.name.trim(),
-      description: form.description.trim(),
-      discountType: form.discountType,
-      discountValue: Number(form.discountValue),
-      scope: form.scope,
-      categoryId: form.scope === "category" ? form.categoryId : null,
+      name: form.name.trim(), description: form.description.trim(),
+      discountType: form.discountType, discountValue: Number(form.discountValue),
+      scope: form.scope, categoryId: form.scope === "category" ? form.categoryId : null,
       productIds: form.scope === "products" ? form.productIds : [],
       minSubtotalHalala: form.minSubtotal ? Math.round(Number(form.minSubtotal) * 100) : null,
       startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
@@ -180,31 +126,29 @@ export function DiscountsPage() {
       isActive: form.isActive,
     };
 
-    setSaving(true);
-    setError(null);
+    setSaving(true); setError(null);
     try {
       if (editing) {
         await api.patch<{ discount: Discount }>(`/admin/discounts/${editing.id}`, payload, token);
+        toast("success", "Discount updated");
       } else {
         await api.post<{ discount: Discount }>("/admin/discounts", payload, token);
+        toast("success", "Discount created");
       }
-      setShowForm(false);
-      load();
+      setShowForm(false); load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");
-    } finally {
-      setSaving(false);
-    }
+      toast("error", err instanceof Error ? err.message : "Failed to save");
+    } finally { setSaving(false); }
   };
 
   const toggleActive = async (d: Discount) => {
     if (!token) return;
     try {
       await api.patch<{ discount: Discount }>(`/admin/discounts/${d.id}`, { isActive: !d.isActive }, token);
+      toast("success", d.isActive ? "Discount paused" : "Discount activated");
       load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update");
-    }
+    } catch (err) { setError(err instanceof Error ? err.message : "Failed to update"); }
   };
 
   const remove = async (d: Discount) => {
@@ -212,14 +156,12 @@ export function DiscountsPage() {
     if (!confirm(`Delete discount "${d.name}"?`)) return;
     try {
       await api.del(`/admin/discounts/${d.id}`, token);
+      toast("success", "Discount deleted");
       load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete");
-    }
+    } catch (err) { setError(err instanceof Error ? err.message : "Failed to delete"); }
   };
 
-  const categoryName = (id: string | null) =>
-    categories.find((c) => c.id === id)?.nameEn ?? "—";
+  const categoryName = (id: string | null) => categories.find((c) => c.id === id)?.nameEn ?? "—";
 
   return (
     <>
@@ -230,7 +172,11 @@ export function DiscountsPage() {
         </button>
       </div>
 
-      {error && <div className="card" style={{ color: "var(--danger)", marginBottom: 16 }}>{error}</div>}
+      {error && (
+        <div style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", background: "var(--danger-soft)", color: "var(--danger)", fontSize: 13, marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
 
       {showForm && (
         <div className="card" style={{ marginBottom: 16 }}>
@@ -283,9 +229,7 @@ export function DiscountsPage() {
               <select className="input" value={form.categoryId ?? ""}
                 onChange={(e) => setForm({ ...form, categoryId: e.target.value || null })}>
                 <option value="">Select a category</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nameEn}</option>
-                ))}
+                {categories.map((c) => (<option key={c.id} value={c.id}>{c.nameEn}</option>))}
               </select>
             </div>
           )}
@@ -296,20 +240,18 @@ export function DiscountsPage() {
               <div className="form-list">
                 {products.length === 0 && <p className="muted" style={{ fontSize: 13 }}>No products found</p>}
                 {products.map((p) => (
-                  <label key={p.id} className="form-check" style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer" }}>
+                  <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13 }}>
                     <input
                       type="checkbox"
                       checked={form.productIds.includes(p.id)}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          productIds: e.target.checked
-                            ? [...form.productIds, p.id]
-                            : form.productIds.filter((id) => id !== p.id),
-                        })
-                      }
+                      onChange={(e) => setForm({
+                        ...form,
+                        productIds: e.target.checked
+                          ? [...form.productIds, p.id]
+                          : form.productIds.filter((id) => id !== p.id),
+                      })}
                     />
-                    <span style={{ fontSize: 13 }}>{p.nameEn}</span>
+                    <span>{p.nameEn}</span>
                   </label>
                 ))}
               </div>
@@ -348,81 +290,86 @@ export function DiscountsPage() {
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
             <button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button>
             <button className="btn btn-primary" onClick={saveForm} disabled={saving}>
+              {saving && <span className="spinner" />}
               {saving ? "Saving..." : editing ? "Save changes" : "Create discount"}
             </button>
           </div>
         </div>
       )}
 
-      <div className="card">
-        <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>
-          Active discounts <span className="muted">({discounts.length})</span>
-        </h3>
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-light)" }}>
+          <h3 style={{ margin: 0, fontSize: 15 }}>
+            Active discounts <span className="muted" style={{ fontWeight: 400 }}>({discounts.length})</span>
+          </h3>
+        </div>
 
-        {discounts.length === 0 ? (
-          <div className="empty">No discounts yet. Create one to start running promos.</div>
+        {loading ? (
+          <SkeletonTable rows={4} cols={6} />
+        ) : discounts.length === 0 ? (
+          <EmptyState icon={<Percent size={40} strokeWidth={1.25} />} title="No discounts yet">
+            <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>Create one to start running promos.</p>
+          </EmptyState>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Value</th>
-                <th>Scope</th>
-                <th>Window</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {discounts.map((d) => {
-                const st = statusOf(d, now);
-                return (
-                  <tr key={d.id}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{d.name}</div>
-                      {d.description && <div className="muted" style={{ fontSize: 12 }}>{d.description}</div>}
-                    </td>
-                    <td className="muted">{d.discountType === "percent" ? "Percent" : "Fixed"}</td>
-                    <td>
-                      <strong>
-                        {d.discountType === "percent"
-                          ? `${d.discountValue}%`
-                          : formatETB(Math.round(d.discountValue * 100))}
-                      </strong>
-                    </td>
-                    <td className="muted">
-                      {scopeLabel(d.scope)}
-                      {d.scope === "category" && <div style={{ fontSize: 12 }}>{categoryName(d.categoryId)}</div>}
-                      {d.scope === "products" && <div style={{ fontSize: 12 }}>{d.productIds.length} product(s)</div>}
-                    </td>
-                    <td className="muted" style={{ fontSize: 12 }}>
-                      {d.startsAt ? new Date(d.startsAt).toLocaleDateString() : "—"}
-                      {d.startsAt || d.endsAt ? " → " : ""}
-                      {d.endsAt ? new Date(d.endsAt).toLocaleDateString() : ""}
-                      {d.minSubtotalHalala != null && (
-                        <div>Min: {formatETB(d.minSubtotalHalala)}</div>
-                      )}
-                    </td>
-                    <td><span className={`badge ${st.cls}`}>{st.label}</span></td>
-                    <td>
-                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                        <button className="btn btn-outline btn-sm" title={d.isActive ? "Pause" : "Activate"} onClick={() => toggleActive(d)}>
-                          <Power size={14} />
-                        </button>
-                        <button className="btn btn-outline btn-sm" title="Edit" onClick={() => startEdit(d)}>
-                          <Pencil size={14} />
-                        </button>
-                        <button className="btn btn-outline btn-sm" title="Delete" onClick={() => remove(d)}>
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div style={{ overflowX: "auto" }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Value</th>
+                  <th>Scope</th>
+                  <th>Window</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {discounts.map((d) => {
+                  const st = statusOf(d, now);
+                  return (
+                    <tr key={d.id}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{d.name}</div>
+                        {d.description && <div className="muted" style={{ fontSize: 12 }}>{d.description}</div>}
+                      </td>
+                      <td className="muted">{d.discountType === "percent" ? "Percent" : "Fixed"}</td>
+                      <td>
+                        <strong>
+                          {d.discountType === "percent" ? `${d.discountValue}%` : formatETB(Math.round(d.discountValue * 100))}
+                        </strong>
+                      </td>
+                      <td className="muted">
+                        {scopeLabel(d.scope)}
+                        {d.scope === "category" && <div style={{ fontSize: 12 }}>{categoryName(d.categoryId)}</div>}
+                        {d.scope === "products" && <div style={{ fontSize: 12 }}>{d.productIds.length} product(s)</div>}
+                      </td>
+                      <td className="muted" style={{ fontSize: 12 }}>
+                        {d.startsAt ? new Date(d.startsAt).toLocaleDateString() : "—"}
+                        {d.startsAt || d.endsAt ? " → " : ""}
+                        {d.endsAt ? new Date(d.endsAt).toLocaleDateString() : ""}
+                        {d.minSubtotalHalala != null && <div>Min: {formatETB(d.minSubtotalHalala)}</div>}
+                      </td>
+                      <td><span className={`badge ${st.cls}`}>{st.label}</span></td>
+                      <td>
+                        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                          <button className="btn btn-outline btn-sm" title={d.isActive ? "Pause" : "Activate"} onClick={() => toggleActive(d)}>
+                            <Power size={14} />
+                          </button>
+                          <button className="btn btn-outline btn-sm" title="Edit" onClick={() => startEdit(d)}>
+                            <Pencil size={14} />
+                          </button>
+                          <button className="btn btn-outline btn-sm" title="Delete" onClick={() => remove(d)}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>

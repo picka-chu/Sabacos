@@ -54,8 +54,17 @@ export function LoginPage() {
               autoComplete="current-password"
             />
           </div>
-          {error && <div className="error-text">{error}</div>}
-          <button className="btn btn-primary btn-block" style={{ width: "100%", marginTop: 8, justifyContent: "center" }} disabled={busy}>
+          {error && (
+            <div style={{ padding: "10px 14px", borderRadius: "var(--radius-sm)", background: "var(--danger-soft)", color: "var(--danger)", fontSize: 13, marginBottom: 8 }}>
+              {error}
+            </div>
+          )}
+          <button
+            className="btn btn-primary"
+            style={{ width: "100%", marginTop: 4 }}
+            disabled={busy}
+          >
+            {busy && <span className="spinner" />}
             {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>

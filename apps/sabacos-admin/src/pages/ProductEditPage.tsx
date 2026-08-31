@@ -4,7 +4,9 @@ import { ArrowLeft, Save, Trash2, Upload } from "lucide-react";
 import type { Category, Product } from "@sabacos/core";
 import { api, uploadAiImage } from "../lib/api.js";
 import { useAuth } from "../auth.js";
+import { useToast } from "../components/toast.js";
 import { AiStatusIndicator, type AiFileStatus } from "../components/AiStatusIndicator.js";
+import { Skeleton } from "../components/ui.js";
 
 const etbToHalala = (etb: string) => Math.round((Number(etb) || 0) * 100);
 
@@ -14,6 +16,7 @@ export function ProductEditPage() {
   const id = isNew ? undefined : params.id;
   const token = useAuth((s) => s.token);
   const [, navigate] = useLocation();
+  const toast = useToast((s) => s.add);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [form, setForm] = useState({
@@ -34,6 +37,7 @@ export function ProductEditPage() {
   const [images, setImages] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(!isNew);
 
   const set = (key: keyof typeof form, value: string | boolean) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -65,9 +69,8 @@ export function ProductEditPage() {
           });
           setImages(p.imageUrls);
         })
-        .catch((err) => {
-          setError(err instanceof Error ? err.message : "Failed to load product");
-        });
+        .catch((err) => setError(err instanceof Error ? err.message : "Failed to load product"))
+        .finally(() => setLoading(false));
     }
   }, [id, isNew, token]);
 
@@ -95,13 +98,16 @@ export function ProductEditPage() {
     try {
       if (isNew) {
         const res = await api.post<{ product: Product }>("/admin/products", body, token);
+        toast("success", "Product created successfully");
         navigate(`/products/${res.product.id}`);
       } else {
         await api.patch<{ product: Product }>(`/admin/products/${id}`, body, token);
+        toast("success", "Product saved");
         navigate("/products");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
+      toast("error", err instanceof Error ? err.message : "Save failed");
       setBusy(false);
     }
   };
@@ -117,7 +123,6 @@ export function ProductEditPage() {
 
     const fileList = Array.from(files);
 
-    // Initialize all files as uploading
     setAiFiles(fileList.map((f) => ({ fileName: f.name, step: "uploading" as const })));
 
     try {
@@ -125,12 +130,10 @@ export function ProductEditPage() {
         const file = fileList[i];
         if (!file) continue;
 
-        // Mark as uploading
         setAiFiles((prev) =>
           prev.map((f, idx) => (idx === i ? { ...f, step: "uploading" as const } : f)),
         );
 
-        // Start upload + AI analysis
         setAiFiles((prev) =>
           prev.map((f, idx) => (idx === i ? { ...f, step: "analyzing" as const } : f)),
         );
@@ -150,34 +153,20 @@ export function ProductEditPage() {
             }));
             setAiFiles((prev) =>
               prev.map((f, idx) =>
-                idx === i
-                  ? { ...f, step: "complete" as const, draftName: res.draft!.nameEn }
-                  : f,
+                idx === i ? { ...f, step: "complete" as const, draftName: res.draft!.nameEn } : f,
               ),
             );
           } else {
             setAiFiles((prev) =>
               prev.map((f, idx) =>
-                idx === i
-                  ? {
-                      ...f,
-                      step: "error" as const,
-                      error: "AI could not identify the product",
-                    }
-                  : f,
+                idx === i ? { ...f, step: "error" as const, error: "AI could not identify the product" } : f,
               ),
             );
           }
         } catch (err) {
           setAiFiles((prev) =>
             prev.map((f, idx) =>
-              idx === i
-                ? {
-                    ...f,
-                    step: "error" as const,
-                    error: err instanceof Error ? err.message : "Upload failed",
-                  }
-                : f,
+              idx === i ? { ...f, step: "error" as const, error: err instanceof Error ? err.message : "Upload failed" } : f,
             ),
           );
         }
@@ -192,11 +181,33 @@ export function ProductEditPage() {
     if (!window.confirm("Delete this product permanently?")) return;
     try {
       await api.del(`/admin/products/${id}`, token);
+      toast("success", "Product deleted");
       navigate("/products");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
+      toast("error", "Delete failed");
     }
   };
+
+  if (loading) {
+    return (
+      <>
+        <div className="page-head">
+          <button className="btn btn-outline btn-sm" onClick={() => navigate("/products")}>
+            <ArrowLeft size={15} /> Back
+          </button>
+          <h1 className="page-title" style={{ flex: 1 }}>Loading…</h1>
+        </div>
+        <div className="card" style={{ marginBottom: 14 }}>
+          <Skeleton className="skeleton-title" style={{ width: "120px" }} />
+          <div className="input-row" style={{ marginTop: 14 }}>
+            <div><Skeleton className="skeleton-text" /><Skeleton className="skeleton-value" style={{ height: 40 }} /></div>
+            <div><Skeleton className="skeleton-text" /><Skeleton className="skeleton-value" style={{ height: 40 }} /></div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -216,10 +227,14 @@ export function ProductEditPage() {
         )}
       </div>
 
-      {error && <div className="card" style={{ color: "var(--danger)", marginBottom: 14 }}>{error}</div>}
+      {error && (
+        <div style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", background: "var(--danger-soft)", color: "var(--danger)", fontSize: 13, marginBottom: 14 }}>
+          {error}
+        </div>
+      )}
 
       <form onSubmit={submit}>
-        <div className="card">
+        <div className="card" style={{ marginBottom: 14 }}>
           <div className="input-row">
             <div className="field">
               <label>SKU</label>
@@ -281,15 +296,15 @@ export function ProductEditPage() {
             <div className="field">
               <label style={{ visibility: "hidden" }}>Flags</label>
               <div className="row" style={{ paddingTop: 6 }}>
-                <label className="row" style={{ gap: 6 }}>
+                <label className="row" style={{ gap: 6, cursor: "pointer" }}>
                   <input type="checkbox" checked={form.isActive} onChange={(e) => set("isActive", e.target.checked)} />
                   Active
                 </label>
-                <label className="row" style={{ gap: 6 }}>
+                <label className="row" style={{ gap: 6, cursor: "pointer" }}>
                   <input type="checkbox" checked={form.isFeatured} onChange={(e) => set("isFeatured", e.target.checked)} />
                   Featured
                 </label>
-                <label className="row" style={{ gap: 6 }}>
+                <label className="row" style={{ gap: 6, cursor: "pointer" }}>
                   <input type="checkbox" checked={form.isFragile} onChange={(e) => set("isFragile", e.target.checked)} />
                   Fragile
                 </label>
@@ -298,12 +313,12 @@ export function ProductEditPage() {
           </div>
         </div>
 
-        <div className="card" style={{ marginTop: 14 }}>
+        <div className="card" style={{ marginBottom: 14 }}>
           <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Images</h3>
-          <p className="muted" style={{ margin: "0 0 12px", fontSize: 12 }}>
+          <p className="muted" style={{ margin: "0 0 14px", fontSize: 12.5 }}>
             Upload a photo — the AI drafts the name and description for you.
           </p>
-          <label className="btn btn-outline btn-sm" style={{ display: "inline-flex", marginBottom: 12 }}>
+          <label className="btn btn-outline btn-sm" style={{ display: "inline-flex", marginBottom: 14 }}>
             <Upload size={15} />
             Upload images
             <input type="file" multiple accept="image/*" hidden onChange={(e) => onFiles(e.target.files)} />
@@ -338,7 +353,8 @@ export function ProductEditPage() {
           <AiStatusIndicator files={aiFiles} />
         </div>
 
-        <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={busy}>
+        <button className="btn btn-primary" disabled={busy}>
+          {busy && <span className="spinner" />}
           <Save size={16} />
           {busy ? "Saving…" : "Save product"}
         </button>

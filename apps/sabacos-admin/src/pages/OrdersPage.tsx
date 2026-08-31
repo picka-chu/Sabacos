@@ -3,6 +3,8 @@ import { useLocation } from "wouter";
 import { formatETB, type Order, type OrderStatus } from "@sabacos/core";
 import { api } from "../lib/api.js";
 import { useAuth } from "../auth.js";
+import { SkeletonTable, EmptyState } from "../components/ui.js";
+import { ClipboardList } from "lucide-react";
 
 interface OrderPageData {
   items: Order[];
@@ -23,17 +25,12 @@ const STATUSES: Array<{ value: OrderStatus | ""; label: string }> = [
 
 const badgeClass = (status: OrderStatus) => {
   switch (status) {
-    case "delivered":
-      return "badge-success";
+    case "delivered": return "badge-success";
     case "paid":
-    case "processing":
-      return "badge-info";
-    case "shipped":
-      return "badge-warn";
-    case "cancelled":
-      return "badge-danger";
-    default:
-      return "";
+    case "processing": return "badge-info";
+    case "shipped": return "badge-warn";
+    case "cancelled": return "badge-danger";
+    default: return "";
   }
 };
 
@@ -59,20 +56,36 @@ export function OrdersPage() {
     <>
       <div className="page-head">
         <h1 className="page-title">Orders</h1>
-        <select className="select" style={{ width: 200 }} value={status} onChange={(e) => setStatus(e.target.value as OrderStatus | "")}>
+        <select
+          className="select"
+          style={{ width: 200 }}
+          value={status}
+          onChange={(e) => setStatus(e.target.value as OrderStatus | "")}
+        >
           {STATUSES.map((s) => (
             <option key={s.value || "all"} value={s.value}>{s.label}</option>
           ))}
         </select>
       </div>
 
-      {error && <div className="card" style={{ color: "var(--danger)", marginBottom: 14 }}>{error}</div>}
+      {error && (
+        <div style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", background: "var(--danger-soft)", color: "var(--danger)", fontSize: 13, marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
 
-      <div className="card" style={{ padding: 0 }}>
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {!data ? (
-          <div className="empty">Loading…</div>
+          <SkeletonTable rows={6} cols={6} />
         ) : data.items.length === 0 ? (
-          <div className="empty">No orders found</div>
+          <EmptyState
+            icon={<ClipboardList size={40} strokeWidth={1.25} />}
+            title="No orders found"
+          >
+            <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+              {status ? "Try a different filter." : "Orders will appear here once customers start buying."}
+            </p>
+          </EmptyState>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table className="table responsive-table">
@@ -88,22 +101,30 @@ export function OrdersPage() {
               </thead>
               <tbody>
                 {data.items.map((order) => (
-                  <tr key={order.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/orders/${order.id}`)}>
+                  <tr
+                    key={order.id}
+                    style={{ cursor: "pointer" }}
+                    onClick={() => navigate(`/orders/${order.id}`)}
+                  >
                     <td data-label="Order" style={{ fontWeight: 600 }}>{order.orderNo}</td>
                     <td data-label="Customer">
                       <div>{order.customerName}</div>
                       <div className="muted" style={{ fontSize: 12 }}>{order.phone}</div>
                     </td>
                     <td data-label="Status">
-                      <span className={`badge ${badgeClass(order.status)}`}>{order.status.replace("_", " ")}</span>
+                      <span className={`badge ${badgeClass(order.status)}`}>
+                        {order.status.replace("_", " ")}
+                      </span>
                     </td>
                     <td data-label="Payment">
                       <span className={`badge ${order.paymentStatus === "success" ? "badge-success" : order.paymentStatus === "failed" ? "badge-danger" : ""}`}>
                         {order.paymentStatus.replace("_", " ")}
                       </span>
                     </td>
-                    <td data-label="Total" style={{ fontWeight: 600 }}>{formatETB(order.totalHalala)}</td>
-                    <td data-label="Date" className="muted">
+                    <td data-label="Total" style={{ fontWeight: 600 }}>
+                      {formatETB(order.totalHalala)}
+                    </td>
+                    <td data-label="Date" className="muted" style={{ fontSize: 13 }}>
                       {new Date(order.createdAt).toLocaleString(undefined, {
                         month: "short",
                         day: "numeric",

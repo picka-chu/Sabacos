@@ -3,6 +3,7 @@ import { Route, Switch } from "wouter";
 import { useAuth } from "./auth.js";
 import { getTelegramInitData } from "./lib/api.js";
 import { Layout } from "./components/Layout.js";
+import { ToastContainer } from "./components/toast.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { DashboardPage } from "./pages/DashboardPage.js";
 import { ProductsPage } from "./pages/ProductsPage.js";
@@ -29,8 +30,6 @@ function Gate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Opened in Telegram → no password, Telegram initData is the login.
-      // Opened in a browser → Supabase session, or the login form below.
       await restore();
       if (!useAuth.getState().token) {
         await restoreFromTelegram();
@@ -45,18 +44,28 @@ function Gate({ children }: { children: React.ReactNode }) {
   const inTelegram = useMemo(() => Boolean(getTelegramInitData()), []);
 
   if (!ready) {
-    return <div className="auth-screen"><div className="card muted">Loading…</div></div>;
+    return (
+      <div className="auth-screen">
+        <div style={{ textAlign: "center" }}>
+          <div className="login-brand" style={{ marginBottom: 16 }}>
+            <em>S</em>abacos
+          </div>
+          <div className="skeleton" style={{ width: 120, height: 6, margin: "0 auto", borderRadius: 3 }} />
+        </div>
+      </div>
+    );
   }
 
   if (!token && !profile) {
     if (inTelegram) {
-      // Inside Telegram but Telegram auth failed — the email/password form
-      // can't help here.
       return (
         <div className="auth-screen">
           <div className="card auth-card" style={{ textAlign: "center" }}>
             <div className="login-brand"><em>S</em>abacos</div>
-            <div className="error-text">This Telegram account isn't authorized to open the admin dashboard.</div>
+            <div style={{ margin: "12px 0 4px", fontSize: 13, color: "var(--muted)" }}>Admin Dashboard</div>
+            <div className="error-text" style={{ marginTop: 20 }}>
+              This Telegram account isn't authorized to open the admin dashboard.
+            </div>
             <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>
               Open it from the bot's Admin Dashboard button, or sign in from a browser with an admin account.
             </div>
@@ -67,57 +76,65 @@ function Gate({ children }: { children: React.ReactNode }) {
     return <LoginPage />;
   }
 
-  return <Layout>{children}</Layout>;
+  return (
+    <>
+      <Layout>{children}</Layout>
+      <ToastContainer />
+    </>
+  );
 }
 
 export default function App() {
   return (
-    <Switch>
-      <Route path="/login">
-        <Gate><LoginPage /></Gate>
-      </Route>
-      <Route path="/">
-        <Gate><DashboardPage /></Gate>
-      </Route>
-      <Route path="/products">
-        <Gate><ProductsPage /></Gate>
-      </Route>
-      <Route path="/products/new">
-        <Gate><ProductEditPage /></Gate>
-      </Route>
-      <Route path="/products/:id">
-        <Gate><ProductEditPage /></Gate>
-      </Route>
-      <Route path="/categories">
-        <Gate><CategoriesPage /></Gate>
-      </Route>
-      <Route path="/orders">
-        <Gate><OrdersPage /></Gate>
-      </Route>
-      <Route path="/orders/:id">
-        <Gate><OrderDetailPage /></Gate>
-      </Route>
-      <Route path="/analytics">
-        <Gate><AnalyticsPage /></Gate>
-      </Route>
-      <Route path="/waitlist">
-        <Gate><WaitlistPage /></Gate>
-      </Route>
-      <Route path="/discounts">
-        <Gate><DiscountsPage /></Gate>
-      </Route>
-      <Route path="/broadcast">
-        <Gate><BroadcastPage /></Gate>
-      </Route>
-      <Route path="/settings">
-        <Gate><SettingsPage /></Gate>
-      </Route>
-      <Route path="/users">
-        <Gate><UsersPage /></Gate>
-      </Route>
-      <Route path="/referrals">
-        <Gate><ReferralsPage /></Gate>
-      </Route>
-    </Switch>
+    <>
+      <Switch>
+        <Route path="/login">
+          <Gate><LoginPage /></Gate>
+        </Route>
+        <Route path="/">
+          <Gate><DashboardPage /></Gate>
+        </Route>
+        <Route path="/products">
+          <Gate><ProductsPage /></Gate>
+        </Route>
+        <Route path="/products/new">
+          <Gate><ProductEditPage /></Gate>
+        </Route>
+        <Route path="/products/:id">
+          <Gate><ProductEditPage /></Gate>
+        </Route>
+        <Route path="/categories">
+          <Gate><CategoriesPage /></Gate>
+        </Route>
+        <Route path="/orders">
+          <Gate><OrdersPage /></Gate>
+        </Route>
+        <Route path="/orders/:id">
+          <Gate><OrderDetailPage /></Gate>
+        </Route>
+        <Route path="/analytics">
+          <Gate><AnalyticsPage /></Gate>
+        </Route>
+        <Route path="/waitlist">
+          <Gate><WaitlistPage /></Gate>
+        </Route>
+        <Route path="/discounts">
+          <Gate><DiscountsPage /></Gate>
+        </Route>
+        <Route path="/broadcast">
+          <Gate><BroadcastPage /></Gate>
+        </Route>
+        <Route path="/settings">
+          <Gate><SettingsPage /></Gate>
+        </Route>
+        <Route path="/users">
+          <Gate><UsersPage /></Gate>
+        </Route>
+        <Route path="/referrals">
+          <Gate><ReferralsPage /></Gate>
+        </Route>
+      </Switch>
+      <ToastContainer />
+    </>
   );
 }
