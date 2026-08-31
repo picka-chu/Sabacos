@@ -241,6 +241,13 @@ const en = {
   spinnerLoadFailed: "Failed to load spins",
   spinnerNoAvailableSpins: "No available spins",
   spinnerSpinFailed: "Spin failed",
+  spinnerRewardKicker: "You Won",
+  spinnerRewardKickerLucky: "Lucky You!",
+  spinnerYourCode: "Your coupon code",
+  spinnerClaim: "Claim Reward",
+  spinnerClaimCopied: "Copied ✓",
+  spinnerClaimAgain: "Another spin!",
+  spinnerCouponCopyFailed: "Couldn't auto-copy — here's your code",
 } as const;
 
 export type I18nKey = keyof typeof en;
@@ -489,6 +496,13 @@ const am: Record<I18nKey, string> = {
   spinnerLoadFailed: "ማሽከርከሮችን መጫን አልተቻለም",
   spinnerNoAvailableSpins: "የሚገኝ ማሽከርከር የለም",
   spinnerSpinFailed: "ማሽከርከር አልተሳካም",
+  spinnerRewardKicker: "አሸንፈዋል!",
+  spinnerRewardKickerLucky: "ዕድል አለዎት!",
+  spinnerYourCode: "የኩፖን ኮድዎ",
+  spinnerClaim: "ሽልማቱን ያግኙ",
+  spinnerClaimCopied: "ተቀጧል ✓",
+  spinnerClaimAgain: "ሌላ ማሽከርከር!",
+  spinnerCouponCopyFailed: "በራስ-ሰር መቅጠፍ አልተቻለም",
 };
 
 export const DEFAULT_LANGUAGE: Language = "en";
