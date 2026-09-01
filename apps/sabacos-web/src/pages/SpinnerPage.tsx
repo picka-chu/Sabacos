@@ -13,24 +13,30 @@ interface Spin {
 }
 
 interface Prize {
+  id: string;
   name: string;
-  type: string;
+  prizeType: string;
   value: number;
+  weight: number;
 }
 
 interface SpinResult {
-  prize: Prize;
+  prize: { name: string; type: string; value: number };
   coupon?: { code: string; discountType: string; discountValue: number; expiresAt: string };
   spinAgain?: boolean;
 }
 
-const SLICES = 8;
-const SEG = 360 / SLICES;
-
-const SEGMENT_COLORS = [
+const SLICE_COLORS = [
   "#f9c9ed", "#f6eaf8", "#d9a8e8", "#f6eaf8",
   "#f3c3d8", "#f6eaf8", "#bcdce8", "#f6eaf8",
 ];
+
+function prizeLabel(prize: { name: string; type: string; value: number }, translate: ReturnType<typeof useI18n>["t"]): string {
+  if (prize.type === "spin_again") return translate("spinnerSpinAgain");
+  if (prize.type === "coupon_percent") return translate("couponPercentOff", { value: prize.value });
+  if (prize.type === "coupon_fixed") return translate("couponFixedOff", { value: formatETB(prize.value) });
+  return prize.name;
+}
 
 export function SpinnerPage() {
   const profile = useShopStore((s) => s.profile);
@@ -49,6 +55,7 @@ export function SpinnerPage() {
     spinAgain: boolean;
   } | null>(null);
   const [claimCopied, setClaimCopied] = useState(false);
+  const [prizes, setPrizes] = useState<Prize[]>([]);
   const wheelOuterRef = useRef<HTMLDivElement>(null);
   const rotationRef = useRef(0);
 
@@ -63,21 +70,27 @@ export function SpinnerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(loadSpins, [loadSpins]);
+  const loadPrizes = useCallback(() => {
+    api
+      .get<{ prizes: Prize[] }>("/referral/spinner/prizes")
+      .then((res) => setPrizes(res.prizes.length > 0 ? res.prizes : []))
+      .catch(() => {});
+  }, []);
 
-  const prizeValue = (prize: Prize) => {
-    if (prize.type === "spin_again") return t("spinnerSpinAgain");
-    if (prize.type === "coupon_percent") return t("couponPercentOff", { value: prize.value });
-    if (prize.type === "coupon_fixed") return t("couponFixedOff", { value: formatETB(prize.value) });
-    return prize.name;
-  };
+  useEffect(() => {
+    loadSpins();
+    loadPrizes();
+  }, [loadSpins, loadPrizes]);
+
+  const sliceCount = prizes.length || 8;
+  const seg = 360 / sliceCount;
 
   const openModal = (res: SpinResult) => {
     const isAgain = !!res.spinAgain;
     setModalData({
       emoji: isAgain ? "🔄" : res.coupon ? "🎉" : "🏆",
       kicker: isAgain ? t("spinnerRewardKickerLucky") : t("spinnerRewardKicker"),
-      prizeLabel: prizeValue(res.prize),
+      prizeLabel: prizeLabel(res.prize, t),
       code: res.coupon?.code ?? null,
       expiry: res.coupon?.expiresAt ?? null,
       spinAgain: isAgain,
@@ -107,13 +120,14 @@ export function SpinnerPage() {
   };
 
   const spin = async () => {
-    if (spinning || availableSpins <= 0) return;
+    if (spinning || availableSpins <= 0 || prizes.length === 0) return;
 
     setSpinning(true);
     setModalOpen(false);
     setError(null);
 
     try {
+      // 1. Get available spin ID
       const spinsRes = await api.get<{ spins: Spin[] }>("/referral/spinner");
       if (!spinsRes.spins.length) {
         setError(t("spinnerNoAvailableSpins"));
@@ -122,18 +136,48 @@ export function SpinnerPage() {
       }
       const spinId = spinsRes.spins[0]!.id;
 
+      // 2. Start wheel animation (determines visual spin duration)
       const wheel = wheelOuterRef.current;
       if (wheel) {
-        const targetRotation = rotationRef.current + 360 * 5 + Math.random() * 360;
+        // Add several full rotations + a random offset (will be corrected after API)
+        const preliminaryRotation = rotationRef.current + 360 * 5 + Math.random() * 360;
         wheel.style.transition = "transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)";
+        wheel.style.transform = `rotate(${preliminaryRotation}deg)`;
+        rotationRef.current = preliminaryRotation;
+      }
+
+      // 3. Wait for most of the animation, then call API (result arrives near the end)
+      await new Promise((resolve) => setTimeout(resolve, 3200));
+
+      // 4. Call API to get the actual prize
+      const res = await api.post<SpinResult>("/referral/spinner/spin", { spinId });
+      setAvailableSpins((prev) => prev - 1);
+
+      // 5. Find which segment this prize corresponds to
+      const wonPrizeName = res.prize.name;
+      let segmentIndex = prizes.findIndex((p) => p.name === wonPrizeName);
+      if (segmentIndex === -1) segmentIndex = 0;
+
+      // 6. Calculate the exact angle to land on that segment
+      // The wheel rotates clockwise. Segment 0 is at the top (0°).
+      // The pointer is at the top. To land on segment i, the wheel must rotate
+      // so that segment i's center aligns with the top.
+      // Segment i center = i * seg + seg/2 degrees from segment 0's start.
+      // We need the wheel to rotate (360 - segmentCenter) degrees from a clean position.
+      const segmentCenter = segmentIndex * seg + seg / 2;
+      const baseRotation = Math.ceil(rotationRef.current / 360) * 360 + 360 * 3;
+      const targetRotation = baseRotation + (360 - segmentCenter);
+
+      // 7. Animate to the precise target
+      if (wheel) {
+        wheel.style.transition = "transform 1.2s cubic-bezier(0.17, 0.67, 0.12, 0.99)";
         wheel.style.transform = `rotate(${targetRotation}deg)`;
         rotationRef.current = targetRotation;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 4000));
+      // 8. Wait for the correction animation to finish, then show modal
+      await new Promise((resolve) => setTimeout(resolve, 1300));
 
-      const res = await api.post<SpinResult>("/referral/spinner/spin", { spinId });
-      setAvailableSpins((prev) => prev - 1);
       openModal(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("spinnerSpinFailed"));
@@ -218,30 +262,34 @@ export function SpinnerPage() {
             <div style={{
               position: "absolute", inset: 0, borderRadius: "50%",
               background: `conic-gradient(from -22.5deg, ${
-                SEGMENT_COLORS.map((c, i) =>
-                  `${c} ${(i * SEG + 0.5)}deg, ${c} ${((i + 1) * SEG - 0.5)}deg`
-                ).join(", ")
+                Array.from({ length: sliceCount }).map((_, i) => {
+                  const c = SLICE_COLORS[i % SLICE_COLORS.length];
+                  return `${c} ${(i * seg + 0.5)}deg, ${c} ${((i + 1) * seg - 0.5)}deg`;
+                }).join(", ")
               })`,
             }} />
 
             {/* Radial labels */}
-            {Array.from({ length: SLICES }).map((_, i) => {
-              const a = i * SEG;
+            {prizes.map((prize, i) => {
+              const a = i * seg;
               const rad = (a * Math.PI) / 180;
               const R = 78;
               const cx = 148;
               const cy = 148;
               const theta = a - 90;
               const rotate = (theta > 90 || theta < -90) ? theta - 180 : theta;
-              const isETB = i === 1 || i === 3;
 
-              const labels = ["10%", "50 ETB", "5%", "100 ETB", "20%", "15%", "SPIN\nAGAIN", "25%"];
-              const text = labels[i] ?? "";
+              // Short display label
+              let text = prize.name;
+              if (prize.prizeType === "coupon_percent") text = `${prize.value}%`;
+              else if (prize.prizeType === "coupon_fixed") text = `${prize.value}`;
+              else if (prize.prizeType === "spin_again") text = "SPIN\nAGAIN";
               const isBr = text.includes("\n");
+              const isShort = text.length <= 5;
 
               return (
                 <div
-                  key={i}
+                  key={prize.id}
                   style={{
                     position: "absolute",
                     left: cx + R * Math.sin(rad),
@@ -254,7 +302,7 @@ export function SpinnerPage() {
                     whiteSpace: "nowrap",
                     zIndex: 4,
                     textShadow: "0 1px 0 rgba(255,255,255,0.6)",
-                    fontSize: isBr ? 11 : isETB ? 13 : 16,
+                    fontSize: isBr ? 11 : isShort ? 16 : 12,
                   }}
                 >
                   {isBr ? text.split("\n").map((ln, li) => <div key={li}>{ln}</div>) : text}
@@ -288,7 +336,7 @@ export function SpinnerPage() {
       <button
         className="btn btn-primary"
         onClick={spin}
-        disabled={spinning || availableSpins <= 0}
+        disabled={spinning || availableSpins <= 0 || prizes.length === 0}
         style={{ width: "100%", padding: "14px 24px", fontSize: 18, fontWeight: 700, marginBottom: 16 }}
       >
         {spinning ? (

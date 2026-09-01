@@ -20,6 +20,7 @@ import {
   getAvailableSpins,
   countAvailableSpins,
   getValidCoupons,
+  getActiveSpinnerPrizes,
 } from "../db/spinner.js";
 import { processSpin } from "../db/referral-rewards.js";
 import { getProfileById, getProfileByTelegramId } from "../db/profiles.js";
@@ -121,6 +122,21 @@ referralRoutes.get("/spinner", async (c) => {
     spins: availableSpins,
     maxSpinsPerWeek: settings?.maxSpinsPerWeek ?? 5,
     referralsPerSpin: settings?.referralsPerSpin ?? 3,
+  });
+});
+
+/** GET /referral/spinner/prizes — Get active spinner prizes for the wheel */
+referralRoutes.get("/spinner/prizes", async (c) => {
+  const db = getDb(c.env);
+  const prizes = await getActiveSpinnerPrizes(db);
+  return c.json({
+    prizes: prizes.map((p) => ({
+      id: p.id,
+      name: p.name,
+      prizeType: p.prizeType,
+      value: p.value,
+      weight: p.weight,
+    })),
   });
 });
 
