@@ -18,6 +18,7 @@ import { DiscountsPage } from "./pages/DiscountsPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { UsersPage } from "./pages/UsersPage.js";
 import { ReferralsPage } from "./pages/ReferralsPage.js";
+import { SpinnerPrizesPage } from "./pages/SpinnerPrizesPage.js";
 
 function Gate({ children }: { children: React.ReactNode }) {
   const token = useAuth((s) => s.token);
@@ -132,6 +133,9 @@ export default function App() {
         </Route>
         <Route path="/referrals">
           <Gate><ReferralsPage /></Gate>
+        </Route>
+        <Route path="/spinner-prizes">
+          <Gate><SpinnerPrizesPage /></Gate>
         </Route>
       </Switch>
       <ToastContainer />

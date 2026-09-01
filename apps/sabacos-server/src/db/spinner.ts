@@ -63,21 +63,67 @@ export async function createSpinnerPrize(
   return spinnerPrizeRowSchema.parse(data);
 }
 
+/** Get all spinner prizes (active + inactive). */
+export async function getAllSpinnerPrizes(db: Db): Promise<SpinnerPrize[]> {
+  const { data, error } = await db
+    .from("spinner_prizes")
+    .select("*")
+    .order("weight", { ascending: false });
+
+  if (error) throw new Error(`getAllSpinnerPrizes: ${error.message}`);
+  return (data ?? []).map((r) => spinnerPrizeRowSchema.parse(r));
+}
+
 /** Update a spinner prize. */
 export async function updateSpinnerPrize(
   db: Db,
   id: string,
   updates: Partial<Omit<SpinnerPrize, "id" | "createdAt" | "updatedAt">>,
 ): Promise<SpinnerPrize> {
+  const row: Record<string, unknown> = {};
+  if (updates.name !== undefined) row.name = updates.name;
+  if (updates.prizeType !== undefined) row.prize_type = updates.prizeType;
+  if (updates.value !== undefined) row.value = updates.value;
+  if (updates.productId !== undefined) row.product_id = updates.productId;
+  if (updates.weight !== undefined) row.weight = updates.weight;
+  if (updates.maxPool !== undefined) row.max_pool = updates.maxPool;
+  if (updates.currentPool !== undefined) row.current_pool = updates.currentPool;
+  if (updates.isActive !== undefined) row.is_active = updates.isActive;
+  row.updated_at = new Date().toISOString();
+
   const { data, error } = await db
     .from("spinner_prizes")
-    .update(updates)
+    .update(row)
     .eq("id", id)
     .select()
     .single();
 
   if (error) throw new Error(`updateSpinnerPrize: ${error.message}`);
   return spinnerPrizeRowSchema.parse(data);
+}
+
+/** Delete a spinner prize (hard delete). */
+export async function deleteSpinnerPrize(db: Db, id: string): Promise<void> {
+  const { error } = await db.from("spinner_prizes").delete().eq("id", id);
+  if (error) throw new Error(`deleteSpinnerPrize: ${error.message}`);
+}
+
+/** Count wins per prize. Returns Map<prizeId, winCount>. */
+export async function getPrizeWinCounts(db: Db): Promise<Map<string, number>> {
+  const { data, error } = await db
+    .from("spinner_spins")
+    .select("won_prize_id")
+    .eq("status", "used")
+    .not("won_prize_id", "is", null);
+
+  if (error) throw new Error(`getPrizeWinCounts: ${error.message}`);
+
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    const pid = row.won_prize_id as string;
+    counts.set(pid, (counts.get(pid) ?? 0) + 1);
+  }
+  return counts;
 }
 
 // ──────────────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Package, Tags, ClipboardList, BarChart3,
   ListOrdered, Megaphone, Settings, LogOut, Percent, Users,
-  Menu, X, Gift,
+  Menu, X, Gift, Trophy,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "../auth.js";
@@ -47,6 +47,7 @@ const NAV_GROUPS: NavGroup[] = [
       { path: "/waitlist", label: "Waitlist", icon: ListOrdered },
       { path: "/broadcast", label: "Broadcast", icon: Megaphone },
       { path: "/referrals", label: "Referrals", icon: Gift },
+      { path: "/spinner-prizes", label: "Spinner Prizes", icon: Trophy },
     ],
   },
   {

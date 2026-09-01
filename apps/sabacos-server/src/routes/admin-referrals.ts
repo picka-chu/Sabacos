@@ -13,7 +13,7 @@ import {
   debitWallet,
   getWalletTransactions,
 } from "../db/wallet.js";
-import { getActiveSpinnerPrizes, createSpinnerPrize, updateSpinnerPrize } from "../db/spinner.js";
+import { getAllSpinnerPrizes, createSpinnerPrize, updateSpinnerPrize, deleteSpinnerPrize, getPrizeWinCounts } from "../db/spinner.js";
 
 export const adminReferralRoutes = new Hono<{ Bindings: AppEnv }>();
 
@@ -115,11 +115,20 @@ adminReferralRoutes.get("/stats", async (c) => {
 // Spinner Prizes
 // ──────────────────────────────────────────────────────────────────────
 
-/** GET /admin/referrals/prizes — Get all spinner prizes */
+/** GET /admin/referrals/prizes — Get all spinner prizes (active + inactive) with win counts */
 adminReferralRoutes.get("/prizes", async (c) => {
   const db = getDb(c.env);
-  const prizes = await getActiveSpinnerPrizes(db);
-  return c.json({ prizes });
+  const [prizes, winCounts] = await Promise.all([
+    getAllSpinnerPrizes(db),
+    getPrizeWinCounts(db),
+  ]);
+
+  const prizesWithWins = prizes.map((p) => ({
+    ...p,
+    winCount: winCounts.get(p.id) ?? 0,
+  }));
+
+  return c.json({ prizes: prizesWithWins });
 });
 
 /** POST /admin/referrals/prizes — Create a new spinner prize */
@@ -157,6 +166,14 @@ adminReferralRoutes.patch("/prizes/:id", async (c) => {
 
   const prize = await updateSpinnerPrize(db, id, body);
   return c.json({ prize });
+});
+
+/** DELETE /admin/referrals/prizes/:id — Delete a spinner prize */
+adminReferralRoutes.delete("/prizes/:id", async (c) => {
+  const db = getDb(c.env);
+  const id = c.req.param("id");
+  await deleteSpinnerPrize(db, id);
+  return c.json({ ok: true });
 });
 
 // ──────────────────────────────────────────────────────────────────────
