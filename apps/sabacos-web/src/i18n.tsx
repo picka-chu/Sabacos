@@ -16,6 +16,16 @@ import {
 import { tg } from "./telegram.js";
 
 const STORAGE_KEY = "sabacos:lang";
+const USER_CHOSE_KEY = "sabacos:lang:chose";
+
+/** Check if the user has explicitly chosen a language in this session. */
+export function hasUserChosenLang(): boolean {
+  try {
+    return sessionStorage.getItem(USER_CHOSE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 function initialLang(): Language {
   try {
@@ -46,6 +56,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     setLangState(next);
     try {
       localStorage.setItem(STORAGE_KEY, next);
+      sessionStorage.setItem(USER_CHOSE_KEY, "1");
     } catch {
       /* noop */
     }

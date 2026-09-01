@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { Info } from "lucide-react";
 import { api } from "./api.js";
-import { I18nProvider, useI18n } from "./i18n.js";
+import { I18nProvider, useI18n, hasUserChosenLang } from "./i18n.js";
 import { applyTelegramTheme, getTelegramWebApp, haptic, isTelegramSession } from "./telegram.js";
 import { BottomNav } from "./components/BottomNav.js";
+import { ErrorBoundary } from "./components/ErrorBoundary.js";
 import { ToastHost } from "./components/Toast.js";
 import { useShopStore } from "./store.js";
 import { HomePage } from "./pages/HomePage.js";
@@ -43,9 +44,12 @@ function Shell() {
       .post<{ profile: import("@sabacos/core").Profile }>("/auth/telegram", {})
       .then((res) => {
         setProfile(res.profile);
-        // The language chosen in the bot (or previously in the mini app)
-        // drives the mini app too.
-        if (res.profile.language === "en" || res.profile.language === "am") {
+        // Only set language from server if the user hasn't explicitly chosen
+        // one in this session (prevents overwriting localStorage on reload).
+        if (
+          !hasUserChosenLang() &&
+          (res.profile.language === "en" || res.profile.language === "am")
+        ) {
           setLang(res.profile.language);
         }
       })
@@ -151,8 +155,10 @@ function Shell() {
 
 export default function App() {
   return (
-    <I18nProvider>
-      <Shell />
-    </I18nProvider>
+    <ErrorBoundary>
+      <I18nProvider>
+        <Shell />
+      </I18nProvider>
+    </ErrorBoundary>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { useSearch, useLocation } from "wouter";
 import { useI18n } from "../i18n.js";
@@ -39,6 +39,8 @@ export function ShopPage() {
   const wantsFilters = params.get("filters") === "1";
 
   const [query, setQuery] = useState(initialQuery);
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [sheetOpen, setSheetOpen] = useState(wantsFilters);
   const [draft, setDraft] = useState<Filters>(DEFAULT_FILTERS);
@@ -49,11 +51,20 @@ export function ShopPage() {
 
   const addToCart = useShopStore((s) => s.addToCart);
 
+  // Debounce search query (300ms)
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [query]);
+
   const fetchPage = async (pageNum: number, replace = false) => {
     setLoading(true);
     const qs = new URLSearchParams();
     if (activeCategory) qs.set("category", activeCategory);
-    if (query.trim()) qs.set("q", query.trim());
+    if (debouncedQuery.trim()) qs.set("q", debouncedQuery.trim());
     if (filters.sort !== "newest") qs.set("sort", filters.sort);
     if (filters.minEtb.trim()) qs.set("minPrice", filters.minEtb.trim());
     if (filters.maxEtb.trim()) qs.set("maxPrice", filters.maxEtb.trim());
@@ -75,7 +86,7 @@ export function ShopPage() {
     setItems([]);
     fetchPage(1, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCategory, query, filters]);
+  }, [activeCategory, debouncedQuery, filters]);
 
   const openSheet = () => {
     setDraft(filters);
