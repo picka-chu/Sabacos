@@ -1,6 +1,7 @@
 import {
   DEFAULT_DELIVERY_CONFIG,
   MIN_ORDER_SUBTOTAL_HALALA,
+  computeDeliveryFee,
   formatETB,
   mergeDeliveryConfig,
   quoteDelivery,
@@ -155,11 +156,14 @@ export async function checkout(
   const discountedSubtotal = subtotalHalala - discountHalala;
 
   // Zone delivery pricing (GPS coords preferred, manual zone as fallback).
+  // When no zone is resolved, fall back to the flat deliveryFeeHalala from
+  // admin settings so the charge matches what the cart page displayed.
   const fragile = cart.some((i) => i.product.isFragile);
+  let delivery;
   const config = settings.deliveryConfig
     ? mergeDeliveryConfig(settings.deliveryConfig)
     : DEFAULT_DELIVERY_CONFIG;
-  const delivery = quoteDelivery(config, {
+  const zoneEstimate = quoteDelivery(config, {
     subtotalHalala: discountedSubtotal,
     latitude: input.latitude ?? null,
     longitude: input.longitude ?? null,
@@ -167,6 +171,23 @@ export async function checkout(
     express: input.deliveryType === "express",
     fragile,
   });
+  if (zoneEstimate.zone != null) {
+    // GPS or manual zone resolved — use the zone-based quote.
+    delivery = zoneEstimate;
+  } else {
+    // No zone available — use the flat admin fee (matches cart page).
+    const flatFee = computeDeliveryFee(discountedSubtotal, settings.deliveryFeeHalala, settings.freeDeliveryThresholdHalala);
+    delivery = {
+      zone: null,
+      baseFeeHalala: flatFee,
+      zoneSurchargeHalala: 0,
+      expressSurchargeHalala: input.deliveryType === "express" ? Math.round(flatFee * 0.5) : 0,
+      fragileFeeHalala: fragile ? config.fragileFeeHalala : 0,
+      totalDeliveryFeeHalala: (input.deliveryType === "express" ? flatFee + Math.round(flatFee * 0.5) : flatFee) + (fragile ? config.fragileFeeHalala : 0),
+      freeDeliveryApplied: flatFee === 0,
+      express: input.deliveryType === "express",
+    };
+  }
   const totalHalala = discountedSubtotal + delivery.totalDeliveryFeeHalala;
 
   const order = await createOrder(db, {

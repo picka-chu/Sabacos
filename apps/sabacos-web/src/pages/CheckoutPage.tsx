@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User, X, Zap, Truck, Tag, Wallet } from "lucide-react";
-import { DEFAULT_DELIVERY_CONFIG, formatETB, quoteDelivery, t } from "@sabacos/core";
+import { DEFAULT_DELIVERY_CONFIG, formatETB, quoteDelivery, computeDeliveryFee, t } from "@sabacos/core";
 import type { DeliveryConfig } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { api } from "../api.js";
@@ -56,19 +56,38 @@ export function CheckoutPage() {
   const totals = cart.totals;
   const fragile = cart.items.some((i) => i.product.isFragile);
 
+  // When no zone is selected (no GPS, no manual pick), use the flat delivery
+  // fee from admin settings so the checkout matches the cart page.  Once a zone
+  // is resolved we switch to the zone-based engine.
+  const hasZone = coords != null || manualZone != null;
+  const flatFee = cart.deliveryFeeHalala ?? 0;
+  const flatThreshold = cart.freeDeliveryThresholdHalala ?? 0;
+
   // Live delivery estimate mirrors the server exactly (same core engine).
-  const estimate = useMemo(
-    () =>
-      quoteDelivery(deliveryConfig, {
-        subtotalHalala: totals.subtotalHalala,
-        latitude: coords?.lat ?? null,
-        longitude: coords?.lng ?? null,
-        zone: coords ? null : manualZone,
+  const estimate = useMemo(() => {
+    if (!hasZone) {
+      // No zone yet — use the simple flat-fee logic (matches cart page).
+      const fee = computeDeliveryFee(totals.subtotalHalala, flatFee, flatThreshold);
+      return {
+        zone: null,
+        baseFeeHalala: fee,
+        zoneSurchargeHalala: 0,
+        expressSurchargeHalala: 0,
+        fragileFeeHalala: 0,
+        totalDeliveryFeeHalala: deliveryType === "express" ? fee + Math.round(fee * 0.5) : fee,
+        freeDeliveryApplied: fee === 0,
         express: deliveryType === "express",
-        fragile,
-      }),
-    [deliveryConfig, totals.subtotalHalala, coords, manualZone, deliveryType, fragile],
-  );
+      };
+    }
+    return quoteDelivery(deliveryConfig, {
+      subtotalHalala: totals.subtotalHalala,
+      latitude: coords?.lat ?? null,
+      longitude: coords?.lng ?? null,
+      zone: coords ? null : manualZone,
+      express: deliveryType === "express",
+      fragile,
+    });
+  }, [hasZone, deliveryConfig, totals.subtotalHalala, coords, manualZone, deliveryType, fragile, flatFee, flatThreshold]);
 
   useEffect(() => {
     api.get<{ config: DeliveryConfig }>("/delivery/config")
@@ -115,8 +134,13 @@ export function CheckoutPage() {
 
   const grandTotal = totals.subtotalHalala + estimate.totalDeliveryFeeHalala;
 
-  const priceFor = (express: boolean) =>
-    quoteDelivery(deliveryConfig, {
+  const priceFor = (express: boolean) => {
+    if (!hasZone) {
+      const fee = computeDeliveryFee(totals.subtotalHalala, flatFee, flatThreshold);
+      if (express) return fee + Math.round(fee * 0.5);
+      return fee;
+    }
+    return quoteDelivery(deliveryConfig, {
       subtotalHalala: totals.subtotalHalala,
       latitude: coords?.lat ?? null,
       longitude: coords?.lng ?? null,
@@ -124,9 +148,10 @@ export function CheckoutPage() {
       express,
       fragile,
     }).totalDeliveryFeeHalala;
+  };
 
   const freeGap =
-    deliveryConfig.freeThresholdHalala - totals.subtotalHalala;
+    (hasZone ? deliveryConfig.freeThresholdHalala : flatThreshold) - totals.subtotalHalala;
   const showFreeNudge =
     freeGap > 0 && freeGap <= 20000 && !estimate.freeDeliveryApplied && deliveryType === "standard";
 
