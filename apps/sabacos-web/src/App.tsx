@@ -30,10 +30,18 @@ function Shell() {
   const refreshCart = useShopStore((s) => s.refreshCart);
   const [location] = useLocation();
   const { t, setLang } = useI18n();
-  const inTelegram = isTelegramSession();
+  const [inTelegram, setInTelegram] = useState(isTelegramSession);
 
   // Waitlist phase state
   const [waitlistActive, setWaitlistActive] = useState<boolean | null>(null);
+
+  // Retry Telegram SDK detection — the SDK may load after the initial render.
+  useEffect(() => {
+    if (inTelegram) return;
+    const timer = setTimeout(() => setInTelegram(isTelegramSession()), 500);
+    const timer2 = setTimeout(() => setInTelegram(isTelegramSession()), 1500);
+    return () => { clearTimeout(timer); clearTimeout(timer2); };
+  }, [inTelegram]);
 
   useEffect(() => {
     applyTelegramTheme();

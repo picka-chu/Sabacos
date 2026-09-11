@@ -3,7 +3,7 @@ import { Check, Copy, Gift, Loader2, Share2, Users, Sparkles } from "lucide-reac
 import { useI18n } from "../i18n.js";
 import { PageTitle } from "../components/PageTitle.js";
 import { api } from "../api.js";
-import { haptic, tg, openExternalLink } from "../telegram.js";
+import { haptic, getTelegramWebApp, openExternalLink } from "../telegram.js";
 
 interface WaitlistStatus {
   config: {
@@ -57,9 +57,10 @@ export function WaitlistPage() {
   }, []);
 
   useEffect(() => {
-    if (tg?.initDataUnsafe?.user) {
-      setFirstName(tg.initDataUnsafe.user.first_name ?? "");
-      setLastName(tg.initDataUnsafe.user.last_name ?? "");
+    const webApp = getTelegramWebApp();
+    if (webApp?.initDataUnsafe?.user) {
+      setFirstName(webApp.initDataUnsafe.user.first_name ?? "");
+      setLastName(webApp.initDataUnsafe.user.last_name ?? "");
     }
   }, []);
 

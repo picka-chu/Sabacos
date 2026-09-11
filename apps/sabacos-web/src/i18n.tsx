@@ -13,7 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { tg } from "./telegram.js";
+import { getTelegramWebApp } from "./telegram.js";
 
 const STORAGE_KEY = "sabacos:lang";
 const USER_CHOSE_KEY = "sabacos:lang:chose";
@@ -34,7 +34,7 @@ function initialLang(): Language {
   } catch {
     /* noop */
   }
-  const code = tg?.initDataUnsafe?.user?.language_code;
+  const code = getTelegramWebApp()?.initDataUnsafe?.user?.language_code;
   if (code?.toLowerCase().startsWith("am")) return "am";
   return DEFAULT_LANGUAGE;
 }

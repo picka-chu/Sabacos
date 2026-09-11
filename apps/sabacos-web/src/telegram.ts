@@ -67,8 +67,6 @@ export function getTelegramWebApp(): TelegramWebApp | null {
   return w.Telegram?.WebApp ?? null;
 }
 
-export const tg = getTelegramWebApp();
-
 function hexToRgb(hex: string): [number, number, number] {
   let h = hex.replace("#", "");
   if (h.length === 3) h = h.split("").map((c) => c + c).join("");
@@ -183,8 +181,6 @@ export function isTelegramSession(): boolean {
 export function getInitData(): string {
   const webApp = getTelegramWebApp();
   if (webApp?.initData) return webApp.initData;
-
-  // Fallback: Telegram also places signed data in the URL as tgWebAppData=...
   const hashMatch = window.location.hash.match(/tgWebAppData=([^&]*)/);
   if (hashMatch?.[1]) {
     try {
