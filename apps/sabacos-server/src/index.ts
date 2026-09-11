@@ -15,6 +15,7 @@ import { userManagementRoutes } from "./routes/user-management.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
 import { referralRoutes } from "./routes/referrals.js";
 import { adminReferralRoutes } from "./routes/admin-referrals.js";
+import { shareRoutes } from "./routes/share.js";
 import { requireUser } from "./auth/telegram.js";
 import { requireAdmin, adminMeHandler } from "./auth/admin.js";
 import { sendError, notFound } from "./errors.js";
@@ -187,6 +188,7 @@ app.route("/api/v1/cart", cartRoutes);
 app.route("/api/v1", orderRoutes);
 app.route("/api/v1/waitlist", waitlistRoutes);
 app.route("/api/v1/referral", referralRoutes);
+app.route("/api/v1/share", shareRoutes);
 
 // ---------------------------------------------------------------------------
 // Server lifecycle

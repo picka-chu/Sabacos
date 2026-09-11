@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation } from "wouter";
+import { Share2 } from "lucide-react";
 import { formatETB, t } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { QuantityStepper } from "../components/QuantityStepper.js";
@@ -80,6 +81,15 @@ export function ProductPage() {
     }
   };
 
+  const handleShare = async () => {
+    try {
+      await api.post(`/share/product/${product.id}`, {});
+      toast(t("shared"));
+    } catch (err) {
+      toast(apiErrorMessage(err));
+    }
+  };
+
   return (
     <div className="screen">
       <div
@@ -133,6 +143,23 @@ export function ProductPage() {
         {promo != null && (
           <span className="badge badge-gold" style={{ fontSize: 12 }}>-{promo.percent}%</span>
         )}
+        <button
+          onClick={handleShare}
+          title={t("share")}
+          style={{
+            marginLeft: "auto",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 6,
+            borderRadius: 8,
+            color: "var(--muted)",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <Share2 size={20} />
+        </button>
       </div>
 
       <p className="muted" style={{ marginTop: 12, fontSize: 14, whiteSpace: "pre-wrap" }}>

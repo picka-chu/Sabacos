@@ -22,7 +22,7 @@ import { getProfileByTelegramId, saveProfileContact, setProfileLanguage, upsertT
 import { getWaitlistConfig, getWaitlistEntryByCode } from "../db/waitlist.js";
 import { registerAddProductWizard, hasActiveDraft } from "./addProduct.js";
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
