@@ -25,7 +25,7 @@ const updateRoleSchema = z.object({
 });
 
 // List users with optional role filter, search, and pagination
-userManagementRoutes.get("/users", async (c) => {
+userManagementRoutes.get("/", async (c) => {
   const db = getDb(getAppEnv());
   const role = c.req.query("role") as ProfileRole | undefined;
   const search = c.req.query("search") ?? undefined;
@@ -48,7 +48,7 @@ userManagementRoutes.get("/users", async (c) => {
 });
 
 // Get single user
-userManagementRoutes.get("/users/:id", async (c) => {
+userManagementRoutes.get("/:id", async (c) => {
   const db = getDb(getAppEnv());
   const profile = await getProfileById(db, c.req.param("id"));
   if (!profile) {
@@ -58,7 +58,7 @@ userManagementRoutes.get("/users/:id", async (c) => {
 });
 
 // Invite user by Telegram ID
-userManagementRoutes.post("/users/invite", async (c) => {
+userManagementRoutes.post("/invite", async (c) => {
   const db = getDb(getAppEnv());
   const body = await c.req.json().catch(() => null);
   const input = safeParse(inviteSchema, body);
@@ -84,7 +84,7 @@ userManagementRoutes.post("/users/invite", async (c) => {
 });
 
 // Update user role
-userManagementRoutes.patch("/users/:id/role", async (c) => {
+userManagementRoutes.patch("/:id/role", async (c) => {
   const db = getDb(getAppEnv());
   const body = await c.req.json().catch(() => null);
   const input = safeParse(updateRoleSchema, body);
@@ -94,7 +94,7 @@ userManagementRoutes.patch("/users/:id/role", async (c) => {
 });
 
 // Delete user
-userManagementRoutes.delete("/users/:id", async (c) => {
+userManagementRoutes.delete("/:id", async (c) => {
   const db = getDb(getAppEnv());
   const profile = await getProfileById(db, c.req.param("id"));
   if (!profile) {
