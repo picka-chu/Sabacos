@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "../auth.js";
-import { canShowInSidebar } from "../lib/permissions.js";
+import { canShowInSidebar, usePermissions } from "../lib/permissions.js";
 
 interface NavItem {
   path: string;
@@ -74,14 +74,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const signOut = useAuth((s) => s.signOut);
 
   const role = useAuth((s) => s.profile?.role) as ProfileRole | undefined;
+  const perms = usePermissions((s) => s.perms);
 
   const visibleGroups = useMemo(() => {
     if (!role) return NAV_GROUPS;
     return NAV_GROUPS.map((group) => ({
       ...group,
-      items: group.items.filter((item) => canShowInSidebar(role, item.path)),
+      items: group.items.filter((item) => canShowInSidebar(role, item.path, perms)),
     })).filter((group) => group.items.length > 0);
-  }, [role]);
+  }, [role, perms]);
 
   const visibleItems = useMemo(() => visibleGroups.flatMap((g) => g.items), [visibleGroups]);
 

@@ -3,7 +3,7 @@ import { Route, Switch, useLocation } from "wouter";
 import { useAuth } from "./auth.js";
 import { getTelegramInitData } from "./lib/api.js";
 import type { ProfileRole } from "@sabacos/core";
-import { canAccessPage, loadPermissions } from "./lib/permissions.js";
+import { canAccessPage, usePermissions } from "./lib/permissions.js";
 import { Layout } from "./components/Layout.js";
 import { ToastContainer } from "./components/toast.js";
 import { LoginPage } from "./pages/LoginPage.js";
@@ -24,9 +24,10 @@ import { SpinnerPrizesPage } from "./pages/SpinnerPrizesPage.js";
 
 function RoleGate({ children, path }: { children: React.ReactNode; path: string }) {
   const role = useAuth((s) => s.profile?.role) as ProfileRole | undefined;
+  const perms = usePermissions((s) => s.perms);
   const [, navigate] = useLocation();
 
-  if (role && !canAccessPage(role, path)) {
+  if (role && !canAccessPage(role, path, perms)) {
     navigate("/", { replace: true });
     return null;
   }
@@ -41,6 +42,7 @@ function Gate({ children }: { children: React.ReactNode }) {
   const restore = useAuth((s) => s.restore);
   const restoreFromTelegram = useAuth((s) => s.restoreFromTelegram);
   const finishAuth = useAuth((s) => s.finishAuth);
+  const loadPerms = usePermissions((s) => s.load);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,13 +51,13 @@ function Gate({ children }: { children: React.ReactNode }) {
       if (!useAuth.getState().token) {
         await restoreFromTelegram();
       }
-      await loadPermissions(useAuth.getState().token ?? undefined);
+      await loadPerms(useAuth.getState().token ?? undefined);
       if (!cancelled) finishAuth();
     })();
     return () => {
       cancelled = true;
     };
-  }, [restore, restoreFromTelegram, finishAuth]);
+  }, [restore, restoreFromTelegram, finishAuth, loadPerms]);
 
   const inTelegram = useMemo(() => Boolean(getTelegramInitData()), []);
 

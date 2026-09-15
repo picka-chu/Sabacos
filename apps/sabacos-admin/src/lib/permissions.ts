@@ -1,3 +1,4 @@
+import { create } from "zustand";
 import type { ProfileRole } from "@sabacos/core";
 import { api } from "./api.js";
 
@@ -35,40 +36,44 @@ const CHILD_ROUTES: Record<string, string> = {
   "/orders/:id": "/orders",
 };
 
-/** Loaded permissions from settings (keyed by role). */
-let loadedPerms: Record<string, string[]> | null = null;
-
-/** Load permissions from server settings. Call once on app init. */
-export async function loadPermissions(token?: string): Promise<void> {
-  try {
-    const res = await api.get<{ settings: { permissions?: Record<string, string[]> | null } }>(
-      "/admin/settings",
-      token,
-    );
-    loadedPerms = res.settings.permissions ?? null;
-  } catch {
-    loadedPerms = null;
-  }
+interface PermissionsState {
+  /** null = not loaded yet, {} or populated = loaded */
+  perms: Record<string, string[]> | null;
+  loaded: boolean;
+  load: (token?: string) => Promise<void>;
 }
 
+export const usePermissions = create<PermissionsState>((set) => ({
+  perms: null,
+  loaded: false,
+  load: async (token?: string) => {
+    try {
+      const res = await api.get<{ settings: { permissions?: Record<string, string[]> | null } }>(
+        "/admin/settings",
+        token,
+      );
+      set({ perms: res.settings.permissions ?? {}, loaded: true });
+    } catch {
+      set({ perms: {}, loaded: true });
+    }
+  },
+}));
+
 /** Get the effective permissions for a role. */
-function getRolePages(role: ProfileRole): string[] {
-  if (loadedPerms && loadedPerms[role]) return loadedPerms[role];
-  return DEFAULTS[role] ?? DEFAULTS.customer ?? [];
+function getRolePages(role: ProfileRole, perms: Record<string, string[]> | null): string[] {
+  if (perms && perms[role]) return perms[role];
+  return DEFAULTS[role] ?? [];
 }
 
 /** Check whether a role can access a given path. */
-export function canAccessPage(role: ProfileRole, path: string): boolean {
-  const allowed = getRolePages(role);
+export function canAccessPage(role: ProfileRole, path: string, perms: Record<string, string[]> | null): boolean {
+  const allowed = getRolePages(role, perms);
 
-  // Direct match
   if (allowed.includes(path)) return true;
 
-  // Child route — check parent
   const parent = CHILD_ROUTES[path];
   if (parent && allowed.includes(parent)) return true;
 
-  // Prefix match for detail pages (e.g. /orders/abc123)
   for (const p of allowed) {
     if (p.includes(":id")) {
       const prefix = p.replace("/:id", "");
@@ -80,6 +85,6 @@ export function canAccessPage(role: ProfileRole, path: string): boolean {
 }
 
 /** Check whether a role should see a path in the sidebar. */
-export function canShowInSidebar(role: ProfileRole, path: string): boolean {
-  return SIDEBAR_PATHS.includes(path as typeof SIDEBAR_PATHS[number]) && canAccessPage(role, path);
+export function canShowInSidebar(role: ProfileRole, path: string, perms: Record<string, string[]> | null): boolean {
+  return SIDEBAR_PATHS.includes(path as typeof SIDEBAR_PATHS[number]) && canAccessPage(role, path, perms);
 }
