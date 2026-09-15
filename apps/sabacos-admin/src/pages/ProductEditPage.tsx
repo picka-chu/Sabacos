@@ -132,12 +132,12 @@ export function ProductEditPage() {
           prev.map((f, idx) => (idx === i ? { ...f, step: "uploading" as const } : f)),
         );
 
-        setAiFiles((prev) =>
-          prev.map((f, idx) => (idx === i ? { ...f, step: "analyzing" as const } : f)),
-        );
-
         try {
           const res = await uploadAiImage(file, token ?? undefined);
+
+          setAiFiles((prev) =>
+            prev.map((f, idx) => (idx === i ? { ...f, step: "analyzing" as const } : f)),
+          );
 
           setImages((imgs) => (imgs.includes(res.url) ? imgs : [...imgs, res.url]));
 

@@ -189,6 +189,7 @@ export function SpinnerPage() {
   const shareReferral = async () => {
     try {
       const res = await api.get<{ deepLink: string }>("/referral");
+      if (!res.deepLink) return;
       const url = encodeURIComponent(res.deepLink);
       const text = encodeURIComponent(t("inviteFriendsHint"));
       window.open(`https://t.me/share/url?url=${url}&text=${text}`, "_blank");

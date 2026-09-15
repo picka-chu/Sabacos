@@ -46,7 +46,7 @@ adRoutes.get("/ads/banner", async (c) => {
   const env = getAppEnv();
   const db = getDb(env);
   const profile = c.get("profile");
-  const Language: Language = c.req.query("Language") === "am" ? "am" : "en";
+  const Language: Language = c.req.query("lang") === "am" ? "am" : "en";
 
   const picked = await pickAdForUser(db, profile.id, Language, env).catch((err) => {
     console.error("[ads] banner failed:", err);

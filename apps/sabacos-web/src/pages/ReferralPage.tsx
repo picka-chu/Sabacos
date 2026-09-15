@@ -239,9 +239,10 @@ function OverviewTab({ info, copyCode, copyLink, shareLink, navigate, onWalletTa
   const { t } = useI18n();
   if (!info) return null;
 
-  const progressPct = info.settings
-    ? Math.min(100, ((info.qualifiedCount % info.settings.referralsPerSpin) / info.settings.referralsPerSpin) * 100)
-    : 0;
+  const progressPct =
+    info.settings && info.settings.referralsPerSpin > 0
+      ? Math.min(100, ((info.qualifiedCount % info.settings.referralsPerSpin) / info.settings.referralsPerSpin) * 100)
+      : 0;
 
   return (
     <>

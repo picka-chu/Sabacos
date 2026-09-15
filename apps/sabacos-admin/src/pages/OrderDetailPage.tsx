@@ -196,7 +196,7 @@ export function OrderDetailPage() {
                 <code style={{ fontSize: 12 }}>{order.providerPaymentChargeId.slice(0, 16)}…</code>
               </div>
             )}
-            {order.paymentStatus === "success" && (
+            {order.paymentStatus === "success" && order.telegramPaymentChargeId && (
               <button
                 className="btn btn-outline btn-sm"
                 style={{ marginTop: 12 }}
