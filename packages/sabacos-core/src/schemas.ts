@@ -246,6 +246,7 @@ const settingsFieldsSchema = z.object({
   admin_channel_id: z.string().nullable(),
   ai_vision_model: z.string().max(80).nullable().optional(),
   delivery_config: z.unknown().optional(),
+  permissions: z.record(z.string(), z.array(z.string())).optional(),
 });
 
 export const settingsRowSchema = settingsFieldsSchema.transform(
@@ -259,6 +260,7 @@ export const settingsRowSchema = settingsFieldsSchema.transform(
     aiVisionModel: r.ai_vision_model ?? null,
     deliveryConfig:
       r.delivery_config != null ? mergeDeliveryConfig(r.delivery_config) : null,
+    permissions: r.permissions ?? null,
   }),
 );
 

@@ -4,6 +4,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import { getAppEnv, type AppEnv } from "../env.js";
 import { getDb, getAuthDb } from "../db/client.js";
 import { getProfileByAuthId, getProfileByTelegramId } from "../db/profiles.js";
+import { getSettings } from "../db/settings.js";
 import { forbidden, unauthorized } from "../errors.js";
 
 export type AdminContext = {
@@ -114,3 +115,32 @@ export const adminMeHandler: MiddlewareHandler<{ Bindings: AppEnv } & AdminConte
     },
   });
 };
+
+/**
+ * Middleware that checks whether the caller's role has permission to access
+ * the given page path, based on the permissions stored in store settings.
+ * Must be used AFTER requireAdmin (which sets the profile).
+ */
+export function requirePermission(pagePath: string): MiddlewareHandler<{ Bindings: AppEnv } & AdminContext> {
+  return async (c, next) => {
+    const profile = c.get("profile");
+    // Admin always has full access
+    if (profile.role === "admin") return next();
+
+    const env = getAppEnv();
+    const db = getDb(env);
+    const settings = await getSettings(db).catch(() => null);
+    const perms = settings?.permissions;
+
+    if (perms && perms[profile.role]) {
+      const allowed = perms[profile.role] as string[];
+      // Check direct match or parent match for detail pages
+      if (allowed.includes(pagePath)) return next();
+      // e.g. /orders/:id parent is /orders
+      const parent = pagePath.replace(/\/:[\w]+$/, "").replace(/\/[^/]+$/, "");
+      if (parent && allowed.includes(parent)) return next();
+    }
+
+    throw forbidden("You don't have permission to access this page");
+  };
+}

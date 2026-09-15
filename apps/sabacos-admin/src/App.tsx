@@ -3,7 +3,7 @@ import { Route, Switch, useLocation } from "wouter";
 import { useAuth } from "./auth.js";
 import { getTelegramInitData } from "./lib/api.js";
 import type { ProfileRole } from "@sabacos/core";
-import { canAccessPage } from "./lib/permissions.js";
+import { canAccessPage, loadPermissions } from "./lib/permissions.js";
 import { Layout } from "./components/Layout.js";
 import { ToastContainer } from "./components/toast.js";
 import { LoginPage } from "./pages/LoginPage.js";
@@ -21,6 +21,7 @@ import { SettingsPage } from "./pages/SettingsPage.js";
 import { UsersPage } from "./pages/UsersPage.js";
 import { ReferralsPage } from "./pages/ReferralsPage.js";
 import { SpinnerPrizesPage } from "./pages/SpinnerPrizesPage.js";
+import { PermissionsPage } from "./pages/PermissionsPage.js";
 
 function RoleGate({ children, path }: { children: React.ReactNode; path: string }) {
   const role = useAuth((s) => s.profile?.role) as ProfileRole | undefined;
@@ -49,6 +50,7 @@ function Gate({ children }: { children: React.ReactNode }) {
       if (!useAuth.getState().token) {
         await restoreFromTelegram();
       }
+      await loadPermissions(useAuth.getState().token ?? undefined);
       if (!cancelled) finishAuth();
     })();
     return () => {
@@ -150,6 +152,9 @@ export default function App() {
         </Route>
         <Route path="/spinner-prizes">
           <Gate><RoleGate path="/spinner-prizes"><SpinnerPrizesPage /></RoleGate></Gate>
+        </Route>
+        <Route path="/permissions">
+          <Gate><RoleGate path="/permissions"><PermissionsPage /></RoleGate></Gate>
         </Route>
       </Switch>
       <ToastContainer />

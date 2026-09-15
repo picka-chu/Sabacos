@@ -732,6 +732,7 @@ adminRoutes.put("/settings", async (c) => {
     adminChannelId: input.admin_channel_id,
     aiVisionModel: input.ai_vision_model ?? undefined,
     deliveryConfig: (input.delivery_config as DeliveryConfig | undefined) ?? undefined,
+    permissions: (input.permissions as Record<string, string[]> | undefined) ?? undefined,
   });
   return c.json({ settings });
 });

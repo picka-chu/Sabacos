@@ -174,6 +174,7 @@ export interface Settings {
   adminChannelId: string | null;
   aiVisionModel?: string | null;
   deliveryConfig?: DeliveryConfig | null;
+  permissions?: Record<string, string[]> | null;
 }
 
 export interface OrderTotals {
