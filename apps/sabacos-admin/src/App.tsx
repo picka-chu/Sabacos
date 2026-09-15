@@ -1,7 +1,9 @@
 import { useEffect, useMemo } from "react";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import { useAuth } from "./auth.js";
 import { getTelegramInitData } from "./lib/api.js";
+import type { ProfileRole } from "@sabacos/core";
+import { canAccessPage } from "./lib/permissions.js";
 import { Layout } from "./components/Layout.js";
 import { ToastContainer } from "./components/toast.js";
 import { LoginPage } from "./pages/LoginPage.js";
@@ -19,6 +21,18 @@ import { SettingsPage } from "./pages/SettingsPage.js";
 import { UsersPage } from "./pages/UsersPage.js";
 import { ReferralsPage } from "./pages/ReferralsPage.js";
 import { SpinnerPrizesPage } from "./pages/SpinnerPrizesPage.js";
+
+function RoleGate({ children, path }: { children: React.ReactNode; path: string }) {
+  const role = useAuth((s) => s.profile?.role) as ProfileRole | undefined;
+  const [, navigate] = useLocation();
+
+  if (role && !canAccessPage(role, path)) {
+    navigate("/", { replace: true });
+    return null;
+  }
+
+  return <>{children}</>;
+}
 
 function Gate({ children }: { children: React.ReactNode }) {
   const token = useAuth((s) => s.token);
@@ -93,49 +107,49 @@ export default function App() {
           <Gate><LoginPage /></Gate>
         </Route>
         <Route path="/">
-          <Gate><DashboardPage /></Gate>
+          <Gate><RoleGate path="/"><DashboardPage /></RoleGate></Gate>
         </Route>
         <Route path="/products">
-          <Gate><ProductsPage /></Gate>
+          <Gate><RoleGate path="/products"><ProductsPage /></RoleGate></Gate>
         </Route>
         <Route path="/products/new">
-          <Gate><ProductEditPage /></Gate>
+          <Gate><RoleGate path="/products/new"><ProductEditPage /></RoleGate></Gate>
         </Route>
         <Route path="/products/:id">
-          <Gate><ProductEditPage /></Gate>
+          <Gate><RoleGate path="/products/:id"><ProductEditPage /></RoleGate></Gate>
         </Route>
         <Route path="/categories">
-          <Gate><CategoriesPage /></Gate>
+          <Gate><RoleGate path="/categories"><CategoriesPage /></RoleGate></Gate>
         </Route>
         <Route path="/orders">
-          <Gate><OrdersPage /></Gate>
+          <Gate><RoleGate path="/orders"><OrdersPage /></RoleGate></Gate>
         </Route>
         <Route path="/orders/:id">
-          <Gate><OrderDetailPage /></Gate>
+          <Gate><RoleGate path="/orders/:id"><OrderDetailPage /></RoleGate></Gate>
         </Route>
         <Route path="/analytics">
-          <Gate><AnalyticsPage /></Gate>
+          <Gate><RoleGate path="/analytics"><AnalyticsPage /></RoleGate></Gate>
         </Route>
         <Route path="/waitlist">
-          <Gate><WaitlistPage /></Gate>
+          <Gate><RoleGate path="/waitlist"><WaitlistPage /></RoleGate></Gate>
         </Route>
         <Route path="/discounts">
-          <Gate><DiscountsPage /></Gate>
+          <Gate><RoleGate path="/discounts"><DiscountsPage /></RoleGate></Gate>
         </Route>
         <Route path="/broadcast">
-          <Gate><BroadcastPage /></Gate>
+          <Gate><RoleGate path="/broadcast"><BroadcastPage /></RoleGate></Gate>
         </Route>
         <Route path="/settings">
-          <Gate><SettingsPage /></Gate>
+          <Gate><RoleGate path="/settings"><SettingsPage /></RoleGate></Gate>
         </Route>
         <Route path="/users">
-          <Gate><UsersPage /></Gate>
+          <Gate><RoleGate path="/users"><UsersPage /></RoleGate></Gate>
         </Route>
         <Route path="/referrals">
-          <Gate><ReferralsPage /></Gate>
+          <Gate><RoleGate path="/referrals"><ReferralsPage /></RoleGate></Gate>
         </Route>
         <Route path="/spinner-prizes">
-          <Gate><SpinnerPrizesPage /></Gate>
+          <Gate><RoleGate path="/spinner-prizes"><SpinnerPrizesPage /></RoleGate></Gate>
         </Route>
       </Switch>
       <ToastContainer />

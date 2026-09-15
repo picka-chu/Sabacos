@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import type { ProfileRole } from "@sabacos/core";
 import {
   LayoutDashboard, Package, Tags, ClipboardList, BarChart3,
   ListOrdered, Megaphone, Settings, LogOut, Percent, Users,
@@ -6,6 +7,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "../auth.js";
+import { canShowInSidebar } from "../lib/permissions.js";
 
 interface NavItem {
   path: string;
@@ -71,6 +73,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const profile = useAuth((s) => s.profile);
   const signOut = useAuth((s) => s.signOut);
 
+  const role = useAuth((s) => s.profile?.role) as ProfileRole | undefined;
+
+  const visibleGroups = useMemo(() => {
+    if (!role) return NAV_GROUPS;
+    return NAV_GROUPS.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => canShowInSidebar(role, item.path)),
+    })).filter((group) => group.items.length > 0);
+  }, [role]);
+
+  const visibleItems = useMemo(() => visibleGroups.flatMap((g) => g.items), [visibleGroups]);
+
   useEffect(() => setSidebarOpen(false), [location]);
 
   useEffect(() => {
@@ -84,7 +98,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const displayName = profile?.firstName ?? email ?? "Admin";
   const initial = (displayName[0] ?? "A").toUpperCase();
 
-  const currentPage = ALL_NAV_ITEMS.find((n) => isActive(location, n.path));
+  const currentPage = visibleItems.find((n) => isActive(location, n.path));
 
   return (
     <div className="app-shell">
@@ -112,7 +126,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <span style={{ fontSize: 12, opacity: 0.35, marginLeft: 6, fontWeight: 400 }}>Admin</span>
         </div>
 
-        {NAV_GROUPS.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.label} className="sidebar-section">
             <div className="sidebar-section-label">{group.label}</div>
             {group.items.map((item) => {

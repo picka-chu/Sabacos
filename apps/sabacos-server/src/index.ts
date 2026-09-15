@@ -17,7 +17,7 @@ import { referralRoutes } from "./routes/referrals.js";
 import { adminReferralRoutes } from "./routes/admin-referrals.js";
 import { shareRoutes } from "./routes/share.js";
 import { requireUser } from "./auth/telegram.js";
-import { requireAdmin, adminMeHandler } from "./auth/admin.js";
+import { requireAdmin, requireFullAdmin, adminMeHandler } from "./auth/admin.js";
 import { sendError, notFound } from "./errors.js";
 import { log } from "./log.js";
 import { rateLimit } from "./rate-limit.js";
@@ -184,6 +184,7 @@ app.use("/api/v1/admin/*", rateLimit({ windowMs: 60_000, limit: 20, keyGenerator
 app.route("/api/v1/admin", adminRoutes);
 app.route("/api/v1/admin/waitlist", waitlistAdminRoutes);
 app.route("/api/v1/admin/discounts", discountAdminRoutes);
+app.use("/api/v1/admin/users/*", requireFullAdmin);
 app.route("/api/v1/admin/users", userManagementRoutes);
 app.route("/api/v1/admin/referrals", adminReferralRoutes);
 

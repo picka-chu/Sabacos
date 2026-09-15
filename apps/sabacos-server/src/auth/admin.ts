@@ -25,6 +25,18 @@ function readInitData(c: Context): string {
 /** Roles that can access admin dashboard. */
 const ADMIN_ACCESS_ROLES: readonly ProfileRole[] = ["admin", "staff", "delivery"];
 
+export const requireFullAdmin: MiddlewareHandler<{ Bindings: AppEnv } & AdminContext> = async (
+  c,
+  next,
+) => {
+  // Must already have a profile from requireAdmin
+  const profile = c.get("profile");
+  if (!profile || profile.role !== "admin") {
+    throw forbidden("Full admin access required");
+  }
+  await next();
+};
+
 export const requireAdmin: MiddlewareHandler<{ Bindings: AppEnv } & AdminContext> = async (
   c,
   next,

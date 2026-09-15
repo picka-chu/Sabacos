@@ -716,6 +716,10 @@ adminRoutes.get("/settings", async (c) => {
 });
 
 adminRoutes.put("/settings", async (c) => {
+  const caller = c.get("profile");
+  if (caller.role !== "admin") {
+    return c.json({ error: { code: "forbidden", message: "Only admins can change settings" } }, 403);
+  }
   const db = getDb(getAppEnv());
   const body = await c.req.json().catch(() => null);
   const input = safeParse(updateSettingsSchema, body);
@@ -768,6 +772,10 @@ adminRoutes.get("/broadcast/audience", async (c) => {
 });
 
 adminRoutes.post("/broadcast", async (c) => {
+  const caller = c.get("profile");
+  if (caller.role !== "admin" && caller.role !== "staff") {
+    return c.json({ error: { code: "forbidden", message: "Insufficient permissions" } }, 403);
+  }
   const env = getAppEnv();
   const db = getDb(env);
   const input = safeParse(broadcastSchema, await c.req.json().catch(() => null));
