@@ -1,14 +1,38 @@
 import { useEffect, useState } from "react";
-import { Users, Search, Plus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Users, Search, Plus, Trash2, ChevronLeft, ChevronRight, Shield, Save, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "../auth.js";
 import { api, apiErrorMessage } from "../lib/api.js";
 import { useToast } from "../components/toast.js";
-import type { Profile, ProfileRole } from "@sabacos/core";
+import type { Profile, ProfileRole, Settings } from "@sabacos/core";
 import { SkeletonTable, EmptyState } from "../components/ui.js";
+import { ALL_PAGE_PATHS } from "../lib/permissions.js";
 
 const ROLES: ProfileRole[] = ["admin", "staff", "delivery", "customer"];
+const ADMIN_ROLES: ProfileRole[] = ["admin", "staff", "delivery"];
 const ROLE_LABELS: Record<ProfileRole, string> = { admin: "Admin", staff: "Staff", delivery: "Delivery", customer: "Customer" };
 const ROLE_BADGE_CLASS: Record<ProfileRole, string> = { admin: "badge-danger", staff: "badge-info", delivery: "badge-success", customer: "" };
+
+const PAGE_LABELS: Record<string, string> = {
+  "/": "Dashboard",
+  "/products": "Products",
+  "/categories": "Categories",
+  "/discounts": "Discounts",
+  "/orders": "Orders",
+  "/analytics": "Analytics",
+  "/broadcast": "Broadcast",
+  "/users": "Users",
+  "/waitlist": "Waitlist",
+  "/referrals": "Referrals",
+  "/spinner-prizes": "Spinner Prizes",
+  "/settings": "Settings",
+  "/permissions": "Permissions",
+};
+
+const DEFAULTS: Record<string, string[]> = {
+  admin: [...ALL_PAGE_PATHS],
+  staff: ["/", "/products", "/categories", "/discounts", "/orders", "/analytics", "/broadcast"],
+  delivery: ["/", "/orders"],
+};
 
 export function UsersPage() {
   const token = useAuth((s) => s.token);
@@ -27,6 +51,12 @@ export function UsersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const toast = useToast((s) => s.add);
 
+  // --- Role permissions state ---
+  const [perms, setPerms] = useState<Record<string, string[]>>({});
+  const [expandedRole, setExpandedRole] = useState<string | null>(null);
+  const [permsSaving, setPermsSaving] = useState(false);
+  const [permsSaved, setPermsSaved] = useState(false);
+
   async function fetchUsers() {
     setLoading(true);
     try {
@@ -44,6 +74,16 @@ export function UsersPage() {
   }
 
   useEffect(() => { fetchUsers(); }, [page, roleFilter]);
+
+  useEffect(() => {
+    api
+      .get<{ settings: Settings }>("/admin/settings", token ?? undefined)
+      .then((res) => {
+        const stored = res.settings.permissions;
+        setPerms(stored ? { ...DEFAULTS, ...stored } : { ...DEFAULTS });
+      })
+      .catch(() => setPerms({ ...DEFAULTS }));
+  }, [token]);
 
   async function handleInvite() {
     if (!inviteTelegramId.trim()) return;
@@ -73,6 +113,26 @@ export function UsersPage() {
     } catch (err) { console.error("Failed to delete user:", err); }
   }
 
+  function togglePerm(role: string, path: string) {
+    setPerms((prev) => {
+      const current = prev[role] ?? [];
+      const next = current.includes(path) ? current.filter((p) => p !== path) : [...current, path];
+      return { ...prev, [role]: next };
+    });
+    setPermsSaved(false);
+  }
+
+  async function savePerms() {
+    setPermsSaving(true); setPermsSaved(false);
+    try {
+      await api.put("/admin/settings", { permissions: perms }, token ?? undefined);
+      setPermsSaved(true);
+      toast("success", "Role permissions saved");
+    } catch (err) {
+      toast("error", err instanceof Error ? err.message : "Save failed");
+    } finally { setPermsSaving(false); }
+  }
+
   const totalPages = Math.ceil(total / pageSize);
 
   return (
@@ -84,6 +144,72 @@ export function UsersPage() {
         </button>
       </div>
 
+      {/* ── Role Permissions ──────────────────────────────── */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 15, display: "flex", alignItems: "center", gap: 6 }}>
+            <Shield size={16} /> Role Permissions
+          </h3>
+          <button className="btn btn-primary btn-sm" onClick={savePerms} disabled={permsSaving}>
+            {permsSaving && <span className="spinner" />}
+            <Save size={13} /> {permsSaving ? "Saving…" : "Save"}
+          </button>
+        </div>
+        {permsSaved && (
+          <div style={{ padding: "8px 12px", borderRadius: "var(--radius-sm)", background: "var(--success-soft)", color: "var(--success)", fontSize: 13, marginBottom: 10 }}>
+            Permissions saved.
+          </div>
+        )}
+        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>
+          Toggle which pages each role can access. Admin always has full access.
+        </div>
+
+        {ADMIN_ROLES.map((role) => {
+          const expanded = expandedRole === role;
+          const allowed = perms[role] ?? DEFAULTS[role] ?? [];
+          return (
+            <div key={role} style={{ borderBottom: "1px solid var(--border-light)" }}>
+              <button
+                onClick={() => setExpandedRole(expanded ? null : role)}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  width: "100%", padding: "10px 0", background: "none", border: "none",
+                  cursor: "pointer", fontSize: 14, fontWeight: 600, textTransform: "capitalize",
+                  color: "var(--ink)",
+                }}
+              >
+                <span>{ROLE_LABELS[role]} — {allowed.length} page{allowed.length !== 1 ? "s" : ""}</span>
+                {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+              {expanded && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "6px 12px", paddingBottom: 14 }}>
+                  {ALL_PAGE_PATHS.map((path) => (
+                    <label
+                      key={path}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 6, fontSize: 13,
+                        cursor: role === "admin" ? "default" : "pointer",
+                        opacity: role === "admin" ? 0.5 : 1,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={allowed.includes(path)}
+                        disabled={role === "admin"}
+                        onChange={() => togglePerm(role, path)}
+                        style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
+                      />
+                      {PAGE_LABELS[path] ?? path}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Search / filter ───────────────────────────────── */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="input-row" style={{ gridTemplateColumns: "1fr 200px" }}>
           <div className="field" style={{ marginBottom: 0 }}>
@@ -108,6 +234,7 @@ export function UsersPage() {
         </div>
       </div>
 
+      {/* ── User table ────────────────────────────────────── */}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {loading ? (
           <SkeletonTable rows={6} cols={4} />
@@ -187,6 +314,7 @@ export function UsersPage() {
         )}
       </div>
 
+      {/* ── Invite modal ──────────────────────────────────── */}
       {showInvite && (
         <div className="modal-backdrop" onClick={() => setShowInvite(false)}>
           <div className="card modal-card" onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>

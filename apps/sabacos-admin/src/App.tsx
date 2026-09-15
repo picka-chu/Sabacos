@@ -21,7 +21,6 @@ import { SettingsPage } from "./pages/SettingsPage.js";
 import { UsersPage } from "./pages/UsersPage.js";
 import { ReferralsPage } from "./pages/ReferralsPage.js";
 import { SpinnerPrizesPage } from "./pages/SpinnerPrizesPage.js";
-import { PermissionsPage } from "./pages/PermissionsPage.js";
 
 function RoleGate({ children, path }: { children: React.ReactNode; path: string }) {
   const role = useAuth((s) => s.profile?.role) as ProfileRole | undefined;
@@ -152,9 +151,6 @@ export default function App() {
         </Route>
         <Route path="/spinner-prizes">
           <Gate><RoleGate path="/spinner-prizes"><SpinnerPrizesPage /></RoleGate></Gate>
-        </Route>
-        <Route path="/permissions">
-          <Gate><RoleGate path="/permissions"><PermissionsPage /></RoleGate></Gate>
         </Route>
       </Switch>
       <ToastContainer />

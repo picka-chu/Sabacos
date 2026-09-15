@@ -3,7 +3,7 @@ import type { ProfileRole } from "@sabacos/core";
 import {
   LayoutDashboard, Package, Tags, ClipboardList, BarChart3,
   ListOrdered, Megaphone, Settings, LogOut, Percent, Users,
-  Menu, X, Gift, Trophy, Shield,
+  Menu, X, Gift, Trophy,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "../auth.js";
@@ -55,7 +55,6 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "System",
     items: [
-      { path: "/permissions", label: "Permissions", icon: Shield },
       { path: "/settings", label: "Settings", icon: Settings },
     ],
   },
