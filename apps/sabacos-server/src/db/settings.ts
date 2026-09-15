@@ -38,6 +38,10 @@ export async function updateSettings(db: Db, patch: Partial<Settings>): Promise<
       patch.deliveryConfig === undefined
         ? (current.deliveryConfig ?? null)
         : mergeDeliveryConfig(patch.deliveryConfig),
+    permissions:
+      patch.permissions === undefined
+        ? (current.permissions ?? null)
+        : patch.permissions,
   };
 
   const { error } = await db
@@ -52,6 +56,7 @@ export async function updateSettings(db: Db, patch: Partial<Settings>): Promise<
         admin_channel_id: merged.adminChannelId,
         ai_vision_model: merged.aiVisionModel ?? null,
         ...(merged.deliveryConfig ? { delivery_config: merged.deliveryConfig } : {}),
+        permissions: merged.permissions ?? null,
       },
     })
     .eq("key", "store");
