@@ -34,9 +34,8 @@ export function OrderDetailPage() {
   const toast = useToast((s) => s.add);
 
   const load = () => {
-    if (!token) return;
     api
-      .get<{ order: OrderWithItems }>(`/admin/orders/${params.id}`, token)
+      .get<{ order: OrderWithItems }>(`/admin/orders/${params.id}`, token ?? undefined)
       .then((res) => setOrder(res.order))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load order"));
   };
@@ -44,14 +43,14 @@ export function OrderDetailPage() {
   useEffect(load, [params.id, token]);
 
   const transition = async (to: OrderStatus) => {
-    if (!token || !order) return;
+    if (!order) return;
     setBusy(true);
     setError(null);
     try {
       const res = await api.patch<{ order: OrderWithItems }>(
         `/admin/orders/${order.id}/status`,
         { status: to },
-        token,
+        token ?? undefined,
       );
       setOrder(res.order);
       toast("success", `Order moved to ${translateStatus("en", to)}`);

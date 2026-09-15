@@ -70,9 +70,8 @@ export function SpinnerPrizesPage() {
   const toast = useToast((s) => s.add);
 
   const load = useCallback(() => {
-    if (!token) return;
     api
-      .get<{ prizes: Prize[] }>("/admin/referrals/prizes", token)
+      .get<{ prizes: Prize[] }>("/admin/referrals/prizes", token ?? undefined)
       .then((res) => setPrizes(res.prizes))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load prizes"))
       .finally(() => setLoading(false));
@@ -102,7 +101,6 @@ export function SpinnerPrizesPage() {
   };
 
   const saveForm = async () => {
-    if (!token) return;
     if (!form.name.trim()) { setError("Name is required"); return; }
     if (form.prizeType !== "spin_again" && form.prizeType !== "free_product" && form.value <= 0) {
       setError("Value must be greater than 0"); return;
@@ -122,10 +120,10 @@ export function SpinnerPrizesPage() {
     setError(null);
     try {
       if (editing) {
-        await api.patch<{ prize: Prize }>(`/admin/referrals/prizes/${editing.id}`, payload, token);
+        await api.patch<{ prize: Prize }>(`/admin/referrals/prizes/${editing.id}`, payload, token ?? undefined);
         toast("success", "Prize updated");
       } else {
-        await api.post<{ prize: Prize }>("/admin/referrals/prizes", payload, token);
+        await api.post<{ prize: Prize }>("/admin/referrals/prizes", payload, token ?? undefined);
         toast("success", "Prize created");
       }
       setShowForm(false);
@@ -137,19 +135,17 @@ export function SpinnerPrizesPage() {
   };
 
   const toggleActive = async (p: Prize) => {
-    if (!token) return;
     try {
-      await api.patch<{ prize: Prize }>(`/admin/referrals/prizes/${p.id}`, { isActive: !p.isActive }, token);
+      await api.patch<{ prize: Prize }>(`/admin/referrals/prizes/${p.id}`, { isActive: !p.isActive }, token ?? undefined);
       toast("success", p.isActive ? "Prize deactivated" : "Prize activated");
       load();
     } catch (err) { setError(err instanceof Error ? err.message : "Failed to update"); }
   };
 
   const remove = async (p: Prize) => {
-    if (!token) return;
     if (!confirm(`Delete prize "${p.name}"? This cannot be undone.`)) return;
     try {
-      await api.del(`/admin/referrals/prizes/${p.id}`, token);
+      await api.del(`/admin/referrals/prizes/${p.id}`, token ?? undefined);
       toast("success", "Prize deleted");
       load();
     } catch (err) { setError(err instanceof Error ? err.message : "Failed to delete"); }

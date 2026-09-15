@@ -18,25 +18,24 @@ export function BroadcastPage() {
   const toast = useToast((s) => s.add);
 
   useEffect(() => {
-    if (!token) return;
-    api.get<{ count: number }>("/admin/broadcast/audience", token)
+    api.get<{ count: number }>("/admin/broadcast/audience", token ?? undefined)
       .then((res) => setAudience(res.count))
       .catch(() => setAudience(null));
   }, [token]);
 
   const onImage = async (files: FileList | null) => {
     const file = files?.[0];
-    if (!file || !token) return;
+    if (!file) return;
     setUploading(true); setError(null);
     try {
-      const res = await uploadAiImage(file, token);
+      const res = await uploadAiImage(file, token ?? undefined);
       setImageUrl(res.url);
     } catch (err) { setError(err instanceof Error ? err.message : "Upload failed"); }
     finally { setUploading(false); }
   };
 
   const send = async () => {
-    if (!token || !text.trim()) return;
+    if (!text.trim()) return;
     if (buttonUrl.trim() && !buttonText.trim()) { setError("Button label is required with a button URL."); return; }
     if (!window.confirm(`Send this message to ${audience ?? "all"} users?`)) return;
     setSending(true); setError(null); setResult(null);
@@ -45,7 +44,7 @@ export function BroadcastPage() {
         text: text.trim(),
         ...(imageUrl ? { imageUrl } : {}),
         ...(buttonUrl.trim() ? { buttonUrl: buttonUrl.trim(), buttonText: buttonText.trim() } : {}),
-      }, token);
+      }, token ?? undefined);
       setResult(res);
       toast("success", `Broadcast sent to ${res.sent} users`);
     } catch (err) {

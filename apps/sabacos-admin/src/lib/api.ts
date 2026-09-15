@@ -129,7 +129,7 @@ async function resizeImage(file: File, maxDim = 1024): Promise<File> {
 /** Uploads a photo, stores it, and asks the AI to draft the product listing. */
 export async function uploadAiImage(
   file: File,
-  token: string,
+  token?: string,
 ): Promise<{ url: string; draft: ProductDraft | null }> {
   const resized = await resizeImage(file);
   const form = new FormData();

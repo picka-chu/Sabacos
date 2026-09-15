@@ -35,9 +35,8 @@ export function SettingsPage() {
   const toast = useToast((s) => s.add);
 
   useEffect(() => {
-    if (!token) return;
     api
-      .get<{ settings: Settings }>("/admin/settings", token)
+      .get<{ settings: Settings }>("/admin/settings", token ?? undefined)
       .then((res) => {
         const s = res.settings;
         setForm({
@@ -57,7 +56,6 @@ export function SettingsPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!token) return;
 
     let deliveryConfig: unknown = undefined;
     if (deliveryConfigJson.trim() && deliveryConfigJson.trim() !== "null") {
@@ -76,7 +74,7 @@ export function SettingsPage() {
         admin_channel_id: form.adminChannelId.trim() || null,
         ai_vision_model: form.aiVisionModel.trim() || null,
         ...(deliveryConfig !== undefined ? { delivery_config: deliveryConfig } : {}),
-      }, token);
+      }, token ?? undefined);
       setSaved(true);
       toast("success", "Settings saved");
     } catch (err) {
@@ -157,10 +155,9 @@ export function SettingsPage() {
               <button type="button" className="btn btn-secondary" disabled={busy || !form.adminChannelId.trim()}
                 title="Send a test message to this channel"
                 onClick={async () => {
-                  if (!token) return;
                   setBusy(true); setError(null); setSaved(false);
                   try {
-                    await api.post<{ ok: boolean; channelId: string }>("/admin/settings/test-channel", undefined, token);
+                    await api.post<{ ok: boolean; channelId: string }>("/admin/settings/test-channel", undefined, token ?? undefined);
                     setSaved(true); toast("success", "Test message sent");
                   } catch (err) {
                     setError(err instanceof Error ? err.message : "Channel test failed");

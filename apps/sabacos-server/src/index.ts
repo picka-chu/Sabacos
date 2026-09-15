@@ -156,6 +156,14 @@ app.post("/webhook", async (c) => {
 // ---------------------------------------------------------------------------
 app.route("/api/v1/catalog", catalogRoutes);
 
+// Public waitlist check — no auth required.  The mini app Shell uses this to
+// decide whether to show the waitlist page before user auth completes.
+app.get("/api/v1/waitlist/public-status", async (c) => {
+  const { getWaitlistConfig } = await import("./db/waitlist.js");
+  const config = await getWaitlistConfig(db).catch(() => null);
+  return c.json({ isActive: config?.isActive === true });
+});
+
 app.get("/api/v1/delivery/config", async (c) => {
   const { getSettings } = await import("./db/settings.js");
   const { DEFAULT_DELIVERY_CONFIG } = await import("@sabacos/core");

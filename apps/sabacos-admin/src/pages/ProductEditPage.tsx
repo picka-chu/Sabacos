@@ -42,14 +42,13 @@ export function ProductEditPage() {
   const set = (key: keyof typeof form, value: string | boolean) => setForm((f) => ({ ...f, [key]: value }));
 
   useEffect(() => {
-    if (!token) return;
     api
-      .get<{ categories: Category[] }>("/admin/categories", token)
+      .get<{ categories: Category[] }>("/admin/categories", token ?? undefined)
       .then((res) => setCategories(res.categories))
       .catch(() => {});
     if (!isNew) {
       api
-        .get<{ product: Product }>(`/admin/products/${id}`, token)
+        .get<{ product: Product }>(`/admin/products/${id}`, token ?? undefined)
         .then((res) => {
           const p = res.product;
           setForm({
@@ -76,7 +75,6 @@ export function ProductEditPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!token) return;
     setBusy(true);
     setError(null);
     const body = {
@@ -97,11 +95,11 @@ export function ProductEditPage() {
     };
     try {
       if (isNew) {
-        const res = await api.post<{ product: Product }>("/admin/products", body, token);
+        const res = await api.post<{ product: Product }>("/admin/products", body, token ?? undefined);
         toast("success", "Product created successfully");
         navigate(`/products/${res.product.id}`);
       } else {
-        await api.patch<{ product: Product }>(`/admin/products/${id}`, body, token);
+        await api.patch<{ product: Product }>(`/admin/products/${id}`, body, token ?? undefined);
         toast("success", "Product saved");
         navigate("/products");
       }
@@ -117,7 +115,7 @@ export function ProductEditPage() {
   const [aiFiles, setAiFiles] = useState<AiFileStatus[]>([]);
 
   const onFiles = async (files: FileList | null) => {
-    if (!files || !token || files.length === 0) return;
+    if (!files || files.length === 0) return;
     setBusy(true);
     setError(null);
 
@@ -139,7 +137,7 @@ export function ProductEditPage() {
         );
 
         try {
-          const res = await uploadAiImage(file, token);
+          const res = await uploadAiImage(file, token ?? undefined);
 
           setImages((imgs) => (imgs.includes(res.url) ? imgs : [...imgs, res.url]));
 
@@ -177,10 +175,10 @@ export function ProductEditPage() {
   };
 
   const del = async () => {
-    if (!token || !id) return;
+    if (!id) return;
     if (!window.confirm("Delete this product permanently?")) return;
     try {
-      await api.del(`/admin/products/${id}`, token);
+      await api.del(`/admin/products/${id}`, token ?? undefined);
       toast("success", "Product deleted");
       navigate("/products");
     } catch (err) {

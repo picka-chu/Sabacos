@@ -45,9 +45,8 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token) return;
     api
-      .get<{ stats: Stats }>("/admin/stats", token)
+      .get<{ stats: Stats }>("/admin/stats", token ?? undefined)
       .then((res) => setStats(res.stats))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load stats"));
   }, [token]);

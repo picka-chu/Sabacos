@@ -51,21 +51,20 @@ export function ReferralsPage() {
   const toast = useToast((s) => s.add);
 
   const load = () => {
-    if (!token) return;
-    api.get<ReferralStats>("/admin/referrals/stats", token).then(setStats).catch(() => {});
-    api.get<{ settings: ReferralSettings }>("/admin/referrals/settings", token).then((res) => setSettings(res.settings)).catch(() => {});
-    api.get<{ rolling: RollingAverages }>("/admin/referrals/metrics/latest", token).then((res) => setRolling(res.rolling)).catch(() => {});
-    api.get<{ log: AdjustmentLogEntry[] }>("/admin/referrals/adjust/log?limit=10", token).then((res) => setAdjustLog(res.log)).catch(() => {})
+    api.get<ReferralStats>("/admin/referrals/stats", token ?? undefined).then(setStats).catch(() => {});
+    api.get<{ settings: ReferralSettings }>("/admin/referrals/settings", token ?? undefined).then((res) => setSettings(res.settings)).catch(() => {});
+    api.get<{ rolling: RollingAverages }>("/admin/referrals/metrics/latest", token ?? undefined).then((res) => setRolling(res.rolling)).catch(() => {});
+    api.get<{ log: AdjustmentLogEntry[] }>("/admin/referrals/adjust/log?limit=10", token ?? undefined).then((res) => setAdjustLog(res.log)).catch(() => {})
       .finally(() => setLoading(false));
   };
 
   useEffect(load, [token]);
 
   const saveSettings = async () => {
-    if (!token || !settings) return;
+    if (!settings) return;
     setSaving(true); setError(null);
     try {
-      await api.patch("/admin/referrals/settings", settings, token);
+      await api.patch("/admin/referrals/settings", settings, token ?? undefined);
       setEditing(false); toast("success", "Settings saved");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -74,37 +73,35 @@ export function ReferralsPage() {
   };
 
   const runAggregation = async () => {
-    if (!token) return;
     setAggregating(true);
-    try { await api.post("/admin/referrals/metrics/aggregate", {}, token); load(); }
+    try { await api.post("/admin/referrals/metrics/aggregate", {}, token ?? undefined); load(); }
     catch (err) { setError(err instanceof Error ? err.message : "Aggregation failed"); }
     finally { setAggregating(false); }
   };
 
   const runAdjustment = async () => {
-    if (!token) return;
     setAdjusting(true);
-    try { await api.post("/admin/referrals/adjust", {}, token); load(); }
+    try { await api.post("/admin/referrals/adjust", {}, token ?? undefined); load(); }
     catch (err) { setError(err instanceof Error ? err.message : "Adjustment failed"); }
     finally { setAdjusting(false); }
   };
 
   const toggleAdaptive = async () => {
-    if (!token || !settings) return;
+    if (!settings) return;
     try {
-      await api.patch("/admin/referrals/adaptive", { enabled: !settings.adaptiveEnabled }, token);
+      await api.patch("/admin/referrals/adaptive", { enabled: !settings.adaptiveEnabled }, token ?? undefined);
       setSettings({ ...settings, adaptiveEnabled: !settings.adaptiveEnabled });
     } catch (err) { setError(apiErrorMessage(err)); }
   };
 
   const walletAdjust = async (action: "credit" | "debit") => {
-    if (!token || !walletProfileId.trim() || walletAmount <= 0) return;
+    if (!walletProfileId.trim() || walletAmount <= 0) return;
     setWalletMsg(null);
     try {
       await api.post(`/admin/referrals/wallet/${action}`, {
         profileId: walletProfileId.trim(), amountHalala: Math.round(walletAmount * 100),
         description: walletNote.trim() || `Admin ${action}`,
-      }, token);
+      }, token ?? undefined);
       const msg = `${action === "credit" ? "Credited" : "Debited"} ${walletAmount.toFixed(2)} ETB`;
       setWalletMsg(msg); toast("success", msg);
       setWalletAmount(0); setWalletNote(""); load();

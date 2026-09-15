@@ -60,10 +60,9 @@ export function AnalyticsPage() {
   const [range, setRange] = useState("30d");
 
   useEffect(() => {
-    if (!token) return;
     setData(null); setError(null);
     api
-      .get<{ analytics: AnalyticsData }>(`/admin/analytics?range=${range}`, token)
+      .get<{ analytics: AnalyticsData }>(`/admin/analytics?range=${range}`, token ?? undefined)
       .then((res) => setData(res.analytics))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load analytics"));
   }, [token, range]);

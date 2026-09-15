@@ -64,12 +64,11 @@ function Shell() {
       .catch(() => setProfileStatus("error"));
     refreshCart().catch(() => {});
 
-    // Check if waitlist phase is active — server has ONLY /waitlist/status,
-    // which returns { config.isActive, entry, discount }
+    // Check if waitlist phase is active — public endpoint, no auth needed.
     api
-      .get<{ config: { isActive: boolean } | null }>("/waitlist/status")
+      .get<{ isActive: boolean }>("/waitlist/public-status")
       .then((res) => {
-        setWaitlistActive(res.config?.isActive === true);
+        setWaitlistActive(res.isActive === true);
       })
       .catch(() => {
         setWaitlistActive(false);

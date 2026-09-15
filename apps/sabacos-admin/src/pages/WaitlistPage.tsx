@@ -41,11 +41,10 @@ export function WaitlistPage() {
   const [formGraceDays, setFormGraceDays] = useState(30);
 
   const loadAll = () => {
-    if (!token) return;
     Promise.all([
-      api.get<{ config: WaitlistConfig }>("/admin/waitlist/config", token),
-      api.get<{ stats: WaitlistStats; config: WaitlistConfig }>("/admin/waitlist/stats", token),
-      api.get<{ items: WaitlistEntry[]; total: number }>(`/admin/waitlist/entries?page=${page}&pageSize=15`, token),
+      api.get<{ config: WaitlistConfig }>("/admin/waitlist/config", token ?? undefined),
+      api.get<{ stats: WaitlistStats; config: WaitlistConfig }>("/admin/waitlist/stats", token ?? undefined),
+      api.get<{ items: WaitlistEntry[]; total: number }>(`/admin/waitlist/entries?page=${page}&pageSize=15`, token ?? undefined),
     ])
       .then(([configRes, statsRes, entriesRes]) => {
         setConfig(configRes.config); setStats(statsRes.stats);
@@ -64,7 +63,6 @@ export function WaitlistPage() {
   useEffect(() => { loadAll(); }, [token, page]);
 
   const saveConfig = async () => {
-    if (!token) return;
     setSaving(true); setError(null);
     try {
       const res = await api.put<{ config: WaitlistConfig }>("/admin/waitlist/config", {
@@ -72,7 +70,7 @@ export function WaitlistPage() {
         deadline: formDeadline ? new Date(formDeadline).toISOString() : null,
         referralBonusPercent: formReferralBonus, maxReferralDiscount: formMaxReferral,
         discountGracePeriodDays: formGraceDays,
-      }, token);
+      }, token ?? undefined);
       setConfig(res.config); toast("success", "Configuration saved");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");

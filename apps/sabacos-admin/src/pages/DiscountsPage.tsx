@@ -77,9 +77,8 @@ export function DiscountsPage() {
   const toast = useToast((s) => s.add);
 
   const load = useCallback(() => {
-    if (!token) return;
     api
-      .get<{ discounts: Discount[] }>("/admin/discounts", token)
+      .get<{ discounts: Discount[] }>("/admin/discounts", token ?? undefined)
       .then((res) => setDiscounts(res.discounts))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load discounts"))
       .finally(() => setLoading(false));
@@ -88,9 +87,8 @@ export function DiscountsPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    if (!token) return;
-    api.get<{ categories: Category[] }>("/admin/categories", token).then((res) => setCategories(res.categories)).catch(() => undefined);
-    api.get<{ items: ProductLite[] }>("/admin/products?pageSize=500", token).then((res) => setProducts(res.items)).catch(() => undefined);
+    api.get<{ categories: Category[] }>("/admin/categories", token ?? undefined).then((res) => setCategories(res.categories)).catch(() => undefined);
+    api.get<{ items: ProductLite[] }>("/admin/products?pageSize=500", token ?? undefined).then((res) => setProducts(res.items)).catch(() => undefined);
   }, [token]);
 
   const startCreate = () => { setEditing(null); setForm(EMPTY_FORM); setShowForm(true); setError(null); };
@@ -107,7 +105,6 @@ export function DiscountsPage() {
   };
 
   const saveForm = async () => {
-    if (!token) return;
     if (!form.name.trim()) { setError("Name is required"); return; }
     if (form.discountType === "percent" && (form.discountValue <= 0 || form.discountValue > 100)) { setError("Percentage must be between 1 and 100"); return; }
     if (form.discountType === "fixed" && form.discountValue <= 0) { setError("Discount amount must be greater than 0"); return; }
@@ -129,10 +126,10 @@ export function DiscountsPage() {
     setSaving(true); setError(null);
     try {
       if (editing) {
-        await api.patch<{ discount: Discount }>(`/admin/discounts/${editing.id}`, payload, token);
+        await api.patch<{ discount: Discount }>(`/admin/discounts/${editing.id}`, payload, token ?? undefined);
         toast("success", "Discount updated");
       } else {
-        await api.post<{ discount: Discount }>("/admin/discounts", payload, token);
+        await api.post<{ discount: Discount }>("/admin/discounts", payload, token ?? undefined);
         toast("success", "Discount created");
       }
       setShowForm(false); load();
@@ -143,19 +140,17 @@ export function DiscountsPage() {
   };
 
   const toggleActive = async (d: Discount) => {
-    if (!token) return;
     try {
-      await api.patch<{ discount: Discount }>(`/admin/discounts/${d.id}`, { isActive: !d.isActive }, token);
+      await api.patch<{ discount: Discount }>(`/admin/discounts/${d.id}`, { isActive: !d.isActive }, token ?? undefined);
       toast("success", d.isActive ? "Discount paused" : "Discount activated");
       load();
     } catch (err) { setError(err instanceof Error ? err.message : "Failed to update"); }
   };
 
   const remove = async (d: Discount) => {
-    if (!token) return;
     if (!confirm(`Delete discount "${d.name}"?`)) return;
     try {
-      await api.del(`/admin/discounts/${d.id}`, token);
+      await api.del(`/admin/discounts/${d.id}`, token ?? undefined);
       toast("success", "Discount deleted");
       load();
     } catch (err) { setError(err instanceof Error ? err.message : "Failed to delete"); }
