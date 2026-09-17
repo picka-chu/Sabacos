@@ -24,7 +24,7 @@ export function getTelegramInitData(): string | null {
   return null;
 }
 
-async function request<T>(method: string, path: string, body?: unknown, token?: string): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, token?: string, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (token) {
@@ -41,6 +41,7 @@ async function request<T>(method: string, path: string, body?: unknown, token?: 
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
   });
 
   if (!res.ok) {
@@ -61,11 +62,11 @@ async function request<T>(method: string, path: string, body?: unknown, token?: 
 }
 
 export const api = {
-  get: <T>(path: string, token?: string) => request<T>("GET", path, undefined, token),
-  post: <T>(path: string, body?: unknown, token?: string) => request<T>("POST", path, body, token),
-  patch: <T>(path: string, body?: unknown, token?: string) => request<T>("PATCH", path, body, token),
-  put: <T>(path: string, body?: unknown, token?: string) => request<T>("PUT", path, body, token),
-  del: <T>(path: string, token?: string) => request<T>("DELETE", path, undefined, token),
+  get: <T>(path: string, token?: string, signal?: AbortSignal) => request<T>("GET", path, undefined, token, signal),
+  post: <T>(path: string, body?: unknown, token?: string, signal?: AbortSignal) => request<T>("POST", path, body, token, signal),
+  patch: <T>(path: string, body?: unknown, token?: string, signal?: AbortSignal) => request<T>("PATCH", path, body, token, signal),
+  put: <T>(path: string, body?: unknown, token?: string, signal?: AbortSignal) => request<T>("PUT", path, body, token, signal),
+  del: <T>(path: string, token?: string, signal?: AbortSignal) => request<T>("DELETE", path, undefined, token, signal),
 };
 
 export function apiErrorMessage(err: unknown): string {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Users, Gift, Wallet, TrendingUp, Settings, Save, Activity, AlertTriangle, Play, Pause } from "lucide-react";
 import { api, apiErrorMessage } from "../lib/api.js";
 import { useAuth } from "../auth.js";
@@ -50,15 +50,15 @@ export function ReferralsPage() {
   const [loading, setLoading] = useState(true);
   const toast = useToast((s) => s.add);
 
-  const load = () => {
+  const load = useCallback(() => {
     api.get<ReferralStats>("/admin/referrals/stats", token ?? undefined).then(setStats).catch(() => {});
     api.get<{ settings: ReferralSettings }>("/admin/referrals/settings", token ?? undefined).then((res) => setSettings(res.settings)).catch(() => {});
     api.get<{ rolling: RollingAverages }>("/admin/referrals/metrics/latest", token ?? undefined).then((res) => setRolling(res.rolling)).catch(() => {});
     api.get<{ log: AdjustmentLogEntry[] }>("/admin/referrals/adjust/log?limit=10", token ?? undefined).then((res) => setAdjustLog(res.log)).catch(() => {})
       .finally(() => setLoading(false));
-  };
+  }, [token]);
 
-  useEffect(load, [token]);
+  useEffect(load, [load]);
 
   const saveSettings = async () => {
     if (!settings) return;

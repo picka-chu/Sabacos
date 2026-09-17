@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Plus, Pencil, Trash2, Tags } from "lucide-react";
 import type { Category } from "@sabacos/core";
 import { api } from "../lib/api.js";
@@ -16,15 +16,15 @@ export function CategoriesPage() {
   const [loading, setLoading] = useState(true);
   const toast = useToast((s) => s.add);
 
-  const load = () => {
+  const load = useCallback(() => {
     api
       .get<{ categories: Category[] }>("/admin/categories", token ?? undefined)
       .then((res) => setCategories(res.categories))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load categories"))
       .finally(() => setLoading(false));
-  };
+  }, [token]);
 
-  useEffect(load, [token]);
+  useEffect(load, [load]);
 
   const startEdit = (c: Category) => {
     setEditingId(c.id);

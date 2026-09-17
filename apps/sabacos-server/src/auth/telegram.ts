@@ -12,11 +12,7 @@ export type UserContext = {
 };
 
 function readInitData(c: Context<{ Bindings: AppEnv }>): string {
-  const header = c.req.header("x-telegram-init-data");
-  if (header) return header;
-  const body = c.req.query("initData");
-  if (typeof body === "string" && body) return body;
-  return "";
+  return c.req.header("x-telegram-init-data") ?? "";
 }
 
 export const requireUser: MiddlewareHandler<{ Bindings: AppEnv } & UserContext> = async (

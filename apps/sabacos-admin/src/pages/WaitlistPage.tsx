@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Copy, Check } from "lucide-react";
 import { api } from "../lib/api.js";
 import { useAuth } from "../auth.js";
@@ -40,7 +40,7 @@ export function WaitlistPage() {
   const [formMaxReferral, setFormMaxReferral] = useState(30);
   const [formGraceDays, setFormGraceDays] = useState(30);
 
-  const loadAll = () => {
+  const loadAll = useCallback(() => {
     Promise.all([
       api.get<{ config: WaitlistConfig }>("/admin/waitlist/config", token ?? undefined),
       api.get<{ stats: WaitlistStats; config: WaitlistConfig }>("/admin/waitlist/stats", token ?? undefined),
@@ -58,9 +58,9 @@ export function WaitlistPage() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
       .finally(() => setLoading(false));
-  };
+  }, [token, page]);
 
-  useEffect(() => { loadAll(); }, [token, page]);
+  useEffect(loadAll, [loadAll]);
 
   const saveConfig = async () => {
     setSaving(true); setError(null);

@@ -60,11 +60,16 @@ export function AnalyticsPage() {
   const [range, setRange] = useState("30d");
 
   useEffect(() => {
+    const ctrl = new AbortController();
     setData(null); setError(null);
     api
-      .get<{ analytics: AnalyticsData }>(`/admin/analytics?range=${range}`, token ?? undefined)
+      .get<{ analytics: AnalyticsData }>(`/admin/analytics?range=${range}`, token ?? undefined, ctrl.signal)
       .then((res) => setData(res.analytics))
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load analytics"));
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : "Failed to load analytics");
+      });
+    return () => ctrl.abort();
   }, [token, range]);
 
   return (

@@ -27,12 +27,30 @@ function RoleGate({ children, path }: { children: React.ReactNode; path: string 
   const perms = usePermissions((s) => s.perms);
   const [, navigate] = useLocation();
 
+  useEffect(() => {
+    if (role && !canAccessPage(role, path, perms)) {
+      navigate("/", { replace: true });
+    }
+  }, [role, path, perms, navigate]);
+
   if (role && !canAccessPage(role, path, perms)) {
-    navigate("/", { replace: true });
     return null;
   }
 
   return <>{children}</>;
+}
+
+function NotFoundPage() {
+  const [, navigate] = useLocation();
+  return (
+    <div className="p-8 text-center">
+      <h1 className="text-lg font-semibold mb-2">Page not found</h1>
+      <p className="text-sm text-gray-500 mb-4">The page you're looking for doesn't exist.</p>
+      <button onClick={() => navigate("/")} className="px-4 py-2 rounded-lg bg-black text-white text-sm">
+        Go to dashboard
+      </button>
+    </div>
+  );
 }
 
 function Gate({ children }: { children: React.ReactNode }) {
@@ -97,7 +115,6 @@ function Gate({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Layout>{children}</Layout>
-      <ToastContainer />
     </>
   );
 }
@@ -153,6 +170,9 @@ export default function App() {
         </Route>
         <Route path="/spinner-prizes">
           <Gate><RoleGate path="/spinner-prizes"><SpinnerPrizesPage /></RoleGate></Gate>
+        </Route>
+        <Route>
+          <Gate><NotFoundPage /></Gate>
         </Route>
       </Switch>
       <ToastContainer />

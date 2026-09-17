@@ -16,7 +16,6 @@ export const ALL_PAGE_PATHS = [
   "/referrals",
   "/spinner-prizes",
   "/settings",
-  "/permissions",
 ] as const;
 
 /** Sidebar-only paths (excludes detail/edit routes). */

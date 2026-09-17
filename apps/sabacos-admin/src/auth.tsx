@@ -34,10 +34,18 @@ export const useAuth = create<AdminSession>((set) => ({
   restore: async () => {
     const { data } = await supabase.auth.getSession();
     const session = data.session;
+    const token = session?.access_token ?? null;
     set({
-      token: session?.access_token ?? null,
+      token,
       email: session?.user.email ?? null,
     });
+    // Fetch admin profile if we have a Supabase session
+    if (token) {
+      try {
+        const res = await api.get<{ profile: AdminProfile }>("/admin/me", token);
+        set({ profile: res.profile });
+      } catch { /* not an admin or token invalid */ }
+    }
   },
 
   restoreFromTelegram: async () => {
@@ -46,10 +54,8 @@ export const useAuth = create<AdminSession>((set) => ({
 
     try {
       const res = await api.get<{ profile: AdminProfile }>("/admin/me");
-      // Store initData as the "token" for subsequent API calls
-      // The server accepts either Bearer token or X-Telegram-Init-Data
       set({
-        token: null, // No bearer token — auth is via X-Telegram-Init-Data header
+        token: null,
         email: res.profile.firstName ?? "Admin",
         profile: res.profile,
       });
@@ -62,7 +68,15 @@ export const useAuth = create<AdminSession>((set) => ({
   signIn: async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
-    set({ token: data.session.access_token, email: data.session.user.email ?? email, ready: true });
+    const token = data.session.access_token;
+    set({ token, email: data.session.user.email ?? email });
+    // Fetch admin profile
+    try {
+      const res = await api.get<{ profile: AdminProfile }>("/admin/me", token);
+      set({ profile: res.profile, ready: true });
+    } catch {
+      set({ ready: true });
+    }
   },
 
   signOut: async () => {
@@ -70,8 +84,5 @@ export const useAuth = create<AdminSession>((set) => ({
     set({ token: null, email: null, profile: null, ready: true });
   },
 
-  // Marks the initial auth attempt complete — only called after both the
-  // Supabase session restore and (when needed) the Telegram attempt resolve,
-  // so the app never flashes the login screen while Telegram auth is pending.
   finishAuth: () => set({ ready: true }),
 }));

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import type { AppEnv } from "../env.js";
 import { getDb } from "../db/client.js";
 import {
@@ -17,6 +18,16 @@ import { getAllSpinnerPrizes, createSpinnerPrize, updateSpinnerPrize, deleteSpin
 
 export const adminReferralRoutes = new Hono<{ Bindings: AppEnv }>();
 
+const walletSchema = z.object({ amountHalala: z.number().int().positive().max(10_000_000) });
+
+const referralSettingsSchema = z.object({
+  firstPurchasePercent: z.number().min(0).max(100).optional(),
+  monthlyCapHalala: z.number().int().nonnegative().optional(),
+  rewardBudgetPct: z.number().min(0).max(100).optional(),
+  commissionPct: z.number().min(0).max(100).optional(),
+  adaptiveEnabled: z.boolean().optional(),
+}).passthrough(); // allow other fields through
+
 // ──────────────────────────────────────────────────────────────────────
 // Referral Settings
 // ──────────────────────────────────────────────────────────────────────
@@ -33,11 +44,12 @@ adminReferralRoutes.patch("/settings", async (c) => {
   const db = getDb(c.env);
   const body = await c.req.json().catch(() => null);
 
-  if (!body) {
-    return c.json({ error: { code: "bad_request", message: "Invalid body" } }, 400);
+  const input = referralSettingsSchema.safeParse(body);
+  if (!input.success) {
+    return c.json({ error: { code: "bad_request", message: input.error.message } }, 400);
   }
 
-  const settings = await updateReferralSettings(db, body);
+  const settings = await updateReferralSettings(db, input.data);
   return c.json({ settings });
 });
 
@@ -185,14 +197,18 @@ adminReferralRoutes.post("/wallet/credit", async (c) => {
   const db = getDb(c.env);
   const body = await c.req.json().catch(() => null);
 
-  if (!body?.profileId || !body?.amountHalala || !body?.description) {
+  const input = walletSchema.safeParse(body);
+  if (!input.success) {
+    return c.json({ error: { code: "bad_request", message: input.error.message } }, 400);
+  }
+  if (!body?.profileId || !body?.description) {
     return c.json({ error: { code: "bad_request", message: "profileId, amountHalala, and description required" } }, 400);
   }
 
   const result = await creditWallet(
     db,
     body.profileId,
-    body.amountHalala,
+    input.data.amountHalala,
     body.description,
     "admin_adjustment",
   );
@@ -205,7 +221,11 @@ adminReferralRoutes.post("/wallet/debit", async (c) => {
   const db = getDb(c.env);
   const body = await c.req.json().catch(() => null);
 
-  if (!body?.profileId || !body?.amountHalala || !body?.description) {
+  const input = walletSchema.safeParse(body);
+  if (!input.success) {
+    return c.json({ error: { code: "bad_request", message: input.error.message } }, 400);
+  }
+  if (!body?.profileId || !body?.description) {
     return c.json({ error: { code: "bad_request", message: "profileId, amountHalala, and description required" } }, 400);
   }
 
@@ -213,7 +233,7 @@ adminReferralRoutes.post("/wallet/debit", async (c) => {
     const result = await debitWallet(
       db,
       body.profileId,
-      body.amountHalala,
+      input.data.amountHalala,
       body.description,
       "admin_adjustment",
     );

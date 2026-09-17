@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { formatETB, type Order, type OrderStatus } from "@sabacos/core";
 import { api } from "../lib/api.js";
@@ -41,16 +41,16 @@ export function OrdersPage() {
   const [status, setStatus] = useState<OrderStatus | "">("");
   const [error, setError] = useState<string | null>(null);
 
-  const load = () => {
+  const load = useCallback(() => {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
     api
       .get<OrderPageData>(`/admin/orders?${params.toString()}`, token ?? undefined)
       .then(setData)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load orders"));
-  };
+  }, [token, status]);
 
-  useEffect(load, [token, status]);
+  useEffect(load, [load]);
 
   return (
     <>

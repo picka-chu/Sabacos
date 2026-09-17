@@ -81,39 +81,55 @@ export const requireAdmin: MiddlewareHandler<{ Bindings: AppEnv } & AdminContext
 };
 
 /**
- * Lightweight endpoint to verify Telegram auth and return the admin profile.
- * Used by the admin dashboard when opened as a Telegram mini app.
+ * Lightweight endpoint to verify admin auth and return the profile.
+ * Accepts either Telegram initData or Supabase Bearer token.
  */
 export const adminMeHandler: MiddlewareHandler<{ Bindings: AppEnv } & AdminContext> = async (c) => {
   const env = getAppEnv();
-  const initData = readInitData(c as Context);
-  if (!initData) {
-    return c.json({ error: { code: "unauthorized", message: "Missing Telegram init data" } }, 401);
-  }
-
-  const result = await validateInitData(initData, env.BOT_TOKEN);
-  if (!result.valid || !result.payload) {
-    return c.json({ error: { code: "unauthorized", message: "Invalid Telegram session" } }, 401);
-  }
-
   const db = getDb(env);
-  const profile = await getProfileByTelegramId(db, result.payload.userId);
-  if (!profile) {
-    return c.json({ error: { code: "unauthorized", message: "No profile found" } }, 401);
-  }
-  if (!(ADMIN_ACCESS_ROLES as readonly string[]).includes(profile.role)) {
-    return c.json({ error: { code: "forbidden", message: "Admin access required" } }, 403);
+
+  // --- Method 1: Telegram initData ---
+  const initData = readInitData(c as Context);
+  if (initData) {
+    const result = await validateInitData(initData, env.BOT_TOKEN);
+    if (result.valid && result.payload) {
+      const profile = await getProfileByTelegramId(db, result.payload.userId);
+      if (profile && (ADMIN_ACCESS_ROLES as readonly string[]).includes(profile.role)) {
+        return c.json({
+          profile: {
+            id: profile.id,
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            username: profile.username,
+            role: profile.role,
+          },
+        });
+      }
+    }
   }
 
-  return c.json({
-    profile: {
-      id: profile.id,
-      firstName: profile.firstName,
-      lastName: profile.lastName,
-      username: profile.username,
-      role: profile.role,
-    },
-  });
+  // --- Method 2: Supabase Bearer token ---
+  const token = readBearer(c as Context);
+  if (token) {
+    const authDb = getAuthDb(env);
+    const { data, error } = await authDb.auth.getUser(token);
+    if (!error && data.user) {
+      const profile = await getProfileByAuthId(db, data.user.id);
+      if (profile && (ADMIN_ACCESS_ROLES as readonly string[]).includes(profile.role)) {
+        return c.json({
+          profile: {
+            id: profile.id,
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            username: profile.username,
+            role: profile.role,
+          },
+        });
+      }
+    }
+  }
+
+  return c.json({ error: { code: "unauthorized", message: "Not authenticated" } }, 401);
 };
 
 /**

@@ -33,6 +33,11 @@ const updateConfigSchema = z.object({
 });
 
 waitlistAdminRoutes.put("/config", async (c) => {
+  const caller = c.get("profile");
+  if (caller.role !== "admin") {
+    return c.json({ error: { code: "forbidden", message: "Only admins can change waitlist config" } }, 403);
+  }
+
   const db = getDb(getAppEnv());
   const body = await c.req.json().catch(() => null);
   const input = safeParse(updateConfigSchema, body);

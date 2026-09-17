@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import {
@@ -33,14 +33,14 @@ export function OrderDetailPage() {
   const [busy, setBusy] = useState(false);
   const toast = useToast((s) => s.add);
 
-  const load = () => {
+  const load = useCallback(() => {
     api
       .get<{ order: OrderWithItems }>(`/admin/orders/${params.id}`, token ?? undefined)
       .then((res) => setOrder(res.order))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load order"));
-  };
+  }, [params.id, token]);
 
-  useEffect(load, [params.id, token]);
+  useEffect(load, [load]);
 
   const transition = async (to: OrderStatus) => {
     if (!order) return;
