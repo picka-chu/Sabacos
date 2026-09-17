@@ -5,7 +5,7 @@ import { api, apiErrorMessage } from "../lib/api.js";
 import { useToast } from "../components/toast.js";
 import type { Profile, ProfileRole, Settings } from "@sabacos/core";
 import { SkeletonTable, EmptyState } from "../components/ui.js";
-import { ALL_PAGE_PATHS } from "../lib/permissions.js";
+import { ALL_PAGE_PATHS, usePermissions } from "../lib/permissions.js";
 
 const ROLES: ProfileRole[] = ["admin", "staff", "delivery", "customer"];
 const ADMIN_ROLES: ProfileRole[] = ["admin", "staff", "delivery"];
@@ -128,6 +128,8 @@ export function UsersPage() {
       await api.put("/admin/settings", { permissions: perms }, token ?? undefined);
       setPermsSaved(true);
       toast("success", "Role permissions saved");
+      // Refresh the live enforcement store so the change takes effect immediately.
+      await usePermissions.getState().load(token ?? undefined);
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Save failed");
     } finally { setPermsSaving(false); }

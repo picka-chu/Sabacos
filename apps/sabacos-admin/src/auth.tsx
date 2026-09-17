@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { supabase } from "./lib/supabase.js";
 import { api, getTelegramInitData } from "./lib/api.js";
+import { usePermissions } from "./lib/permissions.js";
 
 interface AdminProfile {
   id: string;
@@ -81,6 +82,7 @@ export const useAuth = create<AdminSession>((set) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
+    usePermissions.getState().reset();
     set({ token: null, email: null, profile: null, ready: true });
   },
 

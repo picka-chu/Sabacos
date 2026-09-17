@@ -40,6 +40,7 @@ interface PermissionsState {
   perms: Record<string, string[]> | null;
   loaded: boolean;
   load: (token?: string) => Promise<void>;
+  reset: () => void;
 }
 
 export const usePermissions = create<PermissionsState>((set) => ({
@@ -56,6 +57,7 @@ export const usePermissions = create<PermissionsState>((set) => ({
       set({ perms: {}, loaded: true });
     }
   },
+  reset: () => set({ perms: null, loaded: false }),
 }));
 
 /** Get the effective permissions for a role. */
