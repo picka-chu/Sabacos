@@ -1,5 +1,4 @@
 import {
-  formatOrderNo,
   orderItemRowSchema,
   orderRowSchema,
   type Order,
@@ -9,7 +8,6 @@ import {
   type PaymentStatus,
 } from "@sabacos/core";
 import type { Db } from "./client.js";
-import { nextOrderSeq } from "./sequences.js";
 
 export interface CreateOrderInput {
   profileId: string;
@@ -39,16 +37,9 @@ export interface CreateOrderInput {
 }
 
 export async function createOrder(db: Db, input: CreateOrderInput): Promise<Order> {
-  const seq = await nextOrderSeq(db);
-  const orderNo = formatOrderNo(seq);
-
-  const { data, error } = await db
-    .from("orders")
-    .insert({
-      order_no: orderNo,
+  const { data, error } = await db.rpc("create_order", {
+    p_order: {
       profile_id: input.profileId,
-      status: "pending_payment",
-      payment_status: "pending",
       subtotal_halala: input.subtotalHalala,
       discount_halala: input.discountHalala,
       discount_percent: input.discountPercent,
@@ -63,35 +54,19 @@ export async function createOrder(db: Db, input: CreateOrderInput): Promise<Orde
       zone: input.zone ?? null,
       delivery_type: input.deliveryType ?? "standard",
       fragile: input.fragile ?? false,
-      invoice_payload: "",
-    })
-    .select("*")
-    .single();
+      items: input.items.map((item) => ({
+        product_id: item.productId,
+        name_en: item.nameEn,
+        name_am: item.nameAm,
+        sku: item.sku,
+        price_halala: item.priceHalala,
+        qty: item.qty,
+        subtotal_halala: item.subtotalHalala,
+      })),
+    },
+  });
   if (error) throw new Error(`createOrder: ${error.message}`);
-
-  const order = orderRowSchema.parse(data);
-
-  const itemRows = input.items.map((item) => ({
-    order_id: order.id,
-    product_id: item.productId,
-    name_en: item.nameEn,
-    name_am: item.nameAm,
-    sku: item.sku,
-    price_halala: item.priceHalala,
-    qty: item.qty,
-    subtotal_halala: item.subtotalHalala,
-  }));
-
-  const { error: itemsError } = await db.from("order_items").insert(itemRows);
-  if (itemsError) throw new Error(`createOrder items: ${itemsError.message}`);
-
-  const { error: payloadError } = await db
-    .from("orders")
-    .update({ invoice_payload: order.id })
-    .eq("id", order.id);
-  if (payloadError) throw new Error(`createOrder payload: ${payloadError.message}`);
-
-  return { ...order, invoicePayload: order.id };
+  return orderRowSchema.parse(data);
 }
 
 const ORDER_COLUMNS = [

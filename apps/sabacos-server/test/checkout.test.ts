@@ -143,14 +143,14 @@ describe("checkout", () => {
 
     const result = await checkout(db, "profile-1", input, { createInvoiceLink });
 
-    // No coords/zone given → default Zone 2 surcharge (2500) + base tier (5500).
+    // No coords/zone given → use the configured flat delivery fee.
     expect(createOrderMock).toHaveBeenCalledWith(
       db,
       expect.objectContaining({
         profileId: "profile-1",
         subtotalHalala: 100000,
-        deliveryFeeHalala: 8000,
-        totalHalala: 108000,
+        deliveryFeeHalala: 12000,
+        totalHalala: 112000,
       }),
     );
     expect(createInvoiceLink).toHaveBeenCalledWith(
@@ -160,7 +160,7 @@ describe("checkout", () => {
         currency: "ETB",
         prices: [
           { label: "Test Serum × 2", amount: 100000 },
-          { label: "Delivery fee", amount: 8000 },
+          { label: "Delivery fee", amount: 12000 },
         ],
       }),
     );
@@ -205,13 +205,13 @@ describe("checkout", () => {
 
     await checkout(db, "profile-1", input, { createInvoiceLink });
 
-    // subtotal 30000 → base 9000 + zone 2500 + fragile 1000
+    // subtotal 30000 → configured flat fee + fragile handling fee
     expect(createOrderMock).toHaveBeenCalledWith(
       db,
       expect.objectContaining({
         fragile: true,
-        deliveryFeeHalala: 12500,
-        totalHalala: 42500,
+        deliveryFeeHalala: 13000,
+        totalHalala: 43000,
       }),
     );
     expect(createInvoiceLink).toHaveBeenCalledWith(
@@ -242,14 +242,14 @@ describe("checkout", () => {
     );
   });
 
-  it("propagates Chapa failures and and clears the cart", async () => {
+  it("keeps the cart when invoice creation fails", async () => {
     getCartMock.mockResolvedValue([cartItem({ qty: 2 })]);
     createInvoiceLink.mockRejectedValue(new Error("invoice failed"));
 
     await expect(
       checkout(db, "profile-1", input, { createInvoiceLink }),
-    ).rejects.toThrow("invoice failed");
-    expect(clearCartMock).toHaveBeenCalledWith(db, "profile-1");
+    ).rejects.toMatchObject({ code: "min_order", message: "Could not create payment link. Please try again." });
+    expect(clearCartMock).not.toHaveBeenCalled();
   });
 });
 
