@@ -1,4 +1,5 @@
-import { serve, type ServerType } from "@hono/node-server";
+import { getRequestListener, type HttpBindings, type ServerType } from "@hono/node-server";
+import { createServer } from "node:http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { loadEnv } from "./env.js";
@@ -37,33 +38,36 @@ if (env.NODE_ENV !== "production") {
   allowedOrigins.add("http://localhost:5175");
 }
 
+const allowedOriginValues = new Set([...allowedOrigins].map((value) => new URL(value).origin));
+
 function isAllowedOrigin(origin: string | undefined): boolean {
   if (!origin) return true; // non-browser clients
   try {
-    const host = new URL(origin).host;
-    for (const allowed of allowedOrigins) {
-      if (new URL(allowed).host === host) return true;
-    }
+    return allowedOriginValues.has(new URL(origin).origin);
   } catch {
     return false;
   }
-  return false;
 }
 
-function ipKey(c: { req: { header: (name: string) => string | undefined } }): string {
-  // Prefer the LAST X-Forwarded-For entry: the client can spoof earlier ones,
-  // but the value appended by the hosting proxy (Render) is the real peer.
-  const xff = c.req.header("x-forwarded-for");
-  if (xff) {
-    const parts = xff.split(",").map((s) => s.trim()).filter(Boolean);
-    if (parts.length > 0) return parts[parts.length - 1]!;
+const trustedProxyIps = new Set(
+  (env.TRUSTED_PROXY_IPS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
+);
+
+function ipKey(c: { env: HttpBindings; req: { header: (name: string) => string | undefined } }): string {
+  const peer = c.env.incoming.socket.remoteAddress ?? "unknown";
+  // Forwarded headers are user-controlled unless the TCP peer is an explicitly
+  // configured reverse proxy. A trusted proxy appends the client at the left.
+  if (trustedProxyIps.has(peer)) {
+    const xff = c.req.header("x-forwarded-for");
+    const client = xff?.split(",").map((value) => value.trim()).find(Boolean);
+    if (client) return client;
   }
-  return c.req.header("x-real-ip") ?? "unknown";
+  return peer;
 }
 
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
 
-const app = new Hono<{ Bindings: typeof env }>();
+const app = new Hono<{ Bindings: typeof env & HttpBindings }>();
 
 // ---------------------------------------------------------------------------
 // Global middleware
@@ -109,7 +113,7 @@ app.use("*", async (c, next) => {
 });
 
 // Global rate limit: 120 req/min per IP
-app.use("*", rateLimit({ windowMs: 60_000, limit: 120, keyGenerator: ipKey }));
+app.use("*", rateLimit(db, { windowMs: 60_000, limit: 120, keyGenerator: ipKey }));
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -180,7 +184,7 @@ app.get("/api/v1/delivery/config", async (c) => {
 // ---------------------------------------------------------------------------
 app.get("/api/v1/admin/me", adminMeHandler);
 
-app.use("/api/v1/admin/*", rateLimit({ windowMs: 60_000, limit: 20, keyGenerator: ipKey }), requireAdmin);
+app.use("/api/v1/admin/*", rateLimit(db, { windowMs: 60_000, limit: 20, keyGenerator: ipKey }), requireAdmin);
 app.route("/api/v1/admin", adminRoutes);
 app.route("/api/v1/admin/waitlist", waitlistAdminRoutes);
 app.route("/api/v1/admin/discounts", discountAdminRoutes);
@@ -191,7 +195,7 @@ app.route("/api/v1/admin/referrals", adminReferralRoutes);
 // ---------------------------------------------------------------------------
 // Authenticated user routes — tighter rate limit: 30 req/min
 // ---------------------------------------------------------------------------
-app.use("/api/v1/checkout", rateLimit({ windowMs: 60_000, limit: 10, keyGenerator: ipKey }), requireUser);
+app.use("/api/v1/checkout", rateLimit(db, { windowMs: 60_000, limit: 10, keyGenerator: ipKey }), requireUser);
 app.route("/api/v1", adRoutes);
 app.route("/api/v1/cart", cartRoutes);
 app.route("/api/v1", orderRoutes);
@@ -224,8 +228,31 @@ async function start(): Promise<void> {
 
   startAdaptiveCron(env);
   log.info("Adaptive referral cron scheduler started");
-  server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
-    log.info(`Sabacos server listening on http://localhost:${info.port}`);
+  const listener = getRequestListener(app.fetch);
+  server = createServer((incoming, outgoing) => {
+    const contentLength = Number(incoming.headers["content-length"]);
+    if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+      outgoing.writeHead(413, { "Content-Type": "application/json" });
+      outgoing.end(JSON.stringify({ error: { code: "payload_too_large", message: "Request too large (max 10 MB)" } }));
+      incoming.destroy();
+      return;
+    }
+    let received = 0;
+    let rejected = false;
+    incoming.on("data", (chunk: Buffer) => {
+      received += chunk.length;
+      if (!rejected && received > MAX_BODY_BYTES) {
+        rejected = true;
+        outgoing.writeHead(413, { "Content-Type": "application/json" });
+        outgoing.end(JSON.stringify({ error: { code: "payload_too_large", message: "Request too large (max 10 MB)" } }));
+        incoming.destroy();
+      }
+    });
+    void listener(incoming, outgoing);
+  }).listen(env.PORT, () => {
+    const address = server?.address();
+    const port = typeof address === "object" && address ? address.port : env.PORT;
+    log.info(`Sabacos server listening on http://localhost:${port}`);
     log.info(`Mini app URL: ${env.WEBAPP_URL}`);
     log.info(`Admin dashboard URL: ${env.ADMIN_DASHBOARD_URL}`);
   });

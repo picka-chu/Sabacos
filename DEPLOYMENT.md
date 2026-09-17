@@ -13,6 +13,10 @@ Production deployment targets:
 1. `npm ci`
 2. Build: `npm run build -w @sabacos/server`
 3. Set env vars (see `.env.example`).
+   - If the server is behind a reverse proxy, set `TRUSTED_PROXY_IPS` to the
+     comma-separated **socket IP addresses of that proxy only**. This is
+     required before the server will use `X-Forwarded-For` for rate limiting;
+     never add public client ranges to this setting.
 4. Start: `npm run start -w @sabacos/server` (runs the built Hono app, exposing `/webhook` and `/api/v1/*`).
 5. Register the webhook with Telegram (exact bot token):
 
@@ -32,7 +36,11 @@ Production deployment targets:
 
 ## Supabase
 
-- Apply `supabase/migrations/0001_init.sql`.
+- Apply **all** files in `supabase/migrations/` in numeric order (including
+  `0017_payment_stock_atomicity.sql` and `0018_order_creation_atomicity.sql`).
+  Migration 0018 provides the shared rate limiter and atomic order creation;
+  deploying the server before it is applied will intentionally reject requests
+  rather than run without abuse protection.
 - Create the `product-images` bucket (public).
 - Create the admin auth user, then run the seed with `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` to link `profiles.role = 'admin'`.
 - Enable email auth (any email/password auth provider) for admin login.

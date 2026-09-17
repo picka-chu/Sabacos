@@ -12,6 +12,9 @@ const baseSchema = z.object({
   ADMIN_DASHBOARD_URL: z.string().trim().url("ADMIN_DASHBOARD_URL is required"),
   WEBHOOK_URL: z.string().trim().url().optional(),
   WEBHOOK_SECRET: z.string().trim().optional(),
+  // Comma-separated socket IPs for the reverse proxies allowed to supply
+  // X-Forwarded-For. Leave unset for direct deployments.
+  TRUSTED_PROXY_IPS: z.string().trim().optional(),
   ADMIN_CHANNEL_ID: z.string().trim().optional(),
   ADMIN_TELEGRAM_IDS: z.string().trim().optional(),
   BOT_USERNAME: z.string().trim().optional(),

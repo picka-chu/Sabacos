@@ -217,16 +217,14 @@ export async function checkout(
     })),
   });
 
-  // Redeem the spinner coupon against this order only after the order exists.
-  if (coupon?.coupon) {
-    await useSpinnerCoupon(db, coupon.coupon.id, order.id);
-  }
-
-  // Clear the cart now that the order is locked in (both payment paths).
-  await clearCart(db, profileId);
-
   if (input.paymentMethod === "wallet") {
-    return await finalizeWithWallet(db, order, totalHalala, delivery);
+    const result = await finalizeWithWallet(db, order, totalHalala, delivery);
+    // Only consume incentives and clear the cart after the atomic wallet
+    // payment succeeds.  Doing this before payment could otherwise make a
+    // failed checkout silently discard the customer's cart and coupon.
+    if (coupon?.coupon) await useSpinnerCoupon(db, coupon.coupon.id, order.id);
+    await clearCart(db, profileId);
+    return result;
   }
 
   const prices: InvoicePriceLine[] = [
@@ -278,6 +276,12 @@ export async function checkout(
     throw new CartValidationError("Could not create payment link. Please try again.", "min_order");
   }
 
+  // The payment link now exists, so this checkout has been accepted.  Keep
+  // the cart and coupon intact when invoice creation fails so a retry cannot
+  // lose customer value.
+  if (coupon?.coupon) await useSpinnerCoupon(db, coupon.coupon.id, order.id);
+  await clearCart(db, profileId);
+
   return { order, invoiceUrl, delivery };
 }
 
@@ -316,6 +320,14 @@ async function finalizeWithWallet(
     throw new CartValidationError(`Wallet payment failed: ${error.message}`, "wallet_insufficient");
   }
   if (status !== "ok") {
+    try {
+      await db
+        .from("orders")
+        .update({ status: "cancelled", payment_status: "failed" })
+        .eq("id", order.id);
+    } catch {
+      // Order cancellation is best-effort here.
+    }
     throw new CartValidationError(`Wallet payment failed (${status})`, "wallet_insufficient");
   }
 
