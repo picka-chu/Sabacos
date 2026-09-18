@@ -48,7 +48,7 @@ export function CheckoutPage() {
 
   const [couponInput, setCouponInput] = useState("");
   const [couponCode, setCouponCode] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"telegram" | "wallet" | "cod">("telegram");
+  const [paymentMethod, setPaymentMethod] = useState<"telegram" | "wallet" | "cod">("cod");
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(true);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -490,14 +490,15 @@ export function CheckoutPage() {
             <div style={{ display: "grid", gap: 6 }}>
               <button
                 type="button"
-                className={`zone-option${paymentMethod === "telegram" ? " active" : ""}`}
-                onClick={() => {
-                  haptic();
-                  setPaymentMethod("telegram");
-                }}
+                className="zone-option"
+                disabled
+                style={{ opacity: 0.5, cursor: "not-allowed" }}
               >
                 <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
                   <Zap size={15} /> {t("payWithTelegram")}
+                  <span style={{ fontSize: 10, background: "var(--accent-soft)", color: "var(--accent-strong)", padding: "2px 6px", borderRadius: 6, fontWeight: 700 }}>
+                    {t("comingSoon")}
+                  </span>
                 </span>
                 <span className="muted" style={{ fontSize: 12 }}>{t("payWithTelegramHint")}</span>
               </button>
