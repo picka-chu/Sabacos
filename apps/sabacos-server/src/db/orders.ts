@@ -96,6 +96,12 @@ const ORDER_COLUMNS = [
   "provider_payment_charge_id",
   "payment_status",
   "payment_method",
+  "deposit_halala",
+  "balance_halala",
+  "bank_account_id",
+  "payment_proof_url",
+  "payment_proof_status",
+  "payment_proof_rejection_reason",
   "created_at",
   "updated_at",
 ].join(", ");

@@ -5,10 +5,12 @@ import { checkoutSchema } from "@sabacos/core";
 import { getAppEnv, type AppEnv } from "../env.js";
 import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
-import { getOrdersByProfile, getOrderWithItems } from "../db/orders.js";
+import { getOrdersByProfile, getOrderWithItems, getOrderById } from "../db/orders.js";
 import { saveProfileContact, getProfileById, setProfileLanguage } from "../db/profiles.js";
+import { submitPaymentProof } from "../db/bank-accounts.js";
 import { checkout, CartValidationError } from "../services/checkout.js";
 import { createBot, makeCreateInvoiceLink, notifyAdminChannelWithButtons, sendShareRequest, formatAdminOrderAlert } from "../bot/bot.js";
+import { r2Config, r2Put } from "../services/r2.js";
 
 export const orderRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
 
@@ -132,4 +134,95 @@ orderRoutes.post("/profile/request-location", async (c) => {
   if (!profile.telegramId) throw badRequest("Telegram chat not linked");
   await sendShareRequest(env, profile.telegramId, "location");
   return c.json({ ok: true });
+});
+
+const ALLOWED_RECEIPT_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const MAX_RECEIPT_BYTES = 10 * 1024 * 1024;
+
+// Upload payment receipt for a bank_split order
+orderRoutes.post("/orders/:id/payment-proof", async (c) => {
+  const env = getAppEnv();
+  const db = getDb(env);
+  const profile = c.get("profile");
+  const orderId = c.req.param("id");
+
+  const order = await getOrderById(db, orderId);
+  if (!order || order.profileId !== profile.id) {
+    return c.json({ error: { code: "not_found", message: "Order not found" } }, 404);
+  }
+  if (order.paymentMethod !== "bank_split") {
+    return c.json({ error: { code: "invalid_method", message: "This order is not a bank split payment" } }, 400);
+  }
+  if (order.paymentProofStatus === "approved") {
+    return c.json({ error: { code: "already_verified", message: "Payment already approved" } }, 400);
+  }
+
+  const form = await c.req.parseBody();
+  const file = form["receipt"];
+  if (!(file instanceof File)) throw badRequest("receipt image required");
+  if (file.size > MAX_RECEIPT_BYTES) throw badRequest("Image too large (max 10MB)");
+  if (file.type && !ALLOWED_RECEIPT_MIMES.has(file.type)) {
+    throw badRequest(`Unsupported image type: ${file.type}`);
+  }
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const mime = file.type || "image/jpeg";
+  const safeName = file.name.replace(/[^\w.-]+/g, "_").slice(-80) || "receipt.jpg";
+  const path = `proofs/${orderId}/${Date.now()}-${safeName}`;
+
+  // Upload to R2 or Supabase Storage
+  const r2 = r2Config(env);
+  let proofUrl: string;
+  if (r2) {
+    try {
+      proofUrl = await r2Put(r2, path, new Uint8Array(bytes), mime);
+    } catch (err) {
+      console.error("[r2] receipt upload failed, falling back to Supabase:", err);
+      const { error } = await db.storage
+        .from("product-images")
+        .upload(path, new File([bytes], safeName, { type: mime }), { contentType: mime, upsert: true });
+      if (error) throw new Error(`upload receipt: ${error.message}`);
+      const { data } = db.storage.from("product-images").getPublicUrl(path);
+      proofUrl = data.publicUrl;
+    }
+  } else {
+    const { error } = await db.storage
+      .from("product-images")
+      .upload(path, new File([bytes], safeName, { type: mime }), { contentType: mime, upsert: true });
+    if (error) throw new Error(`upload receipt: ${error.message}`);
+    const { data } = db.storage.from("product-images").getPublicUrl(path);
+    proofUrl = data.publicUrl;
+  }
+
+  await submitPaymentProof(db, orderId, proofUrl);
+
+  // Notify admin channel with approve/reject buttons
+  const deposit = order.depositHalala ?? Math.round(order.totalHalala / 2);
+  const bankLabel = order.bankAccountId ? `Bank: ${order.bankAccountId.slice(0, 8)}...` : "";
+  const alertText = [
+    `💰 <b>Payment Receipt — Order ${order.orderNo}</b>`,
+    `Customer: ${order.customerName}`,
+    `Deposit: ${deposit} ETB`,
+    bankLabel,
+    `<a href="${proofUrl}">View Receipt</a>`,
+  ].filter(Boolean).join("\n");
+
+  const bot = createBot(env);
+  const settings = await import("../db/settings.js").then((m) => m.getSettings(db)).catch(() => null);
+  const channelId = (settings?.adminChannelId ?? env.ADMIN_CHANNEL_ID) ?? "";
+  if (channelId) {
+    await bot.api.sendMessage(channelId, alertText, {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✅ Approve", callback_data: `proof:${orderId}:approved` },
+            { text: "❌ Reject", callback_data: `proof:${orderId}:rejected` },
+          ],
+        ],
+      },
+    }).catch((err: unknown) => console.error(`admin notify (receipt) failed:`, err));
+  }
+
+  return c.json({ ok: true, proofUrl });
 });

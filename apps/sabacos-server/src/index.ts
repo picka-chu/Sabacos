@@ -175,6 +175,13 @@ app.get("/api/v1/delivery/config", async (c) => {
   return c.json({ config: settings?.deliveryConfig ?? DEFAULT_DELIVERY_CONFIG });
 });
 
+// Public bank accounts — active accounts only, no auth required
+app.get("/api/v1/bank-accounts", async (c) => {
+  const { listBankAccounts } = await import("./db/bank-accounts.js");
+  const accounts = await listBankAccounts(db);
+  return c.json({ accounts });
+});
+
 // ---------------------------------------------------------------------------
 // Admin auth + routes — registered BEFORE the user routers below, otherwise
 // their global requireUser middleware (mounted loosely at /api/v1) shadows

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User, X, Zap, Truck, Tag, Wallet, Banknote } from "lucide-react";
-import { DEFAULT_DELIVERY_CONFIG, formatETB, quoteDelivery, computeDeliveryFee, t } from "@sabacos/core";
+import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User, X, Zap, Truck, Tag, Wallet, Banknote, Building2, Upload, Check } from "lucide-react";
+import { DEFAULT_DELIVERY_CONFIG, formatETB, quoteDelivery, computeDeliveryFee, t, BANK_LABELS, type BankName, type BankAccount } from "@sabacos/core";
 import type { DeliveryConfig } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { api } from "../api.js";
@@ -11,7 +11,7 @@ import { useShopStore, apiErrorMessage } from "../store.js";
 import { toast } from "../components/Toast.js";
 import { isTelegramSession, haptic, payInvoice, closeToChat } from "../telegram.js";
 
-type Phase = "form" | "pending" | "success" | "failed";
+type Phase = "form" | "pending" | "success" | "failed" | "bank_select" | "receipt_upload";
 
 const ZONES = [
   { value: 1, labelKey: "zone1" },
@@ -43,15 +43,22 @@ export function CheckoutPage() {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderNo, setOrderNo] = useState<string | null>(null);
   const [orderTotal, setOrderTotal] = useState<number>(0);
-  const [orderPaymentMethod, setOrderPaymentMethod] = useState<"telegram" | "wallet" | "cod">("telegram");
+  const [orderPaymentMethod, setOrderPaymentMethod] = useState<"telegram" | "wallet" | "cod" | "bank_split">("telegram");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [couponInput, setCouponInput] = useState("");
   const [couponCode, setCouponCode] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"telegram" | "wallet" | "cod">("cod");
+  const [paymentMethod, setPaymentMethod] = useState<"telegram" | "wallet" | "cod" | "bank_split">("cod");
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(true);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  // Bank split payment state
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [uploadingProof, setUploadingProof] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const submittingRef = useRef(false);
@@ -103,6 +110,15 @@ export function CheckoutPage() {
       .then((res) => setWalletBalance(res.walletBalance ?? 0))
       .catch(() => undefined)
       .finally(() => setWalletLoading(false));
+  }, []);
+
+  useEffect(() => {
+    api.get<{ accounts: BankAccount[] }>("/bank-accounts")
+      .then((res) => {
+        setBankAccounts(res.accounts);
+        if (res.accounts[0]) setSelectedBankId(res.accounts[0].id);
+      })
+      .catch(() => undefined);
   }, []);
 
   const handleApplyCoupon = async () => {
@@ -219,6 +235,13 @@ export function CheckoutPage() {
     submittingRef.current = true;
     setErrorMsg(null);
     try {
+      // For bank_split, go to bank selection phase first
+      if (paymentMethod === "bank_split") {
+        setPhase("bank_select");
+        submittingRef.current = false;
+        return;
+      }
+
       const { order, invoiceUrl } = await checkout({
         customerName: form.customerName.trim(),
         phone: form.phone.trim(),
@@ -290,6 +313,59 @@ export function CheckoutPage() {
     }
   };
 
+  const handleBankConfirm = async () => {
+    if (!selectedBankId) {
+      toast("Please select a bank");
+      return;
+    }
+    haptic();
+    submittingRef.current = true;
+    setErrorMsg(null);
+    try {
+      const { order, invoiceUrl } = await checkout({
+        customerName: form.customerName.trim(),
+        phone: form.phone.trim(),
+        address: form.address.trim(),
+        note: form.note.trim() || null,
+        latitude: coords?.lat ?? null,
+        longitude: coords?.lng ?? null,
+        zone: coords ? null : manualZone,
+        deliveryType,
+        couponCode: couponCode ?? undefined,
+        paymentMethod: "bank_split",
+        bankAccountId: selectedBankId,
+      });
+      setOrderId(order.id);
+      setOrderNo(order.orderNo);
+      setOrderPaymentMethod("bank_split");
+      setOrderTotal(order.totalHalala);
+      await clearCart();
+      setPhase("receipt_upload");
+    } catch (err) {
+      setErrorMsg(apiErrorMessage(err));
+      setPhase("failed");
+    } finally {
+      submittingRef.current = false;
+    }
+  };
+
+  const handleReceiptUpload = async () => {
+    if (!orderId || !receiptFile) return;
+    haptic();
+    setUploadingProof(true);
+    try {
+      const formData = new FormData();
+      formData.append("receipt", receiptFile);
+      await api.post(`/orders/${orderId}/payment-proof`, formData);
+      haptic("heavy");
+      setPhase("success");
+    } catch (err) {
+      toast(apiErrorMessage(err));
+    } finally {
+      setUploadingProof(false);
+    }
+  };
+
   // Returning from the bot chat (via the bot's "Back to the shop" button):
   // pick up whatever was shared while the app was closed.
   useEffect(() => {
@@ -302,13 +378,164 @@ export function CheckoutPage() {
       .catch(() => undefined);
   }, []);
 
+  if (phase === "bank_select") {
+    const selectedBank = bankAccounts.find((b) => b.id === selectedBankId);
+    const deposit = Math.round(grandTotal / 2);
+    return (
+      <div className="screen" style={{ paddingTop: "calc(var(--safe-top) + 24px)" }}>
+        <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px" }}>
+          <h1 className="serif" style={{ fontSize: 24, margin: "0 0 8px" }}>{t("selectBank")}</h1>
+          <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
+            {lang === "am"
+              ? `${formatETB(deposit)} ግማሽ አሁን ይ躍ልጉ፣ ቀሪው ${formatETB(grandTotal - deposit)} ሲደርስ ይከፈላል`
+              : `Pay ${formatETB(deposit)} deposit now, ${formatETB(grandTotal - deposit)} on delivery`}
+          </p>
+
+          <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+            {bankAccounts.map((bank) => (
+              <button
+                key={bank.id}
+                type="button"
+                className={`zone-option${selectedBankId === bank.id ? " active" : ""}`}
+                onClick={() => { haptic(); setSelectedBankId(bank.id); }}
+                style={{ textAlign: "left" }}
+              >
+                <span style={{ fontWeight: 600 }}>
+                  <Building2 size={15} style={{ verticalAlign: -2, marginRight: 6 }} />
+                  {BANK_LABELS[bank.bankName as BankName]?.[lang as "en" | "am"] ?? BANK_LABELS[bank.bankName as BankName]?.en ?? bank.bankName}
+                </span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {bank.accountName} · {bank.accountNumber}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {selectedBank && (
+            <div className="card" style={{ padding: 18, marginBottom: 16, background: "var(--accent-soft)" }}>
+              <h3 style={{ fontSize: 15, margin: "0 0 10px", fontWeight: 700 }}>{t("bankAccountDetails")}</h3>
+              <div style={{ display: "grid", gap: 8, fontSize: 14 }}>
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <span className="muted">{t("accountHolder")}</span>
+                  <strong>{selectedBank.accountName}</strong>
+                </div>
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <span className="muted">{t("accountNumber")}</span>
+                  <strong style={{ fontFamily: "monospace", letterSpacing: 1 }}>{selectedBank.accountNumber}</strong>
+                </div>
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <span className="muted">{t("depositAmount")}</span>
+                  <strong style={{ color: "var(--success)" }}>{formatETB(deposit)}</strong>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <button
+            className="btn btn-primary btn-block"
+            onClick={handleBankConfirm}
+            disabled={!selectedBankId}
+          >
+            {t("continueBtn")} <ArrowRight size={16} />
+          </button>
+          <button className="btn btn-ghost btn-block" style={{ marginTop: 4 }} onClick={() => setPhase("form")}>
+            {t("back")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "receipt_upload" && orderId) {
+    return (
+      <div className="screen" style={{ paddingTop: "calc(var(--safe-top) + 24px)" }}>
+        <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px" }}>
+          <h1 className="serif" style={{ fontSize: 24, margin: "0 0 8px" }}>{t("uploadReceipt")}</h1>
+          <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>{t("uploadReceiptHint")}</p>
+
+          <div className="card" style={{ padding: 18, marginBottom: 16 }}>
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
+              <span className="muted">{t("orderNumber")}</span>
+              <strong>{orderNo}</strong>
+            </div>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <span className="muted">{t("depositAmount")}</span>
+              <strong style={{ color: "var(--success)" }}>{formatETB(Math.round(orderTotal / 2))}</strong>
+            </div>
+          </div>
+
+          <div
+            className="card"
+            style={{
+              padding: 24,
+              marginBottom: 16,
+              textAlign: "center",
+              border: receiptFile ? "2px solid var(--success)" : "2px dashed var(--border)",
+              cursor: "pointer",
+              background: receiptFile ? "var(--success-soft, #e8f5e9)" : "transparent",
+            }}
+            onClick={() => document.getElementById("receipt-input")?.click()}
+          >
+            <input
+              id="receipt-input"
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setReceiptFile(file);
+                  setReceiptPreview(URL.createObjectURL(file));
+                }
+              }}
+            />
+            {receiptFile ? (
+              <>
+                <Check size={32} color="var(--success)" style={{ marginBottom: 8 }} />
+                <p style={{ fontSize: 14, fontWeight: 600 }}>{receiptFile.name}</p>
+                <p className="muted" style={{ fontSize: 12 }}>{(receiptFile.size / 1024 / 1024).toFixed(1)} MB</p>
+                {receiptPreview && (
+                  <img src={receiptPreview} alt="Receipt" style={{ maxWidth: "100%", maxHeight: 200, borderRadius: 8, marginTop: 12 }} />
+                )}
+              </>
+            ) : (
+              <>
+                <Upload size={32} style={{ marginBottom: 8, color: "var(--muted)" }} />
+                <p style={{ fontSize: 14, fontWeight: 600 }}>{t("uploadReceipt")}</p>
+                <p className="muted" style={{ fontSize: 12 }}>JPEG, PNG, WebP</p>
+              </>
+            )}
+          </div>
+
+          <button
+            className="btn btn-primary btn-block"
+            onClick={handleReceiptUpload}
+            disabled={!receiptFile || uploadingProof}
+          >
+            {uploadingProof ? <Loader2 size={16} className="spin" /> : <Upload size={16} />}
+            {" "}{t("verifyPayment")}
+          </button>
+          <button className="btn btn-ghost btn-block" style={{ marginTop: 4 }} onClick={() => setPhase("bank_select")}>
+            {t("back")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (phase === "success" && orderNo) {
     return (
       <div className="screen" style={{ paddingTop: "calc(var(--safe-top) + 24px)" }}>
         <div className="text-center" style={{ paddingTop: 40 }}>
           <CheckCircle2 size={72} strokeWidth={1.25} color="var(--success)" />
           <h1 className="serif" style={{ fontSize: 28, margin: "18px 0 6px" }}>{t("orderConfirmed")}</h1>
-          <p className="muted">{orderPaymentMethod === "cod" ? t("codOrderConfirmedHint") : t("orderConfirmedHint")}</p>
+          <p className="muted">
+            {orderPaymentMethod === "cod"
+              ? t("codOrderConfirmedHint")
+              : orderPaymentMethod === "bank_split"
+                ? t("paymentPendingVerificationHint")
+                : t("orderConfirmedHint")}
+          </p>
           <div className="card" style={{ padding: 18, marginTop: 24, textAlign: "left" }}>
             <div className="row" style={{ justifyContent: "space-between" }}>
               <span className="muted">{t("orderNumber")}</span>
@@ -531,6 +758,21 @@ export function CheckoutPage() {
                 </span>
                 <span className="muted" style={{ fontSize: 12 }}>{t("payWithCodHint")}</span>
               </button>
+              {bankAccounts.length > 0 && (
+                <button
+                  type="button"
+                  className={`zone-option${paymentMethod === "bank_split" ? " active" : ""}`}
+                  onClick={() => {
+                    haptic();
+                    setPaymentMethod("bank_split");
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                    <Building2 size={15} /> {t("payWithBankHalf")}
+                  </span>
+                  <span className="muted" style={{ fontSize: 12 }}>{t("payWithBankHalfHint")}</span>
+                </button>
+              )}
             </div>
             {paymentMethod === "wallet" && walletBalance < grandTotal && (
               <p style={{ fontSize: 12.5, margin: "8px 2px 0", color: "var(--danger, #d32f2f)", fontWeight: 600 }}>
@@ -659,10 +901,12 @@ export function CheckoutPage() {
                 ? `${t("payWithWallet")} · ${formatETB(grandTotal)}`
                 : paymentMethod === "cod"
                   ? `${t("payWithCod")} · ${formatETB(grandTotal)}`
-                  : `${t("payWithTelegram")} · ${formatETB(grandTotal)}`}
+                  : paymentMethod === "bank_split"
+                    ? `${t("payWithBankHalf")} · ${formatETB(grandTotal)}`
+                    : `${t("payWithTelegram")} · ${formatETB(grandTotal)}`}
             </button>
             <p className="muted text-center" style={{ margin: 0, fontSize: 12, fontWeight: 500 }}>
-              {paymentMethod === "wallet" ? t("payWithWalletHint") : paymentMethod === "cod" ? t("payWithCodHint") : t("payWithTelegramHint")}
+              {paymentMethod === "wallet" ? t("payWithWalletHint") : paymentMethod === "cod" ? t("payWithCodHint") : paymentMethod === "bank_split" ? t("payWithBankHalfHint") : t("payWithTelegramHint")}
             </p>
           </div>
         </>

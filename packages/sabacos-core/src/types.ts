@@ -114,7 +114,28 @@ export interface CartItem {
 }
 
 export type DeliveryType = "standard" | "express";
-export type PaymentMethod = "telegram" | "wallet" | "cod";
+export type PaymentMethod = "telegram" | "wallet" | "cod" | "bank_split";
+
+export const BANK_NAMES = ["cbe", "birr", "telebirr", "awash", "abyssinia"] as const;
+export type BankName = (typeof BANK_NAMES)[number];
+
+export const BANK_LABELS: Record<BankName, { en: string; am: string }> = {
+  cbe: { en: "Commercial Bank of Ethiopia (CBE)", am: "የኢትዮጵያ ንግድ ባንክ (CBE)" },
+  birr: { en: "Bank of Abyssinia", am: "የአቢሲኒያ ባንክ" },
+  telebirr: { en: "Telebirr", am: "ቴሌብር" },
+  awash: { en: "Awash Bank", am: "አዋሽ ባንክ" },
+  abyssinia: { en: "Abysinia Bank", am: "አቢሲኒያ ባንክ" },
+};
+
+export interface BankAccount {
+  id: string;
+  bankName: BankName;
+  accountName: string;
+  accountNumber: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface Order {
   id: string;
@@ -140,6 +161,12 @@ export interface Order {
   providerPaymentChargeId: string | null;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;
+  depositHalala: number | null;
+  balanceHalala: number | null;
+  bankAccountId: string | null;
+  paymentProofUrl: string | null;
+  paymentProofStatus: "none" | "pending" | "approved" | "rejected";
+  paymentProofRejectionReason: string | null;
   createdAt: string;
   updatedAt: string;
 }

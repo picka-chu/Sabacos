@@ -47,6 +47,7 @@ export interface CheckoutInput {
   deliveryType?: "standard" | "express";
   couponCode?: string;
   paymentMethod?: PaymentMethod;
+  bankAccountId?: string;
 }
 
 export interface CheckoutResult {
@@ -233,6 +234,13 @@ export async function checkout(
     return result;
   }
 
+  if (input.paymentMethod === "bank_split") {
+    const result = await finalizeBankSplitCheckout(db, order, totalHalala, delivery, input.bankAccountId);
+    if (coupon?.coupon) await useSpinnerCoupon(db, coupon.coupon.id, order.id);
+    await clearCart(db, profileId);
+    return result;
+  }
+
   const prices: InvoicePriceLine[] = [
     ...cart.map((i) => ({
       label: `${i.product.nameEn} × ${i.qty}`,
@@ -382,6 +390,53 @@ async function finalizeCod(
       // Order cancellation is best-effort here.
     }
     throw new CartValidationError(`COD finalization failed (${status})`, "insufficient_stock");
+  }
+
+  return { order, invoiceUrl: null, delivery };
+}
+
+/**
+ * Finalizes a bank split order: locks stock and sets up the split payment.
+ * The customer uploads a receipt for admin verification before processing.
+ */
+async function finalizeBankSplitCheckout(
+  db: Db,
+  order: Order,
+  totalHalala: number,
+  delivery: DeliveryBreakdown,
+  bankAccountId?: string,
+): Promise<CheckoutResult> {
+  if (!bankAccountId) {
+    throw new CartValidationError("Bank account is required for split payment", "invalid_coupon");
+  }
+
+  const { getBankAccountById } = await import("../db/bank-accounts.js");
+  const bankAccount = await getBankAccountById(db, bankAccountId);
+  if (!bankAccount || !bankAccount.isActive) {
+    throw new CartValidationError("Selected bank account is not available", "invalid_coupon");
+  }
+
+  const { data: status, error } = await db.rpc("finalize_bank_split_deposit", {
+    p_order_id: order.id,
+    p_bank_account_id: bankAccountId,
+  });
+  if (error) {
+    try {
+      await db
+        .from("orders")
+        .update({ status: "cancelled", payment_status: "failed" })
+        .eq("id", order.id);
+    } catch {}
+    throw new CartValidationError(`Bank split finalization failed: ${error.message}`, "insufficient_stock");
+  }
+  if (status !== "ok") {
+    try {
+      await db
+        .from("orders")
+        .update({ status: "cancelled", payment_status: "failed" })
+        .eq("id", order.id);
+    } catch {}
+    throw new CartValidationError(`Bank split finalization failed (${status})`, "insufficient_stock");
   }
 
   return { order, invoiceUrl: null, delivery };

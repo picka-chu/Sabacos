@@ -31,10 +31,19 @@ import {
   listOrders,
   updateOrderStatus,
 } from "../db/orders.js";
+import {
+  listAllBankAccounts,
+  createBankAccount,
+  updateBankAccount,
+  deleteBankAccount,
+  verifyPaymentProof,
+  finalizeBankSplitDeposit,
+} from "../db/bank-accounts.js";
 import { getSettings, updateSettings } from "../db/settings.js";
 import { notifyAdminChannel, createBot, postProductToChannel, testAdminChannel } from "../bot/bot.js";
 import { aiEnabled, llamaVisionProduct } from "../services/ai.js";
 import { r2Config, r2Put, r2Delete } from "../services/r2.js";
+import { BANK_NAMES, type BankName } from "@sabacos/core";
 
 const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -881,4 +890,118 @@ adminRoutes.post("/ai/product-image", async (c) => {
     console.log("[ai/product-image] No AI providers configured (CLOUDFLARE or GEMINI_API_KEY)");
   }
   return c.json({ url, draft });
+});
+
+// --------------------------------------------------------------- Bank accounts
+
+const createBankAccountSchema = z.object({
+  bankName: z.enum(BANK_NAMES as unknown as [string, ...string[]]),
+  accountName: z.string().trim().min(1).max(200),
+  accountNumber: z.string().trim().min(1).max(50),
+  isActive: z.boolean().optional(),
+});
+
+const updateBankAccountSchema = createBankAccountSchema.partial();
+
+adminRoutes.get("/bank-accounts", async (c) => {
+  const env = getAppEnv();
+  const db = getDb(env);
+  const accounts = await listAllBankAccounts(db);
+  return c.json({ accounts });
+});
+
+adminRoutes.post("/bank-accounts", async (c) => {
+  const env = getAppEnv();
+  const db = getDb(env);
+  const body = safeParse(createBankAccountSchema, await c.req.json());
+  const account = await createBankAccount(db, {
+    bankName: body.bankName as BankName,
+    accountName: body.accountName,
+    accountNumber: body.accountNumber,
+    isActive: body.isActive,
+  });
+  return c.json({ account }, 201);
+});
+
+adminRoutes.patch("/bank-accounts/:id", async (c) => {
+  const env = getAppEnv();
+  const db = getDb(env);
+  const id = c.req.param("id");
+  const body = safeParse(updateBankAccountSchema, await c.req.json());
+  const update: Record<string, unknown> = {};
+  if (body.bankName !== undefined) update.bankName = body.bankName;
+  if (body.accountName !== undefined) update.accountName = body.accountName;
+  if (body.accountNumber !== undefined) update.accountNumber = body.accountNumber;
+  if (body.isActive !== undefined) update.isActive = body.isActive;
+  const account = await updateBankAccount(db, id, update as any);
+  if (!account) throw notFound();
+  return c.json({ account });
+});
+
+adminRoutes.delete("/bank-accounts/:id", async (c) => {
+  const env = getAppEnv();
+  const db = getDb(env);
+  const id = c.req.param("id");
+  await deleteBankAccount(db, id);
+  return c.json({ ok: true });
+});
+
+// --------------------------------------------------------------- Payment verification
+
+const verifyPaymentSchema = z.object({
+  action: z.enum(["approved", "rejected"]),
+  rejectionReason: z.string().trim().max(500).optional(),
+});
+
+adminRoutes.patch("/orders/:id/verify-payment", async (c) => {
+  const env = getAppEnv();
+  const db = getDb(env);
+  const orderId = c.req.param("id");
+  const body = safeParse(verifyPaymentSchema, await c.req.json());
+
+  const order = await getOrderById(db, orderId);
+  if (!order) throw notFound();
+  if (order.paymentProofStatus !== "pending") {
+    return c.json({ error: { code: "invalid_state", message: "Payment proof is not pending verification" } }, 400);
+  }
+
+  // Update payment proof status
+  await verifyPaymentProof(db, orderId, body.action, body.rejectionReason);
+
+  if (body.action === "approved" && order.bankAccountId) {
+    // Finalize the deposit — decrements stock, records payment
+    const result = await finalizeBankSplitDeposit(db, orderId, order.bankAccountId);
+    if (result !== "ok") {
+      console.error(`[admin/verify-payment] finalize failed for order ${orderId}: ${result}`);
+    }
+  }
+
+  // Notify user via Telegram
+  const { getProfileByTelegramId } = await import("../db/profiles.js");
+  const profile = await getProfileByTelegramId(db, (order as any).profileId ?? "").catch(() => null);
+  const telegramId = profile?.telegramId;
+  if (telegramId) {
+    const bot = createBot(env);
+    const lang = profile?.language ?? "am";
+    const msg = body.action === "approved"
+      ? lang === "am"
+        ? `✅ የክፍያ ማስረከቢያ ተረድቷል!\nትዕዛዙ በ😼 ቀጥታ ይዘጋጃል።`
+        : `✅ Payment receipt approved!\nYour order is being prepared.`
+      : lang === "am"
+        ? `❌ የክፍያ ማስረከቢያ አልተፈነበረም${body.rejectionReason ? `:\n${body.rejectionReason}` : ""}\nእባክዎ እንደገና ይሞክሩ።`
+        : `❌ Payment receipt rejected${body.rejectionReason ? `:\n${body.rejectionReason}` : ""}\nPlease try again.`;
+    await bot.api.sendMessage(telegramId, msg).catch((err: unknown) =>
+      console.error(`[admin/verify-payment] user notify failed:`, err),
+    );
+  }
+
+  // Notify admin channel
+  const statusLabel = body.action === "approved" ? "✅ Approved" : "❌ Rejected";
+  await notifyAdminChannel(
+    env,
+    `${statusLabel} payment for order ${order.orderNo} (by admin)`,
+  );
+
+  const updatedOrder = await getOrderById(db, orderId);
+  return c.json({ order: updatedOrder });
 });

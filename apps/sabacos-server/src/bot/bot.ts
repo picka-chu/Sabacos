@@ -759,6 +759,71 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     ).catch(() => {});
   });
 
+  // ---- Payment proof approve/reject callback buttons ----
+  bot.callbackQuery(/^proof:(.+):(.+)$/, async (ctx) => {
+    const match = ctx.match;
+    if (!match) return;
+    const orderId = match[1];
+    const action = match[2];
+    if (!orderId || !action || !["approved", "rejected"].includes(action)) return;
+    const from = ctx.from;
+    if (!from) return;
+
+    const db = getDb(env);
+    const profile = await getProfileByTelegramId(db, from.id).catch(() => null);
+
+    const allowedRoles = ["admin", "staff"];
+    if (!profile || !allowedRoles.includes(profile.role)) {
+      await ctx.answerCallbackQuery({ text: "Not authorized", show_alert: true });
+      return;
+    }
+
+    const order = await getOrderById(db, orderId);
+    if (!order) {
+      await ctx.answerCallbackQuery({ text: "Order not found", show_alert: true });
+      return;
+    }
+    if (order.paymentProofStatus !== "pending") {
+      await ctx.answerCallbackQuery({ text: "Payment proof is not pending", show_alert: true });
+      return;
+    }
+
+    const { verifyPaymentProof, finalizeBankSplitDeposit } = await import("../db/bank-accounts.js");
+    await verifyPaymentProof(db, orderId, action as "approved" | "rejected");
+
+    if (action === "approved" && order.bankAccountId) {
+      const result = await finalizeBankSplitDeposit(db, orderId, order.bankAccountId);
+      if (result !== "ok") {
+        console.error(`[proof callback] finalize failed for order ${orderId}: ${result}`);
+      }
+    }
+
+    // Fetch order owner profile for user notification
+    const { getProfileById } = await import("../db/profiles.js");
+    const orderOwner = await getProfileById(db, order.profileId).catch(() => null);
+    if (orderOwner?.telegramId) {
+      const lang = orderOwner.language ?? "am";
+      const msg = action === "approved"
+        ? lang === "am"
+          ? "✅ የክፍያ ማስረከቢያ ተረድቷል!\nትዕዛዙ ይዘጋጃል።"
+          : "✅ Payment receipt approved!\nYour order is being prepared."
+        : lang === "am"
+          ? "❌ የክፍያ ማስረከቢያ አልተፈነበረም።\nእባክዎ እንደገና ይሞክሩ।"
+          : "❌ Payment receipt rejected.\nPlease try again.";
+      await createBot(env).api.sendMessage(orderOwner.telegramId, msg).catch((err: unknown) =>
+        console.error(`[proof callback] user notify failed:`, err),
+      );
+    }
+
+    const statusLabel = action === "approved" ? "✅ Approved" : "❌ Rejected";
+    await notifyAdminChannel(env, `${statusLabel} payment proof for order ${order.orderNo} (by ${profile.firstName ?? "staff"})`);
+
+    await ctx.answerCallbackQuery({ text: `Payment ${action}` });
+    await ctx.editMessageText(
+      `${statusLabel} — Order ${order.orderNo}\nBy: ${profile.firstName ?? "Staff"}`,
+    ).catch(() => {});
+  });
+
   bot.catch((err) => {
     console.error("bot error", err.error);
   });

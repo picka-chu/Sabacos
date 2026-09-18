@@ -15,6 +15,7 @@ export const ALL_PAGE_PATHS = [
   "/waitlist",
   "/referrals",
   "/spinner-prizes",
+  "/banks",
   "/settings",
 ] as const;
 

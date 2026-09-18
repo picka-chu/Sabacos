@@ -153,7 +153,13 @@ export const orderRowSchema = z
     telegram_payment_charge_id: z.string().nullable(),
     provider_payment_charge_id: z.string().nullable(),
     payment_status: z.enum(PAYMENT_STATUSES),
-    payment_method: z.enum(["telegram", "wallet", "cod"]).default("telegram"),
+    payment_method: z.enum(["telegram", "wallet", "cod", "bank_split"]).default("telegram"),
+    deposit_halala: z.number().int().nullable().default(null),
+    balance_halala: z.number().int().nullable().default(null),
+    bank_account_id: z.string().uuid().nullable().default(null),
+    payment_proof_url: z.string().nullable().default(null),
+    payment_proof_status: z.enum(["none", "pending", "approved", "rejected"]).default("none"),
+    payment_proof_rejection_reason: z.string().nullable().default(null),
     created_at: z.string(),
     updated_at: z.string(),
   })
@@ -182,6 +188,12 @@ export const orderRowSchema = z
       providerPaymentChargeId: r.provider_payment_charge_id,
       paymentStatus: r.payment_status,
       paymentMethod: r.payment_method ?? "telegram",
+      depositHalala: r.deposit_halala ?? null,
+      balanceHalala: r.balance_halala ?? null,
+      bankAccountId: r.bank_account_id ?? null,
+      paymentProofUrl: r.payment_proof_url ?? null,
+      paymentProofStatus: r.payment_proof_status ?? "none",
+      paymentProofRejectionReason: r.payment_proof_rejection_reason ?? null,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }),
@@ -309,8 +321,10 @@ export const checkoutSchema = z.object({
   deliveryType: z.enum(["standard", "express"]).optional(),
   /** Optional spinner coupon code to redeem on this order. */
   couponCode: z.string().trim().min(1).max(40).optional(),
-  /** Payment method — "wallet" uses the customer's referral wallet balance, "cod" for cash on delivery. */
-  paymentMethod: z.enum(["telegram", "wallet", "cod"]).default("telegram").optional(),
+  /** Payment method — "wallet" uses the customer's referral wallet balance, "cod" for cash on delivery, "bank_split" for half now half on delivery. */
+  paymentMethod: z.enum(["telegram", "wallet", "cod", "bank_split"]).default("telegram").optional(),
+  /** Bank account ID — required when paymentMethod is "bank_split". */
+  bankAccountId: z.string().uuid().optional(),
 });
 
 export const createProductSchema = z.object({
