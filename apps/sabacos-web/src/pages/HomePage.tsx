@@ -5,7 +5,6 @@ import { formatETB } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { ProductCard } from "../components/ProductCard.js";
 import { BannerCarousel, type AdBanner } from "../components/BannerCarousel.js";
-import { ProductGridSkeleton } from "../components/Skeletons.js";
 import { iconForCategory } from "../categoryIcons.js";
 import { useCategories, useProducts } from "../hooks.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
@@ -59,8 +58,7 @@ export function HomePage() {
     )
     .slice(0, 5);
 
-  const bestSellers = featuredItems.length > 0 ? featuredItems : latestItems.slice(0, 4);
-  const newArrivals = latestItems.filter((p) => !bestSellers.some((b) => b.id === p.id));
+  const newArrivals = latestItems;
 
   const loading = featured.loading || latest.loading;
 
@@ -132,21 +130,6 @@ export function HomePage() {
             <span>{iconForCategory(c)}</span> {lang === "am" ? c.nameAm : c.nameEn}
           </button>
         ))}
-      </div>
-
-      <div className="section-title">
-        <span>{t("bestSellers")}</span>
-      </div>
-      <div className="product-grid">
-        {loading ? (
-          <ProductGridSkeleton count={4} />
-        ) : bestSellers.length > 0 ? (
-          bestSellers.map((p) => <ProductCard key={p.id} product={p} lang={lang} onAdd={handleAdd} />)
-        ) : (
-          <p className="muted" style={{ gridColumn: "1 / -1", textAlign: "center", padding: "24px 0", fontSize: 14 }}>
-            {t("emptyCatalog")}
-          </p>
-        )}
       </div>
 
       {newArrivals.length > 0 && (
