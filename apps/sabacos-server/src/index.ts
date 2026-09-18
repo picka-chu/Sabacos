@@ -237,17 +237,6 @@ async function start(): Promise<void> {
       incoming.destroy();
       return;
     }
-    let received = 0;
-    let rejected = false;
-    incoming.on("data", (chunk: Buffer) => {
-      received += chunk.length;
-      if (!rejected && received > MAX_BODY_BYTES) {
-        rejected = true;
-        outgoing.writeHead(413, { "Content-Type": "application/json" });
-        outgoing.end(JSON.stringify({ error: { code: "payload_too_large", message: "Request too large (max 10 MB)" } }));
-        incoming.destroy();
-      }
-    });
     void listener(incoming, outgoing);
   }).listen(env.PORT, () => {
     const address = server?.address();
