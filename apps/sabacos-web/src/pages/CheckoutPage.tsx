@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User, X, Zap, Truck, Tag, Wallet } from "lucide-react";
+import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User, X, Zap, Truck, Tag, Wallet, Banknote } from "lucide-react";
 import { DEFAULT_DELIVERY_CONFIG, formatETB, quoteDelivery, computeDeliveryFee, t } from "@sabacos/core";
 import type { DeliveryConfig } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
@@ -42,11 +42,12 @@ export function CheckoutPage() {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderNo, setOrderNo] = useState<string | null>(null);
   const [orderTotal, setOrderTotal] = useState<number>(0);
+  const [orderPaymentMethod, setOrderPaymentMethod] = useState<"telegram" | "wallet" | "cod">("telegram");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [couponInput, setCouponInput] = useState("");
   const [couponCode, setCouponCode] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"telegram" | "wallet">("telegram");
+  const [paymentMethod, setPaymentMethod] = useState<"telegram" | "wallet" | "cod">("telegram");
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(true);
 
@@ -208,8 +209,9 @@ export function CheckoutPage() {
       });
       setOrderId(order.id);
       setOrderNo(order.orderNo);
+      setOrderPaymentMethod(paymentMethod);
 
-      // Wallet payments are finalized server-side — no invoice to open.
+      // Wallet and COD payments are finalized server-side — no invoice to open.
       if (!invoiceUrl) {
         await clearCart();
         setOrderTotal(order.totalHalala);
@@ -282,7 +284,7 @@ export function CheckoutPage() {
         <div className="text-center" style={{ paddingTop: 40 }}>
           <CheckCircle2 size={72} strokeWidth={1.25} color="var(--success)" />
           <h1 className="serif" style={{ fontSize: 28, margin: "18px 0 6px" }}>{t("orderConfirmed")}</h1>
-          <p className="muted">{t("orderConfirmedHint")}</p>
+          <p className="muted">{orderPaymentMethod === "cod" ? t("codOrderConfirmedHint") : t("orderConfirmedHint")}</p>
           <div className="card" style={{ padding: 18, marginTop: 24, textAlign: "left" }}>
             <div className="row" style={{ justifyContent: "space-between" }}>
               <span className="muted">{t("orderNumber")}</span>
@@ -482,6 +484,19 @@ export function CheckoutPage() {
                   {walletLoading ? "…" : t("walletPayLabel") + ": " + formatETB(walletBalance)}
                 </span>
               </button>
+              <button
+                type="button"
+                className={`zone-option${paymentMethod === "cod" ? " active" : ""}`}
+                onClick={() => {
+                  haptic();
+                  setPaymentMethod("cod");
+                }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                  <Banknote size={15} /> {t("payWithCod")}
+                </span>
+                <span className="muted" style={{ fontSize: 12 }}>{t("payWithCodHint")}</span>
+              </button>
             </div>
             {paymentMethod === "wallet" && walletBalance < grandTotal && (
               <p style={{ fontSize: 12.5, margin: "8px 2px 0", color: "var(--danger, #d32f2f)", fontWeight: 600 }}>
@@ -608,10 +623,12 @@ export function CheckoutPage() {
             >
               {paymentMethod === "wallet"
                 ? `${t("payWithWallet")} · ${formatETB(grandTotal)}`
-                : `${t("payWithTelegram")} · ${formatETB(grandTotal)}`}
+                : paymentMethod === "cod"
+                  ? `${t("payWithCod")} · ${formatETB(grandTotal)}`
+                  : `${t("payWithTelegram")} · ${formatETB(grandTotal)}`}
             </button>
             <p className="muted text-center" style={{ margin: 0, fontSize: 12, fontWeight: 500 }}>
-              {paymentMethod === "wallet" ? t("payWithWalletHint") : t("payWithTelegramHint")}
+              {paymentMethod === "wallet" ? t("payWithWalletHint") : paymentMethod === "cod" ? t("payWithCodHint") : t("payWithTelegramHint")}
             </p>
           </div>
         </>

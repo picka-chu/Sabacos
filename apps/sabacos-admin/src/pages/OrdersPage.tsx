@@ -95,6 +95,7 @@ export function OrdersPage() {
                   <th>Customer</th>
                   <th>Status</th>
                   <th>Payment</th>
+                  <th>Method</th>
                   <th>Total</th>
                   <th>Date</th>
                 </tr>
@@ -120,6 +121,9 @@ export function OrdersPage() {
                       <span className={`badge ${order.paymentStatus === "success" ? "badge-success" : order.paymentStatus === "failed" ? "badge-danger" : ""}`}>
                         {order.paymentStatus.replace("_", " ")}
                       </span>
+                    </td>
+                    <td data-label="Method" style={{ fontSize: 13 }}>
+                      {order.paymentMethod === "cod" ? "COD" : order.paymentMethod === "wallet" ? "Wallet" : "Telegram"}
                     </td>
                     <td data-label="Total" style={{ fontWeight: 600 }}>
                       {formatETB(order.totalHalala)}

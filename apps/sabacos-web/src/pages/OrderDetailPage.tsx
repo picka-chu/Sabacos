@@ -131,7 +131,9 @@ export function OrderDetailPage() {
       <div className="card" style={{ padding: 18, marginTop: 14 }}>
         <div className="row" style={{ justifyContent: "space-between" }}>
           <span className="muted">{t("paymentMethod")}</span>
-          <span style={{ fontSize: 14 }}>{t("telegramInvoice")}</span>
+          <span style={{ fontSize: 14 }}>
+            {order.paymentMethod === "cod" ? t("payWithCod") : order.paymentMethod === "wallet" ? t("payWithWallet") : t("telegramInvoice")}
+          </span>
         </div>
         <div className="row" style={{ justifyContent: "space-between", marginTop: 8 }}>
           <span className="muted">{t("payment_success")}</span>

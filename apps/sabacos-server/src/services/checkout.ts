@@ -8,6 +8,7 @@ import {
   type DeliveryBreakdown,
   type CartItem,
   type Order,
+  type PaymentMethod,
 } from "@sabacos/core";
 import type { Db } from "../db/client.js";
 import { getSettings } from "../db/settings.js";
@@ -45,7 +46,7 @@ export interface CheckoutInput {
   zone?: number | null;
   deliveryType?: "standard" | "express";
   couponCode?: string;
-  paymentMethod?: "telegram" | "wallet";
+  paymentMethod?: PaymentMethod;
 }
 
 export interface CheckoutResult {
@@ -206,6 +207,7 @@ export async function checkout(
     zone: delivery.zone,
     deliveryType: input.deliveryType === "express" ? "express" : "standard",
     fragile,
+    paymentMethod: input.paymentMethod ?? "telegram",
     items: cart.map((i) => ({
       productId: i.productId,
       nameEn: i.product.nameEn,
@@ -219,9 +221,13 @@ export async function checkout(
 
   if (input.paymentMethod === "wallet") {
     const result = await finalizeWithWallet(db, order, totalHalala, delivery);
-    // Only consume incentives and clear the cart after the atomic wallet
-    // payment succeeds.  Doing this before payment could otherwise make a
-    // failed checkout silently discard the customer's cart and coupon.
+    if (coupon?.coupon) await useSpinnerCoupon(db, coupon.coupon.id, order.id);
+    await clearCart(db, profileId);
+    return result;
+  }
+
+  if (input.paymentMethod === "cod") {
+    const result = await finalizeCod(db, order, totalHalala, delivery);
     if (coupon?.coupon) await useSpinnerCoupon(db, coupon.coupon.id, order.id);
     await clearCart(db, profileId);
     return result;
@@ -338,6 +344,45 @@ async function finalizeWithWallet(
     orderId: order.id,
     orderTotalHalala: order.totalHalala,
   }).catch((err) => console.error("wallet checkout: referral reward failed", err));
+
+  return { order, invoiceUrl: null, delivery };
+}
+
+/**
+ * Finalizes a COD order: validates stock via the atomic RPC, decrements
+ * inventory, and marks the order as paid.  The customer pays cash on delivery.
+ */
+async function finalizeCod(
+  db: Db,
+  order: Order,
+  totalHalala: number,
+  delivery: DeliveryBreakdown,
+): Promise<CheckoutResult> {
+  const { data: status, error } = await db.rpc("finalize_cod_payment", {
+    p_order_id: order.id,
+  });
+  if (error) {
+    try {
+      await db
+        .from("orders")
+        .update({ status: "cancelled", payment_status: "failed" })
+        .eq("id", order.id);
+    } catch {
+      // Order cancellation is best-effort here.
+    }
+    throw new CartValidationError(`COD finalization failed: ${error.message}`, "insufficient_stock");
+  }
+  if (status !== "ok") {
+    try {
+      await db
+        .from("orders")
+        .update({ status: "cancelled", payment_status: "failed" })
+        .eq("id", order.id);
+    } catch {
+      // Order cancellation is best-effort here.
+    }
+    throw new CartValidationError(`COD finalization failed (${status})`, "insufficient_stock");
+  }
 
   return { order, invoiceUrl: null, delivery };
 }

@@ -153,6 +153,7 @@ export const orderRowSchema = z
     telegram_payment_charge_id: z.string().nullable(),
     provider_payment_charge_id: z.string().nullable(),
     payment_status: z.enum(PAYMENT_STATUSES),
+    payment_method: z.enum(["telegram", "wallet", "cod"]).default("telegram"),
     created_at: z.string(),
     updated_at: z.string(),
   })
@@ -180,6 +181,7 @@ export const orderRowSchema = z
       telegramPaymentChargeId: r.telegram_payment_charge_id,
       providerPaymentChargeId: r.provider_payment_charge_id,
       paymentStatus: r.payment_status,
+      paymentMethod: r.payment_method ?? "telegram",
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }),
@@ -307,8 +309,8 @@ export const checkoutSchema = z.object({
   deliveryType: z.enum(["standard", "express"]).optional(),
   /** Optional spinner coupon code to redeem on this order. */
   couponCode: z.string().trim().min(1).max(40).optional(),
-  /** Payment method — "wallet" uses the customer's referral wallet balance. */
-  paymentMethod: z.enum(["telegram", "wallet"]).default("telegram").optional(),
+  /** Payment method — "wallet" uses the customer's referral wallet balance, "cod" for cash on delivery. */
+  paymentMethod: z.enum(["telegram", "wallet", "cod"]).default("telegram").optional(),
 });
 
 export const createProductSchema = z.object({

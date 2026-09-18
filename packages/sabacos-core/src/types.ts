@@ -114,6 +114,7 @@ export interface CartItem {
 }
 
 export type DeliveryType = "standard" | "express";
+export type PaymentMethod = "telegram" | "wallet" | "cod";
 
 export interface Order {
   id: string;
@@ -138,6 +139,7 @@ export interface Order {
   telegramPaymentChargeId: string | null;
   providerPaymentChargeId: string | null;
   paymentStatus: PaymentStatus;
+  paymentMethod: PaymentMethod;
   createdAt: string;
   updatedAt: string;
 }

@@ -5,6 +5,7 @@ import {
   type OrderItem,
   type OrderStatus,
   type OrderWithItems,
+  type PaymentMethod,
   type PaymentStatus,
 } from "@sabacos/core";
 import type { Db } from "./client.js";
@@ -25,6 +26,7 @@ export interface CreateOrderInput {
   zone?: number | null;
   deliveryType?: "standard" | "express";
   fragile?: boolean;
+  paymentMethod?: PaymentMethod;
   items: Array<{
     productId: string;
     nameEn: string;
@@ -54,6 +56,7 @@ export async function createOrder(db: Db, input: CreateOrderInput): Promise<Orde
       zone: input.zone ?? null,
       delivery_type: input.deliveryType ?? "standard",
       fragile: input.fragile ?? false,
+      payment_method: input.paymentMethod ?? "telegram",
       items: input.items.map((item) => ({
         product_id: item.productId,
         name_en: item.nameEn,
@@ -92,6 +95,7 @@ const ORDER_COLUMNS = [
   "telegram_payment_charge_id",
   "provider_payment_charge_id",
   "payment_status",
+  "payment_method",
   "created_at",
   "updated_at",
 ].join(", ");

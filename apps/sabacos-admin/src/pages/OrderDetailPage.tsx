@@ -185,6 +185,12 @@ export function OrderDetailPage() {
           <div className="card" style={{ marginBottom: 14 }}>
             <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Payment</h3>
             <div className="row" style={{ justifyContent: "space-between" }}>
+              <span className="muted">Method</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>
+                {order.paymentMethod === "cod" ? "Cash on Delivery" : order.paymentMethod === "wallet" ? "Wallet" : "Telegram (Chapa)"}
+              </span>
+            </div>
+            <div className="row" style={{ justifyContent: "space-between", marginTop: 8 }}>
               <span className="muted">Status</span>
               <span className={`badge ${order.paymentStatus === "success" ? "badge-success" : order.paymentStatus === "failed" ? "badge-danger" : ""}`}>
                 {order.paymentStatus.replace("_", " ")}

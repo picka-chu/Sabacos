@@ -24,7 +24,7 @@ interface ShopState {
     zone?: number | null;
     deliveryType?: "standard" | "express";
     couponCode?: string;
-    paymentMethod?: "telegram" | "wallet";
+    paymentMethod?: "telegram" | "wallet" | "cod";
   }) => Promise<{
     order: Order;
     invoiceUrl: string | null;

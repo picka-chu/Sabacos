@@ -54,7 +54,7 @@ orderRoutes.post("/checkout", async (c) => {
       { createInvoiceLink: makeCreateInvoiceLink(env, bot) },
     );
 
-    // Wallet payments are finalized server-side and need the same admin alert.
+    // Wallet and COD payments are finalized server-side and need the admin alert.
     if (!result.invoiceUrl) {
       const order = await getOrderWithItems(db, result.order.id).catch(() => null);
       if (order) {
