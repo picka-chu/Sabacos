@@ -172,6 +172,8 @@ const en = {
   totalSpent: "Total spent",
   invalidPhone: "Enter a valid phone number",
   invalidAddress: "Enter your full delivery address",
+  nameTooShort: "Name must be at least 2 characters",
+  fieldTooLong: "Too many characters",
   previewBanner: "Preview mode — open inside Telegram to order.",
   sharePhone: "Use my Telegram number",
   // Referral & Rewards
@@ -433,6 +435,8 @@ const am: Record<I18nKey, string> = {
   totalSpent: "ጠቅላላ ወጪ",
   invalidPhone: "ትክክለኛ ስልክ ቁጥር ያስገቡ",
   invalidAddress: "ሙሉ የመላኪያ አድራሻዎን ያስገቡ",
+  nameTooShort: "ስም ቢያንስ 2 ቁምፊዎች መሆን አለበት",
+  fieldTooLong: "ብዙ ቁምፊዎች ናቸው",
   previewBanner: "ቅድመ እይታ — ለማዘዝ በቴሌግራም ውስጥ ይክፈቱ።",
   sharePhone: "የቴሌግራም ቁጥሬን ተጠቀም",
   referrals: "ሪፈራሎች",

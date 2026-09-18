@@ -6,6 +6,7 @@ import type { DeliveryConfig } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { api } from "../api.js";
 import { PageTitle } from "../components/PageTitle.js";
+import { FormField } from "../components/FormField.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
 import { toast } from "../components/Toast.js";
 import { isTelegramSession, haptic, payInvoice, closeToChat } from "../telegram.js";
@@ -50,6 +51,7 @@ export function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<"telegram" | "wallet" | "cod">("telegram");
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(true);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const submittingRef = useRef(false);
@@ -164,6 +166,26 @@ export function CheckoutPage() {
     [form],
   );
 
+  const fieldErrors = useMemo(() => {
+    const e: Record<string, string | null> = {};
+    const name = form.customerName.trim();
+    const phone = form.phone.trim();
+    const addr = form.address.trim();
+    if (touched.customerName) {
+      e.customerName = name.length < 2 ? t("nameTooShort") : name.length > 120 ? t("fieldTooLong") : null;
+    }
+    if (touched.phone) {
+      e.phone = phone.length < 7 ? t("invalidPhone") : phone.length > 30 ? t("fieldTooLong") : null;
+    }
+    if (touched.address) {
+      e.address = addr.length < 5 ? t("invalidAddress") : addr.length > 500 ? t("fieldTooLong") : null;
+    }
+    if (touched.note && form.note.length > 500) {
+      e.note = t("fieldTooLong");
+    }
+    return e;
+  }, [form, touched]);
+
   useEffect(() => () => {
     if (pollRef.current) clearInterval(pollRef.current);
   }, []);
@@ -192,6 +214,8 @@ export function CheckoutPage() {
 
   const handleSubmit = async () => {
     if (submittingRef.current) return;
+    setTouched({ customerName: true, phone: true, address: true, note: true });
+    if (!canSubmit) return;
     submittingRef.current = true;
     setErrorMsg(null);
     try {
@@ -372,45 +396,54 @@ export function CheckoutPage() {
 
           <div className="card form-card" style={{ marginBottom: 14 }}>
             <h2 style={{ fontSize: 17, margin: "0 0 12px", fontWeight: 700 }}>{t("contactDetails")}</h2>
-            <div className="field">
-              <label>{t("fullName")}</label>
-              <input
-                value={form.customerName}
-                placeholder={t("fullName")}
-                onChange={(e) => setForm({ ...form, customerName: e.target.value })}
-              />
-            </div>
-            <div className="field">
-              <label>{t("phone")}</label>
-              <div className="row" style={{ gap: 8 }}>
-                <input
-                  value={form.phone}
-                  inputMode="tel"
-                  placeholder="+251 91 234 5678"
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                />
-                {isTelegramSession() && (
-                  <button type="button" className="btn btn-secondary" style={{ flexShrink: 0, padding: "0 12px" }} onClick={handleSharePhone} title={t("sharePhone")}>
-                    <User size={16} />
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="field">
-              <label>{t("deliveryAddress")}</label>
-              <textarea
-                value={form.address}
-                placeholder={t("deliveryAddress")}
-                rows={3}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-              />
-            </div>
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label>{t("note")}</label>
-              <input
+            <FormField
+              label={t("fullName")}
+              value={form.customerName}
+              onChange={(v) => setForm({ ...form, customerName: v })}
+              onBlur={() => setTouched((p) => ({ ...p, customerName: true }))}
+              placeholder={t("fullName")}
+              error={fieldErrors.customerName}
+              minLength={2}
+              maxLength={120}
+              required
+            />
+            <FormField
+              label={t("phone")}
+              value={form.phone}
+              onChange={(v) => setForm({ ...form, phone: v })}
+              onBlur={() => setTouched((p) => ({ ...p, phone: true }))}
+              placeholder="+251 91 234 5678"
+              error={fieldErrors.phone}
+              inputMode="tel"
+              minLength={7}
+              maxLength={30}
+              required
+              suffix={isTelegramSession() ? (
+                <button type="button" className="btn btn-secondary" style={{ flexShrink: 0, padding: "0 12px" }} onClick={handleSharePhone} title={t("sharePhone")}>
+                  <User size={16} />
+                </button>
+              ) : undefined}
+            />
+            <FormField
+              label={t("deliveryAddress")}
+              value={form.address}
+              onChange={(v) => setForm({ ...form, address: v })}
+              onBlur={() => setTouched((p) => ({ ...p, address: true }))}
+              placeholder={t("addressPlaceholder")}
+              error={fieldErrors.address}
+              rows={3}
+              maxLength={500}
+              required
+            />
+            <div style={{ marginBottom: 0 }}>
+              <FormField
+                label={t("note")}
                 value={form.note}
+                onChange={(v) => setForm({ ...form, note: v })}
+                onBlur={() => setTouched((p) => ({ ...p, note: true }))}
                 placeholder={t("note")}
-                onChange={(e) => setForm({ ...form, note: e.target.value })}
+                error={fieldErrors.note}
+                maxLength={500}
               />
             </div>
           </div>

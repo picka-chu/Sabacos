@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { formatETB, type Order } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { PageTitle } from "../components/PageTitle.js";
+import { FormField } from "../components/FormField.js";
 import { api } from "../api.js";
 import { apiErrorMessage, useShopStore } from "../store.js";
 import { toast } from "../components/Toast.js";
@@ -231,24 +232,22 @@ export function ProfilePage() {
       <div className="card" style={{ padding: editing ? 16 : 18 }}>
         {editing ? (
           <div>
-            <div className="field">
-              <label>{t("phone")}</label>
-              <input
-                value={phone}
-                inputMode="tel"
-                placeholder={t("phonePlaceholder")}
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label>{t("deliveryAddress")}</label>
-              <textarea
-                value={address}
-                placeholder={t("addressPlaceholder")}
-                rows={3}
-                onChange={(e) => setAddress(e.target.value)}
-              />
-            </div>
+            <FormField
+              label={t("phone")}
+              value={phone}
+              onChange={setPhone}
+              placeholder={t("phonePlaceholder")}
+              inputMode="tel"
+              maxLength={30}
+            />
+            <FormField
+              label={t("deliveryAddress")}
+              value={address}
+              onChange={setAddress}
+              placeholder={t("addressPlaceholder")}
+              rows={3}
+              maxLength={500}
+            />
             {errorMsg && (
               <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--accent-strong)" }}>{errorMsg}</p>
             )}
