@@ -96,10 +96,13 @@ orderRoutes.patch("/profile", async (c) => {
   const profile = c.get("profile");
   const body = await c.req.json().catch(() => null);
   const input = safeParse(saveProfileSchema, body);
-  let updated = await saveProfileContact(db, profile.id, {
-    phone: input.phone,
-    address: input.address,
-  });
+  let updated = profile;
+  if (input.phone !== undefined || input.address !== undefined) {
+    updated = await saveProfileContact(db, profile.id, {
+      phone: input.phone,
+      address: input.address,
+    });
+  }
   if (input.language) {
     updated = await setProfileLanguage(db, profile.id, input.language);
   }

@@ -82,6 +82,12 @@ export async function saveProfileContact(
     patch.last_longitude = input.lastLongitude;
   }
 
+  if (Object.keys(patch).length === 0) {
+    const existing = await getProfileById(db, id);
+    if (!existing) throw new Error(`saveProfileContact: profile ${id} not found`);
+    return existing;
+  }
+
   const { data, error } = await db.from("profiles").update(patch).eq("id", id).select("*").single();
   if (error) throw new Error(`saveProfileContact: ${error.message}`);
   return profileRowSchema.parse(data);

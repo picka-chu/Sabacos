@@ -506,6 +506,15 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
   });
 
   bot.on("message:text").filter((ctx) => ctx.message.text.trim() === "📋  Join Waitlist", async (ctx) => {
+    const db = getDb(env);
+    const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
+    if (!waitlistConfig?.isActive) {
+      const profile = await getProfileByTelegramId(db, ctx.from.id).catch(() => null);
+      await ctx.reply("🛍  The shop is open!", {
+        reply_markup: new InlineKeyboard().webApp("🛍  Open the shop", env.WEBAPP_URL),
+      });
+      return;
+    }
     await ctx.reply("📋  Opening the waitlist:", {
       reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", env.WEBAPP_URL),
     });
