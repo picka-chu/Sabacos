@@ -16,16 +16,22 @@ async function request<T>(
   path: string,
   options: { method?: string; body?: unknown } = {},
 ): Promise<T> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  const headers: Record<string, string> = {};
   const initData = getInitData();
   if (initData) headers["X-Telegram-Init-Data"] = initData;
+
+  let bodyInit: string | FormData | undefined;
+  if (options.body instanceof FormData) {
+    bodyInit = options.body;
+  } else if (options.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    bodyInit = JSON.stringify(options.body);
+  }
 
   const res = await fetch(`${API_BASE}${path}`, {
     method: options.method ?? "GET",
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body: bodyInit,
   });
 
   const body = (await res.json().catch(() => null)) as
