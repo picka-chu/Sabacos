@@ -43,6 +43,7 @@ import { getSettings, updateSettings } from "../db/settings.js";
 import { notifyAdminChannel, createBot, postProductToChannel, testAdminChannel } from "../bot/bot.js";
 import { aiEnabled, llamaVisionProduct } from "../services/ai.js";
 import { r2Config, r2Put, r2Delete } from "../services/r2.js";
+import { promoForProduct, getActiveDiscounts } from "../db/discounts.js";
 import { BANK_NAMES, type BankName } from "@sabacos/core";
 
 const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -631,6 +632,18 @@ adminRoutes.post("/products/:id/post-to-channel", async (c) => {
   const product = await getProductById(db, id, true);
   if (!product) throw notFound();
 
+  // Check for active discount on this product
+  let discount: { percent: number; salePriceHalala: number } | null = null;
+  try {
+    const discounts = await getActiveDiscounts(db);
+    const promo = promoForProduct(product, discounts);
+    if (promo) {
+      discount = { percent: promo.percent, salePriceHalala: promo.salePriceHalala };
+    }
+  } catch {
+    // Ignore discount lookup errors
+  }
+
   // Generate AI-powered Telegram post copy via Gemini
   let aiPost: { en: string; am: string } | null = null;
   try {
@@ -640,7 +653,7 @@ adminRoutes.post("/products/:id/post-to-channel", async (c) => {
       nameAm: product.nameAm,
       descriptionEn: product.descriptionEn,
       priceHalala: product.priceHalala,
-    });
+    }, discount);
   } catch (err) {
     console.error("[post-to-channel] Gemini generation failed, using product descriptions:", err);
   }
@@ -653,7 +666,7 @@ adminRoutes.post("/products/:id/post-to-channel", async (c) => {
     descriptionAm: product.descriptionAm,
     priceHalala: product.priceHalala,
     imageUrls: product.imageUrls,
-  }, aiPost);
+  }, aiPost, discount);
 
   return c.json({ ok: true, aiGenerated: !!aiPost });
 });

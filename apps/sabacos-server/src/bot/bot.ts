@@ -986,6 +986,7 @@ export async function postProductToChannel(
   env: AppEnv,
   product: { id: string; nameEn: string; nameAm: string; descriptionEn: string; descriptionAm: string; priceHalala: number; imageUrls: string[] },
   aiPost?: { en: string; am: string } | null,
+  discount?: { percent: number; salePriceHalala: number } | null,
 ): Promise<void> {
   const settings = await getSettings(getDb(env)).catch(() => null);
   const channelId = resolveChannelId(settings?.postChannelId ?? env.POST_CHANNEL_ID ?? env.ADMIN_CHANNEL_ID);
@@ -993,22 +994,36 @@ export async function postProductToChannel(
 
   const price = (product.priceHalala / 100).toFixed(2);
 
-  // Use AI-generated post if provided, otherwise fall back to product descriptions
-  const postEn = aiPost?.en ?? product.descriptionEn;
-  const postAm = aiPost?.am ?? product.descriptionAm;
+  // Build caption: AI-generated post is the primary content
+  let caption: string;
+  if (aiPost?.en) {
+    // AI post already includes product name, description, and price
+    caption = aiPost.en;
+    // Append Amharic if the AI didn't include it in the English post
+    if (aiPost.am && !caption.includes(escapeHtml(product.nameAm))) {
+      caption += `\n\n${aiPost.am}`;
+    }
+  } else {
+    // Fallback: build from product data
+    const lines = [
+      `<b>${escapeHtml(product.nameEn)}</b>`,
+      product.nameAm ? `<i>${escapeHtml(product.nameAm)}</i>` : "",
+      "",
+      product.descriptionEn ? escapeHtml(product.descriptionEn).slice(0, 300) : "",
+      product.descriptionAm ? escapeHtml(product.descriptionAm).slice(0, 300) : "",
+    ];
+    caption = lines.filter(Boolean).join("\n");
+  }
 
-  // HTML parse mode: escape every dynamic field
-  const caption = [
-    `<b>${escapeHtml(product.nameEn)}</b>`,
-    product.nameAm ? `<i>${escapeHtml(product.nameAm)}</i>` : "",
-    "",
-    postEn ? escapeHtml(postEn).slice(0, 500) : "",
-    postAm ? escapeHtml(postAm).slice(0, 500) : "",
-    "",
-    `💰 <b>${price} ETB</b>`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  // Add pricing line
+  let priceLine: string;
+  if (discount && discount.percent > 0) {
+    const salePrice = (discount.salePriceHalala / 100).toFixed(2);
+    priceLine = `💰 <b>${salePrice} ETB</b>  <s>${price} ETB</s>  🔥 ${discount.percent}% OFF`;
+  } else {
+    priceLine = `💰 <b>${price} ETB</b>`;
+  }
+  caption += `\n\n${priceLine}`;
 
   let deepLink: string;
   try {

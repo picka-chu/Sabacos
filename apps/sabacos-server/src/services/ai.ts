@@ -476,31 +476,59 @@ export async function llamaVisionProduct(
 // Telegram channel post copy
 // ---------------------------------------------------------------------------
 
-const TELEGRAM_POST_PROMPT = `You are a copywriter for a cosmetics & beauty shop called Sabacos (Ethiopian brand).
-Write a short, catchy Telegram channel post for this product. The post should:
-- Start with the product name
-- Include 1-2 sentences about why it's great (benefits, not features)
-- Include the price
-- Be engaging and use emojis sparingly
-- Keep it under 200 characters total
+const TELEGRAM_POST_PROMPT = `You are a professional copywriter for "Sabacos" — an Ethiopian cosmetics & beauty shop.
 
-Product: {name}
-Price: {price} ETB
-Existing description: {desc}
+Write a Telegram channel post for this product. The post MUST follow this exact structure:
 
-Respond ONLY with JSON:
-{"en": "English post", "am": "Amharic post"}`;
+LINE 1: Product name in English (bold, no emoji)
+LINE 2: Product name in Amharic (italic)
+LINE 3: Empty line
+LINE 4-5: ONE compelling sentence in English about the product (benefit-focused, not feature-focused). Max 15 words.
+LINE 6-7: ONE compelling sentence in Amharic (same meaning). Max 15 words.
+LINE 8: Empty line
+LINE 9: Price in bold with ETB currency
+
+{discount_line}
+
+RULES:
+- Tone: Professional, clean, premium feel. Not spammy.
+- Emojis: Use ONLY 1-2 relevant emojis total (e.g. 💄 for makeup, 🧴 for skincare). No 🌸✨💕 spam.
+- Language: English first, then Amharic. Keep both concise and natural.
+- Price: Always show the original price. If there is a discount, show the sale price AND original price with strikethrough.
+- Do NOT add hashtags, links, or call-to-action text (a "Buy now" button is attached automatically).
+- Do NOT exceed 250 characters per language.
+
+Product name (EN): {name_en}
+Product name (AM): {name_am}
+Original price: {price} ETB
+Description: {desc}
+{discount_info}
+
+Respond ONLY with valid JSON: {"en": "...", "am": "..."}`;
 
 export async function geminiGenerateTelegramPost(
   env: aiEnv,
   product: { nameEn: string; nameAm: string; descriptionEn: string; priceHalala: number },
+  discount?: { percent: number; salePriceHalala: number } | null,
 ): Promise<{ en: string; am: string } | null> {
   if (!geminiEnabled(env)) return null;
   const price = (product.priceHalala / 100).toFixed(2);
+
+  let discountLine = "";
+  let discountInfo = "";
+  if (discount && discount.percent > 0) {
+    const salePrice = (discount.salePriceHalala / 100).toFixed(2);
+    discountLine = `LINE 10: 🔥 ${discount.percent}% OFF — now ${salePrice} ETB (was ~~${price} ETB~~)`;
+    discountInfo = `Discount: ${discount.percent}% off — sale price: ${salePrice} ETB`;
+  }
+
   const prompt = TELEGRAM_POST_PROMPT
-    .replace("{name}", product.nameEn)
+    .replace("{name_en}", product.nameEn)
+    .replace("{name_am}", product.nameAm)
     .replace("{price}", price)
-    .replace("{desc}", product.descriptionEn || "No description");
+    .replace("{desc}", product.descriptionEn || "Premium beauty product")
+    .replace("{discount_line}", discountLine)
+    .replace("{discount_info}", discountInfo);
 
   const model = geminiModel(env);
   const text = await geminiGenerate(
