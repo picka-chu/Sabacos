@@ -28,7 +28,7 @@ function Shell() {
   const setProfile = useShopStore((s) => s.setProfile);
   const setProfileStatus = useShopStore((s) => s.setProfileStatus);
   const refreshCart = useShopStore((s) => s.refreshCart);
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const { t, setLang } = useI18n();
   const [inTelegram, setInTelegram] = useState(isTelegramSession);
 
@@ -74,6 +74,15 @@ function Shell() {
         setWaitlistActive(false);
       });
   }, [setProfile, setProfileStatus, refreshCart]);
+
+  useEffect(() => {
+    const webApp = getTelegramWebApp();
+    const startParam = webApp?.startParam;
+    if (startParam && startParam.startsWith("product_")) {
+      const productId = startParam.replace("product_", "");
+      navigate(`/product/${productId}`);
+    }
+  }, [navigate]);
 
   useEffect(() => {
     const bb = getTelegramWebApp()?.BackButton;

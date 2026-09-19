@@ -1010,13 +1010,12 @@ export async function postProductToChannel(
     .filter(Boolean)
     .join("\n");
 
-  let webAppUrl: string;
+  let deepLink: string;
   try {
-    webAppUrl = `${env.WEBAPP_URL.replace(/\/$/, "")}/product/${product.id}`;
-    // Telegram requires a secure, real https URL for web_app buttons.
-    if (!/^https:\/\//i.test(webAppUrl)) throw new Error("WEBAPP_URL must be https");
+    const username = env.BOT_USERNAME || "sabacosbot";
+    deepLink = `https://t.me/${username}?startapp=${product.id}`;
   } catch (err) {
-    console.error("postProductToChannel skipped (no valid WEBAPP_URL):", err);
+    console.error("postProductToChannel skipped (no BOT_USERNAME):", err);
     return;
   }
 
@@ -1024,7 +1023,7 @@ export async function postProductToChannel(
 
   try {
     const photo = product.imageUrls[0];
-    const btn = new InlineKeyboard().url("🛍  Buy now", webAppUrl);
+    const btn = new InlineKeyboard().url("🛍  Buy now", deepLink);
     if (photo) {
       await bot.api.sendPhoto(channelId, photo, {
         caption,

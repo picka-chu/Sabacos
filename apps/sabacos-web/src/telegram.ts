@@ -12,6 +12,7 @@ export interface TelegramWebApp {
     auth_date?: number;
     query_id?: string;
   };
+  startParam?: string;
   colorScheme: "light" | "dark";
   themeParams: {
     bg_color?: string;
