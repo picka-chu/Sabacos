@@ -112,8 +112,8 @@ app.use("*", async (c, next) => {
   }
 });
 
-// Global rate limit: 120 req/min per IP
-app.use("*", rateLimit(db, { windowMs: 60_000, limit: 120, keyGenerator: ipKey }));
+// Global rate limit: 240 req/min per IP
+app.use("*", rateLimit(db, { windowMs: 60_000, limit: 240, keyGenerator: ipKey }));
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -191,7 +191,7 @@ app.get("/api/v1/bank-accounts", async (c) => {
 // ---------------------------------------------------------------------------
 app.get("/api/v1/admin/me", adminMeHandler);
 
-app.use("/api/v1/admin/*", rateLimit(db, { windowMs: 60_000, limit: 20, keyGenerator: ipKey }), requireAdmin);
+app.use("/api/v1/admin/*", rateLimit(db, { windowMs: 60_000, limit: 60, keyGenerator: ipKey }), requireAdmin);
 app.route("/api/v1/admin", adminRoutes);
 app.route("/api/v1/admin/waitlist", waitlistAdminRoutes);
 app.route("/api/v1/admin/discounts", discountAdminRoutes);
@@ -200,9 +200,9 @@ app.route("/api/v1/admin/users", userManagementRoutes);
 app.route("/api/v1/admin/referrals", adminReferralRoutes);
 
 // ---------------------------------------------------------------------------
-// Authenticated user routes — tighter rate limit: 30 req/min
+// Authenticated user routes — generous limit for normal app usage
 // ---------------------------------------------------------------------------
-app.use("/api/v1/checkout", rateLimit(db, { windowMs: 60_000, limit: 10, keyGenerator: ipKey }), requireUser);
+app.use("/api/v1/checkout", rateLimit(db, { windowMs: 60_000, limit: 20, keyGenerator: ipKey }), requireUser);
 app.route("/api/v1", adRoutes);
 app.route("/api/v1/cart", cartRoutes);
 app.route("/api/v1", orderRoutes);
