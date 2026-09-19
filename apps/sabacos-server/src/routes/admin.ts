@@ -775,6 +775,7 @@ adminRoutes.put("/settings", async (c) => {
     shopNameAm: input.shop_name_am,
     shopPhone: input.shop_phone,
     adminChannelId: input.admin_channel_id,
+    postChannelId: input.post_channel_id,
     aiVisionModel: input.ai_vision_model ?? undefined,
     deliveryConfig: (input.delivery_config as DeliveryConfig | undefined) ?? undefined,
     permissions: (input.permissions as Record<string, string[]> | undefined) ?? undefined,
@@ -785,8 +786,10 @@ adminRoutes.put("/settings", async (c) => {
 // Verify the configured channel before trusting product posts.
 adminRoutes.post("/settings/test-channel", async (c) => {
   const env = getAppEnv();
+  const body = await c.req.json().catch(() => ({}));
+  const type = body.type === "post" ? "post" : "admin";
   try {
-    const result = await testAdminChannel(env);
+    const result = await testAdminChannel(env, type);
     return c.json({ ok: true, channelId: result.channelId });
   } catch (err) {
     throw badRequest(err instanceof Error ? err.message : "Channel test failed");

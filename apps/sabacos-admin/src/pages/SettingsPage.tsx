@@ -25,6 +25,7 @@ export function SettingsPage() {
     shopNameAm: "",
     shopPhone: "",
     adminChannelId: "",
+    postChannelId: "",
     aiVisionModel: "",
   });
   const [deliveryConfigJson, setDeliveryConfigJson] = useState("");
@@ -46,6 +47,7 @@ export function SettingsPage() {
           shopNameAm: s.shopNameAm,
           shopPhone: s.shopPhone,
           adminChannelId: s.adminChannelId ?? "",
+          postChannelId: s.postChannelId ?? "",
           aiVisionModel: s.aiVisionModel ?? "",
         });
         setDeliveryConfigJson(JSON.stringify(s.deliveryConfig ?? null, null, 2));
@@ -72,6 +74,7 @@ export function SettingsPage() {
         shop_name_am: form.shopNameAm.trim(),
         shop_phone: form.shopPhone.trim(),
         admin_channel_id: form.adminChannelId.trim() || null,
+        post_channel_id: form.postChannelId.trim() || null,
         ai_vision_model: form.aiVisionModel.trim() || null,
         ...(deliveryConfig !== undefined ? { delivery_config: deliveryConfig } : {}),
       }, token ?? undefined);
@@ -147,30 +150,56 @@ export function SettingsPage() {
             <label>Shop phone</label>
             <input className="input" value={form.shopPhone} onChange={(e) => set("shopPhone", e.target.value)} placeholder="+251 9xx xxx xxx" />
           </div>
-          <div className="field">
-            <label>Admin channel ID</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input className="input" value={form.adminChannelId} onChange={(e) => setForm((f) => ({ ...f, adminChannelId: e.target.value }))}
-                placeholder="Channel username or numeric id" />
-              <button type="button" className="btn btn-secondary" disabled={busy || !form.adminChannelId.trim()}
-                title="Send a test message to this channel"
-                onClick={async () => {
-                  setBusy(true); setError(null); setSaved(false);
-                  try {
-                    await api.post<{ ok: boolean; channelId: string }>("/admin/settings/test-channel", undefined, token ?? undefined);
-                    setSaved(true); toast("success", "Test message sent");
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : "Channel test failed");
-                    toast("error", err instanceof Error ? err.message : "Channel test failed");
-                  } finally { setBusy(false); }
-                }}>
-                <Send size={14} /> Test
-              </button>
-            </div>
-            <small className="muted" style={{ display: "block", marginTop: 6 }}>
-              Use the channel's @-less username (mychannel) or numeric id (-100…). The bot must be an admin of the channel.
-            </small>
+        </div>
+
+        <h3 style={{ margin: "24px 0 14px", fontSize: 15 }}>Channels</h3>
+        <div className="field">
+          <label>Order notifications channel</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input className="input" value={form.adminChannelId} onChange={(e) => setForm((f) => ({ ...f, adminChannelId: e.target.value }))}
+              placeholder="Channel username or numeric id" />
+            <button type="button" className="btn btn-secondary" disabled={busy || !form.adminChannelId.trim()}
+              title="Send a test message to this channel"
+              onClick={async () => {
+                setBusy(true); setError(null); setSaved(false);
+                try {
+                  await api.post<{ ok: boolean; channelId: string }>("/admin/settings/test-channel", { type: "admin" }, token ?? undefined);
+                  setSaved(true); toast("success", "Test message sent");
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Channel test failed");
+                  toast("error", err instanceof Error ? err.message : "Channel test failed");
+                } finally { setBusy(false); }
+              }}>
+              <Send size={14} /> Test
+            </button>
           </div>
+          <small className="muted" style={{ display: "block", marginTop: 6 }}>
+            Receives new order alerts with approve/reject buttons. Use @-less username (mychannel) or numeric id (-100…).
+          </small>
+        </div>
+        <div className="field" style={{ marginTop: 14 }}>
+          <label>Product posts channel</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input className="input" value={form.postChannelId} onChange={(e) => setForm((f) => ({ ...f, postChannelId: e.target.value }))}
+              placeholder="Channel username or numeric id" />
+            <button type="button" className="btn btn-secondary" disabled={busy || !form.postChannelId.trim()}
+              title="Send a test message to this channel"
+              onClick={async () => {
+                setBusy(true); setError(null); setSaved(false);
+                try {
+                  await api.post<{ ok: boolean; channelId: string }>("/admin/settings/test-channel", { type: "post" }, token ?? undefined);
+                  setSaved(true); toast("success", "Test message sent");
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Channel test failed");
+                  toast("error", err instanceof Error ? err.message : "Channel test failed");
+                } finally { setBusy(false); }
+              }}>
+              <Send size={14} /> Test
+            </button>
+          </div>
+          <small className="muted" style={{ display: "block", marginTop: 6 }}>
+            Receives "Post on Channel" product posts with AI-generated copy. Use @-less username or numeric id (-100…).
+          </small>
         </div>
 
         <h3 style={{ margin: "24px 0 14px", fontSize: 15 }}>AI</h3>

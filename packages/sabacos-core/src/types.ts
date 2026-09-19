@@ -114,7 +114,7 @@ export interface CartItem {
 }
 
 export type DeliveryType = "standard" | "express";
-export type PaymentMethod = "telegram" | "wallet" | "cod" | "bank_split";
+export type PaymentMethod = "telegram" | "wallet" | "bank_split";
 
 export const BANK_NAMES = ["cbe", "birr", "telebirr", "awash", "abyssinia"] as const;
 export type BankName = (typeof BANK_NAMES)[number];
@@ -201,6 +201,7 @@ export interface Settings {
   shopNameAm: string;
   shopPhone: string;
   adminChannelId: string | null;
+  postChannelId: string | null;
   aiVisionModel?: string | null;
   deliveryConfig?: DeliveryConfig | null;
   permissions?: Record<string, string[]> | null;

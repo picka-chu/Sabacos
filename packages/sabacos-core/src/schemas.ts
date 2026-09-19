@@ -153,7 +153,7 @@ export const orderRowSchema = z
     telegram_payment_charge_id: z.string().nullable(),
     provider_payment_charge_id: z.string().nullable(),
     payment_status: z.enum(PAYMENT_STATUSES),
-    payment_method: z.enum(["telegram", "wallet", "cod", "bank_split"]).default("telegram"),
+    payment_method: z.enum(["telegram", "wallet", "bank_split"]).default("telegram"),
     deposit_halala: z.number().int().nullable().default(null),
     balance_halala: z.number().int().nullable().default(null),
     bank_account_id: z.string().uuid().nullable().default(null),
@@ -258,6 +258,7 @@ const settingsFieldsSchema = z.object({
   shop_name_am: z.string().min(1),
   shop_phone: z.string(),
   admin_channel_id: z.string().nullable(),
+  post_channel_id: z.string().nullable().optional(),
   ai_vision_model: z.string().max(80).nullable().optional(),
   delivery_config: z.unknown().optional(),
   permissions: z.record(z.string(), z.array(z.string())).nullish(),
@@ -271,6 +272,7 @@ export const settingsRowSchema = settingsFieldsSchema.transform(
     shopNameAm: r.shop_name_am,
     shopPhone: r.shop_phone,
     adminChannelId: r.admin_channel_id,
+    postChannelId: r.post_channel_id ?? null,
     aiVisionModel: r.ai_vision_model ?? null,
     deliveryConfig:
       r.delivery_config != null ? mergeDeliveryConfig(r.delivery_config) : null,
@@ -322,7 +324,7 @@ export const checkoutSchema = z.object({
   /** Optional spinner coupon code to redeem on this order. */
   couponCode: z.string().trim().min(1).max(40).optional(),
   /** Payment method — "wallet" uses the customer's referral wallet balance, "cod" for cash on delivery, "bank_split" for half now half on delivery. */
-  paymentMethod: z.enum(["telegram", "wallet", "cod", "bank_split"]).default("telegram").optional(),
+  paymentMethod: z.enum(["telegram", "wallet", "bank_split"]).default("telegram").optional(),
   /** Bank account ID — required when paymentMethod is "bank_split". */
   bankAccountId: z.string().uuid().optional(),
 });

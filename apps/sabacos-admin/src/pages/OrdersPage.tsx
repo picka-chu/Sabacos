@@ -123,7 +123,7 @@ export function OrdersPage() {
                       </span>
                     </td>
                     <td data-label="Method" style={{ fontSize: 13 }}>
-                      {order.paymentMethod === "cod" ? "COD" : order.paymentMethod === "wallet" ? "Wallet" : "Telegram"}
+                      {order.paymentMethod === "bank_split" ? "Bank Split" : order.paymentMethod === "wallet" ? "Wallet" : "Telegram"}
                     </td>
                     <td data-label="Total" style={{ fontWeight: 600 }}>
                       {formatETB(order.totalHalala)}

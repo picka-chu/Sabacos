@@ -988,7 +988,7 @@ export async function postProductToChannel(
   aiPost?: { en: string; am: string } | null,
 ): Promise<void> {
   const settings = await getSettings(getDb(env)).catch(() => null);
-  const channelId = resolveChannelId(settings?.adminChannelId ?? env.ADMIN_CHANNEL_ID);
+  const channelId = resolveChannelId(settings?.postChannelId ?? env.POST_CHANNEL_ID ?? env.ADMIN_CHANNEL_ID);
   if (!channelId) return;
 
   const price = (product.priceHalala / 100).toFixed(2);
@@ -1050,16 +1050,20 @@ export async function postProductToChannel(
  * bot has access before relying on product posts. Returns the resolved
  * channel id; throws a readable error when the channel is misconfigured.
  */
-export async function testAdminChannel(env: AppEnv): Promise<{ channelId: string; sent: boolean }> {
+export async function testAdminChannel(env: AppEnv, type: "admin" | "post" = "admin"): Promise<{ channelId: string; sent: boolean }> {
   const settings = await getSettings(getDb(env)).catch(() => null);
-  const channelId = resolveChannelId(settings?.adminChannelId ?? env.ADMIN_CHANNEL_ID);
-  if (!channelId) throw new Error("No admin channel id configured (Settings → Admin channel ID)");
+  const channelId = type === "post"
+    ? resolveChannelId(settings?.postChannelId ?? env.POST_CHANNEL_ID)
+    : resolveChannelId(settings?.adminChannelId ?? env.ADMIN_CHANNEL_ID);
+  const label = type === "post" ? "product posts" : "order alerts";
+  if (!channelId) throw new Error(`No ${label} channel configured (Settings → Channels)`);
 
   const bot = new Bot(env.BOT_TOKEN);
   try {
-    await bot.api.sendMessage(channelId, "✅ Sabacos channel test — product posts will appear here.", {
-      parse_mode: "HTML",
-    });
+    const msg = type === "post"
+      ? "✅ Sabacos channel test — product posts will appear here."
+      : "✅ Sabacos channel test — order alerts will appear here.";
+    await bot.api.sendMessage(channelId, msg, { parse_mode: "HTML" });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(

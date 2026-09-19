@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User, X, Zap, Truck, Tag, Wallet, Banknote, Building2, Upload, Check } from "lucide-react";
+import { CheckCircle2, Loader2, AlertCircle, ArrowRight, MapPin, User, X, Zap, Truck, Tag, Wallet, Building2, Upload, Check } from "lucide-react";
 import { DEFAULT_DELIVERY_CONFIG, formatETB, quoteDelivery, computeDeliveryFee, t, BANK_LABELS, type BankName, type BankAccount } from "@sabacos/core";
 import type { DeliveryConfig } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
@@ -43,12 +43,12 @@ export function CheckoutPage() {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderNo, setOrderNo] = useState<string | null>(null);
   const [orderTotal, setOrderTotal] = useState<number>(0);
-  const [orderPaymentMethod, setOrderPaymentMethod] = useState<"telegram" | "wallet" | "cod" | "bank_split">("telegram");
+  const [orderPaymentMethod, setOrderPaymentMethod] = useState<"telegram" | "wallet" | "bank_split">("telegram");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [couponInput, setCouponInput] = useState("");
   const [couponCode, setCouponCode] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"telegram" | "wallet" | "cod" | "bank_split">("cod");
+  const [paymentMethod, setPaymentMethod] = useState<"telegram" | "wallet" | "bank_split">("bank_split");
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(true);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -258,7 +258,7 @@ export function CheckoutPage() {
       setOrderNo(order.orderNo);
       setOrderPaymentMethod(paymentMethod);
 
-      // Wallet and COD payments are finalized server-side — no invoice to open.
+      // Wallet and bank_split payments are finalized server-side — no invoice to open.
       if (!invoiceUrl) {
         await clearCart();
         setOrderTotal(order.totalHalala);
@@ -530,11 +530,9 @@ export function CheckoutPage() {
           <CheckCircle2 size={72} strokeWidth={1.25} color="var(--success)" />
           <h1 className="serif" style={{ fontSize: 28, margin: "18px 0 6px" }}>{t("orderConfirmed")}</h1>
           <p className="muted">
-            {orderPaymentMethod === "cod"
-              ? t("codOrderConfirmedHint")
-              : orderPaymentMethod === "bank_split"
-                ? t("paymentPendingVerificationHint")
-                : t("orderConfirmedHint")}
+            {orderPaymentMethod === "bank_split"
+              ? t("paymentPendingVerificationHint")
+              : t("orderConfirmedHint")}
           </p>
           <div className="card" style={{ padding: 18, marginTop: 24, textAlign: "left" }}>
             <div className="row" style={{ justifyContent: "space-between" }}>
@@ -731,46 +729,33 @@ export function CheckoutPage() {
               </button>
               <button
                 type="button"
-                className={`zone-option${paymentMethod === "wallet" ? " active" : ""}`}
+                className={`zone-option${paymentMethod === "bank_split" ? " active" : ""}`}
                 onClick={() => {
                   haptic();
-                  setPaymentMethod("wallet");
-                }}
-                disabled={walletLoading}
-              >
-                <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
-                  <Wallet size={15} /> {t("payWithWallet")}
-                </span>
-                <span className="muted" style={{ fontSize: 12 }}>
-                  {walletLoading ? "…" : t("walletPayLabel") + ": " + formatETB(walletBalance)}
-                </span>
-              </button>
-              <button
-                type="button"
-                className={`zone-option${paymentMethod === "cod" ? " active" : ""}`}
-                onClick={() => {
-                  haptic();
-                  setPaymentMethod("cod");
+                  setPaymentMethod("bank_split");
                 }}
               >
                 <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
-                  <Banknote size={15} /> {t("payWithCod")}
+                  <Building2 size={15} /> {t("payWithBankHalf")}
                 </span>
-                <span className="muted" style={{ fontSize: 12 }}>{t("payWithCodHint")}</span>
+                <span className="muted" style={{ fontSize: 12 }}>{t("payWithBankHalfHint")}</span>
               </button>
               {bankAccounts.length > 0 && (
                 <button
                   type="button"
-                  className={`zone-option${paymentMethod === "bank_split" ? " active" : ""}`}
+                  className={`zone-option${paymentMethod === "wallet" ? " active" : ""}`}
                   onClick={() => {
                     haptic();
-                    setPaymentMethod("bank_split");
+                    setPaymentMethod("wallet");
                   }}
+                  disabled={walletLoading}
                 >
                   <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
-                    <Building2 size={15} /> {t("payWithBankHalf")}
+                    <Wallet size={15} /> {t("payWithWallet")}
                   </span>
-                  <span className="muted" style={{ fontSize: 12 }}>{t("payWithBankHalfHint")}</span>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    {walletLoading ? "…" : t("walletPayLabel") + ": " + formatETB(walletBalance)}
+                  </span>
                 </button>
               )}
             </div>
@@ -899,14 +884,12 @@ export function CheckoutPage() {
             >
               {paymentMethod === "wallet"
                 ? `${t("payWithWallet")} · ${formatETB(grandTotal)}`
-                : paymentMethod === "cod"
-                  ? `${t("payWithCod")} · ${formatETB(grandTotal)}`
-                  : paymentMethod === "bank_split"
-                    ? `${t("payWithBankHalf")} · ${formatETB(grandTotal)}`
-                    : `${t("payWithTelegram")} · ${formatETB(grandTotal)}`}
+                : paymentMethod === "bank_split"
+                  ? `${t("payWithBankHalf")} · ${formatETB(grandTotal)}`
+                  : `${t("payWithTelegram")} · ${formatETB(grandTotal)}`}
             </button>
             <p className="muted text-center" style={{ margin: 0, fontSize: 12, fontWeight: 500 }}>
-              {paymentMethod === "wallet" ? t("payWithWalletHint") : paymentMethod === "cod" ? t("payWithCodHint") : paymentMethod === "bank_split" ? t("payWithBankHalfHint") : t("payWithTelegramHint")}
+              {paymentMethod === "wallet" ? t("payWithWalletHint") : paymentMethod === "bank_split" ? t("payWithBankHalfHint") : t("payWithTelegramHint")}
             </p>
           </div>
         </>

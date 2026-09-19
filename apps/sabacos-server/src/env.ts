@@ -16,6 +16,7 @@ const baseSchema = z.object({
   // X-Forwarded-For. Leave unset for direct deployments.
   TRUSTED_PROXY_IPS: z.string().trim().optional(),
   ADMIN_CHANNEL_ID: z.string().trim().optional(),
+  POST_CHANNEL_ID: z.string().trim().optional(),
   ADMIN_TELEGRAM_IDS: z.string().trim().optional(),
   BOT_USERNAME: z.string().trim().optional(),
   GEMINI_API_KEY: z.string().trim().optional(),

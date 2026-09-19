@@ -125,7 +125,7 @@ const en = {
   customer: "Customer",
   phoneLabel: "Phone",
   paymentMethod: "Payment method",
-  telegramInvoice: "Telegram Invoice (Chapa)",
+  telegramInvoice: "Chapa (Coming Soon)",
   orderPlacedAt: "Placed on",
   quantityShort: "Qty",
   edit: "Edit",
