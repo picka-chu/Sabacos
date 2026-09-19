@@ -187,7 +187,7 @@ export function OrderDetailPage() {
             <div className="row" style={{ justifyContent: "space-between" }}>
               <span className="muted">Method</span>
               <span style={{ fontSize: 13, fontWeight: 600 }}>
-                {order.paymentMethod === "bank_split" ? "Bank Split (50/50)" : order.paymentMethod === "wallet" ? "Wallet" : "Telegram (Chapa)"}
+                {order.paymentMethod === "cod" ? "Cash on Delivery" : order.paymentMethod === "bank_split" ? "Bank Split (50/50)" : order.paymentMethod === "wallet" ? "Wallet" : "Telegram (Chapa)"}
               </span>
             </div>
             <div className="row" style={{ justifyContent: "space-between", marginTop: 8 }}>

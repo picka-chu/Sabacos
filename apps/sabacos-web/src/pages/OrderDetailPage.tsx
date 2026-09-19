@@ -132,7 +132,7 @@ export function OrderDetailPage() {
         <div className="row" style={{ justifyContent: "space-between" }}>
           <span className="muted">{t("paymentMethod")}</span>
           <span style={{ fontSize: 14 }}>
-            {order.paymentMethod === "bank_split" ? t("payWithBankHalf") : order.paymentMethod === "wallet" ? t("payWithWallet") : t("telegramInvoice")}
+            {order.paymentMethod === "cod" ? t("payWithCod") : order.paymentMethod === "bank_split" ? t("payWithBankHalf") : order.paymentMethod === "wallet" ? t("payWithWallet") : t("telegramInvoice")}
           </span>
         </div>
         <div className="row" style={{ justifyContent: "space-between", marginTop: 8 }}>

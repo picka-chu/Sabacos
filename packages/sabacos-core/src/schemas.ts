@@ -153,7 +153,7 @@ export const orderRowSchema = z
     telegram_payment_charge_id: z.string().nullable(),
     provider_payment_charge_id: z.string().nullable(),
     payment_status: z.enum(PAYMENT_STATUSES),
-    payment_method: z.enum(["telegram", "wallet", "bank_split"]).default("telegram"),
+    payment_method: z.enum(["telegram", "wallet", "cod", "bank_split"]).default("telegram"),
     deposit_halala: z.number().int().nullable().default(null),
     balance_halala: z.number().int().nullable().default(null),
     bank_account_id: z.string().uuid().nullable().default(null),
