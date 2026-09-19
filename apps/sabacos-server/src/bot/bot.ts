@@ -1024,16 +1024,17 @@ export async function postProductToChannel(
 
   try {
     const photo = product.imageUrls[0];
+    const btn = new InlineKeyboard().url("🛍  Buy now", webAppUrl);
     if (photo) {
       await bot.api.sendPhoto(channelId, photo, {
         caption,
         parse_mode: "HTML",
-        reply_markup: new InlineKeyboard().webApp("🛍  Order now", webAppUrl),
+        reply_markup: btn,
       });
     } else {
       await bot.api.sendMessage(channelId, caption, {
         parse_mode: "HTML",
-        reply_markup: new InlineKeyboard().webApp("🛍  Order now", webAppUrl),
+        reply_markup: btn,
       });
     }
   } catch (err) {
