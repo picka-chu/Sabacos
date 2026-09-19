@@ -121,10 +121,12 @@ export async function checkout(
   const discounts = await getActiveDiscounts(db);
   const promo = computePromotionOrderDiscount(cart, discounts, subtotalHalala);
 
-  // Waitlist / referral discount stacks on top of the promoted prices.
+  // Waitlist / referral discount — only applies when there are NO active
+  // promotions, to prevent double-discounting.  If there are active promos,
+  // the customer already gets the better deal from those.
   const waitlistPercent = Math.min(await getTotalDiscountForProfile(db, profileId), 100);
-  const waitlistDiscountHalala = waitlistPercent > 0
-    ? Math.round((promo.effectiveSubtotalHalala * waitlistPercent) / 100)
+  const waitlistDiscountHalala = (promo.totalDiscountHalala === 0 && waitlistPercent > 0)
+    ? Math.round((subtotalHalala * waitlistPercent) / 100)
     : 0;
 
   // Spinner coupon redemption (validated against the promo-discounted subtotal).
