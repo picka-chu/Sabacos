@@ -985,19 +985,25 @@ export async function notifyAdminChannelWithButtons(
 export async function postProductToChannel(
   env: AppEnv,
   product: { id: string; nameEn: string; nameAm: string; descriptionEn: string; descriptionAm: string; priceHalala: number; imageUrls: string[] },
+  aiPost?: { en: string; am: string } | null,
 ): Promise<void> {
   const settings = await getSettings(getDb(env)).catch(() => null);
   const channelId = resolveChannelId(settings?.adminChannelId ?? env.ADMIN_CHANNEL_ID);
   if (!channelId) return;
 
   const price = (product.priceHalala / 100).toFixed(2);
-  // HTML parse mode: escape every dynamic field. Using Markdown here fails
-  // whenever product text contains _, *, [, `, etc., silently dropping the post.
+
+  // Use AI-generated post if provided, otherwise fall back to product descriptions
+  const postEn = aiPost?.en ?? product.descriptionEn;
+  const postAm = aiPost?.am ?? product.descriptionAm;
+
+  // HTML parse mode: escape every dynamic field
   const caption = [
     `<b>${escapeHtml(product.nameEn)}</b>`,
     product.nameAm ? `<i>${escapeHtml(product.nameAm)}</i>` : "",
     "",
-    product.descriptionEn ? escapeHtml(product.descriptionEn).slice(0, 300) : "",
+    postEn ? escapeHtml(postEn).slice(0, 500) : "",
+    postAm ? escapeHtml(postAm).slice(0, 500) : "",
     "",
     `💰 <b>${price} ETB</b>`,
   ]

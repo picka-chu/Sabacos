@@ -622,6 +622,42 @@ adminRoutes.post("/products/:id/images", async (c) => {
   return c.json({ product: productRowSchema.parse(data) });
 });
 
+// ------------------------------------------------------------- post to channel
+
+adminRoutes.post("/products/:id/post-to-channel", async (c) => {
+  const env = getAppEnv();
+  const db = getDb(env);
+  const id = c.req.param("id");
+  const product = await getProductById(db, id, true);
+  if (!product) throw notFound();
+
+  // Generate AI-powered Telegram post copy via Gemini
+  let aiPost: { en: string; am: string } | null = null;
+  try {
+    const { geminiGenerateTelegramPost } = await import("../services/ai.js");
+    aiPost = await geminiGenerateTelegramPost(env, {
+      nameEn: product.nameEn,
+      nameAm: product.nameAm,
+      descriptionEn: product.descriptionEn,
+      priceHalala: product.priceHalala,
+    });
+  } catch (err) {
+    console.error("[post-to-channel] Gemini generation failed, using product descriptions:", err);
+  }
+
+  await postProductToChannel(env, {
+    id: product.id,
+    nameEn: product.nameEn,
+    nameAm: product.nameAm,
+    descriptionEn: product.descriptionEn,
+    descriptionAm: product.descriptionAm,
+    priceHalala: product.priceHalala,
+    imageUrls: product.imageUrls,
+  }, aiPost);
+
+  return c.json({ ok: true, aiGenerated: !!aiPost });
+});
+
 // ------------------------------------------------------------- categories
 
 adminRoutes.get("/categories", async (c) => {

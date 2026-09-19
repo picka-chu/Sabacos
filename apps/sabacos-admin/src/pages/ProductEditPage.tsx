@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Save, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Save, Trash2, Upload, Send } from "lucide-react";
 import type { Category, Product } from "@sabacos/core";
 import { api, uploadAiImage } from "../lib/api.js";
 import { useAuth } from "../auth.js";
@@ -113,6 +113,7 @@ export function ProductEditPage() {
   const removeImage = (url: string) => setImages((imgs) => imgs.filter((u) => u !== url));
 
   const [aiFiles, setAiFiles] = useState<AiFileStatus[]>([]);
+  const [posting, setPosting] = useState(false);
 
   const onFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -187,6 +188,23 @@ export function ProductEditPage() {
     }
   };
 
+  const postToChannel = async () => {
+    if (!id) return;
+    setPosting(true);
+    try {
+      const res = await api.post<{ ok: boolean; aiGenerated: boolean }>(
+        `/admin/products/${id}/post-to-channel`,
+        {},
+        token ?? undefined,
+      );
+      toast("success", res.aiGenerated ? "Posted with AI description!" : "Posted to channel!");
+    } catch (err) {
+      toast("error", err instanceof Error ? err.message : "Failed to post");
+    } finally {
+      setPosting(false);
+    }
+  };
+
   if (loading) {
     return (
       <>
@@ -218,10 +236,21 @@ export function ProductEditPage() {
           {isNew ? "New product" : "Edit product"}
         </h1>
         {!isNew && (
-          <button className="btn btn-danger btn-sm" onClick={del}>
-            <Trash2 size={15} />
-            Delete
-          </button>
+          <>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={postToChannel}
+              disabled={posting}
+              style={{ marginRight: 8 }}
+            >
+              <Send size={15} />
+              {posting ? "Posting…" : "Post on Channel"}
+            </button>
+            <button className="btn btn-danger btn-sm" onClick={del}>
+              <Trash2 size={15} />
+              Delete
+            </button>
+          </>
         )}
       </div>
 

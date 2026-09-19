@@ -471,3 +471,56 @@ export async function llamaVisionProduct(
   console.log("[ai/vision] Final draft:", JSON.stringify(draft).slice(0, 300));
   return draft;
 }
+
+// ---------------------------------------------------------------------------
+// Telegram channel post copy
+// ---------------------------------------------------------------------------
+
+const TELEGRAM_POST_PROMPT = `You are a copywriter for a cosmetics & beauty shop called Sabacos (Ethiopian brand).
+Write a short, catchy Telegram channel post for this product. The post should:
+- Start with the product name
+- Include 1-2 sentences about why it's great (benefits, not features)
+- Include the price
+- Be engaging and use emojis sparingly
+- Keep it under 200 characters total
+
+Product: {name}
+Price: {price} ETB
+Existing description: {desc}
+
+Respond ONLY with JSON:
+{"en": "English post", "am": "Amharic post"}`;
+
+export async function geminiGenerateTelegramPost(
+  env: aiEnv,
+  product: { nameEn: string; nameAm: string; descriptionEn: string; priceHalala: number },
+): Promise<{ en: string; am: string } | null> {
+  if (!geminiEnabled(env)) return null;
+  const price = (product.priceHalala / 100).toFixed(2);
+  const prompt = TELEGRAM_POST_PROMPT
+    .replace("{name}", product.nameEn)
+    .replace("{price}", price)
+    .replace("{desc}", product.descriptionEn || "No description");
+
+  const model = geminiModel(env);
+  const text = await geminiGenerate(
+    env,
+    model,
+    [{ text: prompt }],
+    10_000,
+    300,
+  );
+  if (!text) return null;
+
+  try {
+    const parsed = extractJson(text) as { en?: string; am?: string } | null;
+    if (parsed?.en) {
+      return { en: parsed.en, am: parsed.am ?? product.nameAm };
+    }
+  } catch {
+    // Fall through
+  }
+
+  // Fallback: return the raw text as English post
+  return { en: text.slice(0, 500), am: product.nameAm };
+}
