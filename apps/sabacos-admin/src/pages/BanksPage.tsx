@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Building2, Check, X } from "lucide-react";
 import { BANK_NAMES, BANK_LABELS, type BankName, type BankAccount } from "@sabacos/core";
 import { api } from "../lib/api.js";
+import { useAuth } from "../auth.js";
 import { useToast } from "../components/toast.js";
 
 const BANK_LOGOS: Record<BankName, string> = {
@@ -14,6 +15,7 @@ const BANK_LOGOS: Record<BankName, string> = {
 
 export function BanksPage() {
   const toast = useToast();
+  const token = useAuth((s) => s.token) ?? undefined;
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -24,7 +26,7 @@ export function BanksPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await api.get<{ accounts: BankAccount[] }>("/admin/bank-accounts");
+      const res = await api.get<{ accounts: BankAccount[] }>("/admin/bank-accounts", token);
       setAccounts(res.accounts);
     } catch (err) {
       console.error("Failed to load bank accounts", err);
@@ -43,10 +45,10 @@ export function BanksPage() {
     setSaving(true);
     try {
       if (editingId) {
-        await api.patch(`/admin/bank-accounts/${editingId}`, form);
+        await api.patch(`/admin/bank-accounts/${editingId}`, form, token);
         toast.add("success", "Bank account updated");
       } else {
-        await api.post("/admin/bank-accounts", form);
+        await api.post("/admin/bank-accounts", form, token);
         toast.add("success", "Bank account created");
       }
       setShowForm(false);
@@ -69,7 +71,7 @@ export function BanksPage() {
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this bank account?")) return;
     try {
-      await api.del(`/admin/bank-accounts/${id}`);
+      await api.del(`/admin/bank-accounts/${id}`, token);
       toast.add("success", "Bank account deleted");
       await load();
     } catch (err) {
@@ -79,7 +81,7 @@ export function BanksPage() {
 
   const handleToggleActive = async (account: BankAccount) => {
     try {
-      await api.patch(`/admin/bank-accounts/${account.id}`, { isActive: !account.isActive });
+      await api.patch(`/admin/bank-accounts/${account.id}`, { isActive: !account.isActive }, token);
       toast.add("success", account.isActive ? "Bank account deactivated" : "Bank account activated");
       await load();
     } catch (err) {
