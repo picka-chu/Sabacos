@@ -508,17 +508,6 @@ adminRoutes.post("/products", async (c) => {
 
   const product = productRowSchema.parse(data);
 
-  // Post to the channel in the background (don't block the response).
-  postProductToChannel(env, {
-    id: product.id,
-    nameEn: product.nameEn,
-    nameAm: product.nameAm,
-    descriptionEn: product.descriptionEn,
-    descriptionAm: product.descriptionAm,
-    priceHalala: product.priceHalala,
-    imageUrls: product.imageUrls,
-  }).catch(() => undefined);
-
   return c.json({ product }, 201);
 });
 

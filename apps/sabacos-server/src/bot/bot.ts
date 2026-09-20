@@ -997,20 +997,13 @@ export async function postProductToChannel(
   // Build caption: AI-generated post is the primary content
   let caption: string;
   if (aiPost?.en) {
-    // AI post already includes product name, description, and price
     caption = aiPost.en;
-    // Append Amharic if the AI didn't include it in the English post
-    if (aiPost.am && !caption.includes(escapeHtml(product.nameAm))) {
-      caption += `\n\n${aiPost.am}`;
-    }
   } else {
     // Fallback: build from product data
     const lines = [
       `<b>${escapeHtml(product.nameEn)}</b>`,
-      product.nameAm ? `<i>${escapeHtml(product.nameAm)}</i>` : "",
       "",
       product.descriptionEn ? escapeHtml(product.descriptionEn).slice(0, 300) : "",
-      product.descriptionAm ? escapeHtml(product.descriptionAm).slice(0, 300) : "",
     ];
     caption = lines.filter(Boolean).join("\n");
   }
