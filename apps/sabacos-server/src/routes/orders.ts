@@ -44,6 +44,8 @@ orderRoutes.post("/checkout", async (c) => {
 
   const bot = createBot(env);
   try {
+    // Use the profile's saved phone for Chapa invoices — must match the
+    // phone the user enters in the Telegram payment dialog for security.
     const result = await checkout(
       db,
       profile.id,
@@ -54,6 +56,7 @@ orderRoutes.post("/checkout", async (c) => {
         longitude: input.longitude ?? freshProfile?.lastLongitude ?? null,
       },
       { createInvoiceLink: makeCreateInvoiceLink(env, bot) },
+      freshProfile?.phone ?? profile.phone ?? undefined,
     );
 
     // Wallet and COD payments are finalized server-side and need the admin alert.

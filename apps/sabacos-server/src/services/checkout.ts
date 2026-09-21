@@ -101,6 +101,7 @@ export async function checkout(
   profileId: string,
   input: CheckoutInput,
   deps: CheckoutDeps,
+  profilePhone?: string,
 ): Promise<CheckoutResult> {
   const settings = await getSettings(db);
   const cart = await getCart(db, profileId);
@@ -248,7 +249,7 @@ export async function checkout(
           description: `50% deposit for your order · ${formatETB(depositHalala)}`,
           currency: "ETB",
           prices: halfPrices,
-          phone: input.phone || undefined,
+          phone: profilePhone,
         });
       } catch {
         try {
@@ -305,7 +306,7 @@ export async function checkout(
       description: `${cart.length} item(s) · ${formatETB(totalHalala)}`,
       currency: "ETB",
       prices,
-      phone: input.phone || undefined,
+      phone: profilePhone,
     });
   } catch {
     // If the invoice cannot be created the order is void — nothing was charged.
