@@ -30,6 +30,7 @@ export interface CreateInvoiceLinkParams {
   description: string;
   currency: string;
   prices: InvoicePriceLine[];
+  phone?: string;
 }
 
 export interface CheckoutDeps {
@@ -247,6 +248,7 @@ export async function checkout(
           description: `50% deposit for your order · ${formatETB(depositHalala)}`,
           currency: "ETB",
           prices: halfPrices,
+          phone: input.phone || undefined,
         });
       } catch {
         try {
@@ -303,6 +305,7 @@ export async function checkout(
       description: `${cart.length} item(s) · ${formatETB(totalHalala)}`,
       currency: "ETB",
       prices,
+      phone: input.phone || undefined,
     });
   } catch {
     // If the invoice cannot be created the order is void — nothing was charged.

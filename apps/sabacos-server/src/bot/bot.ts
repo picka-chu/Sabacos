@@ -622,7 +622,11 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     const q = ctx.preCheckoutQuery;
     const db = getDb(env);
     try {
-      const order = await getOrderById(db, q.invoice_payload);
+      const payload = q.invoice_payload;
+      const isSplitChapa = payload.startsWith("split_");
+      const orderId = isSplitChapa ? payload.replace("split_", "") : payload;
+
+      const order = await getOrderById(db, orderId);
       if (!order) {
         await ctx.answerPreCheckoutQuery(false, { error_message: "Order not found." });
         return;
@@ -633,7 +637,10 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
         });
         return;
       }
-      if (q.total_amount !== order.totalHalala || q.currency !== CURRENCY) {
+
+      // For split Chapa: amount is 50% of total; for full payment: full total
+      const expectedAmount = isSplitChapa ? Math.round(order.totalHalala / 2) : order.totalHalala;
+      if (q.total_amount !== expectedAmount || q.currency !== CURRENCY) {
         await ctx.answerPreCheckoutQuery(false, { error_message: "Order details changed. Please retry." });
         return;
       }
@@ -880,7 +887,14 @@ export function makeCreateInvoiceLink(env: AppEnv, bot: Bot) {
     description: string;
     currency: string;
     prices: { label: string; amount: number }[];
+    phone?: string;
   }): Promise<string> => {
+    const extra: Record<string, unknown> = {};
+    if (params.phone) {
+      extra.need_phone_number = true;
+      extra.send_phone_number_to_provider = true;
+      extra.provider_data = JSON.stringify({ phone: params.phone });
+    }
     const link = await bot.api.createInvoiceLink(
       params.title,
       params.description,
@@ -888,6 +902,7 @@ export function makeCreateInvoiceLink(env: AppEnv, bot: Bot) {
       env.CHAPA_PROVIDER_TOKEN,
       params.currency,
       params.prices.map((p) => ({ label: p.label, amount: p.amount })),
+      extra,
     );
     if (!link) throw new Error("createInvoiceLink failed: no link returned");
     return link;
