@@ -11,7 +11,7 @@ import { useShopStore, apiErrorMessage } from "../store.js";
 import { toast } from "../components/Toast.js";
 import { isTelegramSession, haptic, payInvoice, closeToChat } from "../telegram.js";
 
-type Phase = "form" | "pending" | "success" | "failed" | "bank_select" | "receipt_upload";
+type Phase = "form" | "pending" | "success" | "failed" | "split_choose" | "bank_select" | "receipt_upload";
 
 const ZONES = [
   { value: 1, labelKey: "zone1" },
@@ -59,6 +59,7 @@ export function CheckoutPage() {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
+  const [splitPayVia, setSplitPayVia] = useState<"chapa" | "bank">("chapa");
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const submittingRef = useRef(false);
@@ -235,9 +236,9 @@ export function CheckoutPage() {
     submittingRef.current = true;
     setErrorMsg(null);
     try {
-      // For bank_split, go to bank selection phase first
-      if (paymentMethod === "bank_split") {
-        setPhase("bank_select");
+      // For bank_split, go to sub-choice screen first (only from form phase)
+      if (paymentMethod === "bank_split" && phase === "form") {
+        setPhase("split_choose");
         submittingRef.current = false;
         return;
       }
@@ -253,6 +254,8 @@ export function CheckoutPage() {
         deliveryType,
         couponCode: couponCode ?? undefined,
         paymentMethod,
+        splitPayVia: paymentMethod === "bank_split" ? splitPayVia : undefined,
+        bankAccountId: paymentMethod === "bank_split" && splitPayVia === "bank" ? selectedBankId ?? undefined : undefined,
       });
       setOrderId(order.id);
       setOrderNo(order.orderNo);
@@ -333,6 +336,7 @@ export function CheckoutPage() {
         deliveryType,
         couponCode: couponCode ?? undefined,
         paymentMethod: "bank_split",
+        splitPayVia: "bank",
         bankAccountId: selectedBankId,
       });
       setOrderId(order.id);
@@ -377,6 +381,75 @@ export function CheckoutPage() {
       })
       .catch(() => undefined);
   }, []);
+
+  if (phase === "split_choose") {
+    const deposit = Math.round(grandTotal / 2);
+    return (
+      <div className="screen" style={{ paddingTop: "calc(var(--safe-top) + 24px)" }}>
+        <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px" }}>
+          <h1 className="serif" style={{ fontSize: 24, margin: "0 0 8px" }}>{t("payWithBankHalf")}</h1>
+          <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
+            {lang === "am"
+              ? `${formatETB(deposit)} ግማሽ አሁን ይ躍ልጉ፣ ቀሪው ${formatETB(grandTotal - deposit)} ሲደርስ ይከፈላል`
+              : `Pay ${formatETB(deposit)} deposit now, ${formatETB(grandTotal - deposit)} on delivery`}
+          </p>
+
+          <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+            {isTelegramSession() && (
+              <button
+                type="button"
+                className={`zone-option${splitPayVia === "chapa" ? " active" : ""}`}
+                onClick={() => { haptic(); setSplitPayVia("chapa"); }}
+                style={{ textAlign: "left" }}
+              >
+                <span style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                  <Zap size={15} /> {t("payWithTelegram")}
+                </span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {lang === "am"
+                    ? `${formatETB(deposit)} በቴሌግራም ክፍያ ይ躍ልጉ`
+                    : `Pay ${formatETB(deposit)} via Telegram payment`}
+                </span>
+              </button>
+            )}
+            {bankAccounts.length > 0 && (
+              <button
+                type="button"
+                className={`zone-option${splitPayVia === "bank" ? " active" : ""}`}
+                onClick={() => { haptic(); setSplitPayVia("bank"); }}
+                style={{ textAlign: "left" }}
+              >
+                <span style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                  <Building2 size={15} /> Bank Transfer
+                </span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {lang === "am"
+                    ? `${formatETB(deposit)} በባንክ ይ躍ልጉ እና ደብит ይላኩ`
+                    : `Transfer ${formatETB(deposit)} and upload receipt`}
+                </span>
+              </button>
+            )}
+          </div>
+
+          <button
+            className="btn btn-primary btn-block"
+            onClick={() => {
+              if (splitPayVia === "chapa") {
+                handleSubmit();
+              } else {
+                setPhase("bank_select");
+              }
+            }}
+          >
+            {splitPayVia === "chapa" ? `${t("payWithTelegram")} · ${formatETB(deposit)}` : t("continueBtn")} <ArrowRight size={16} />
+          </button>
+          <button className="btn btn-ghost btn-block" style={{ marginTop: 4 }} onClick={() => setPhase("form")}>
+            {t("back")}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (phase === "bank_select") {
     const selectedBank = bankAccounts.find((b) => b.id === selectedBankId);
@@ -530,9 +603,11 @@ export function CheckoutPage() {
           <CheckCircle2 size={72} strokeWidth={1.25} color="var(--success)" />
           <h1 className="serif" style={{ fontSize: 28, margin: "18px 0 6px" }}>{t("orderConfirmed")}</h1>
           <p className="muted">
-            {orderPaymentMethod === "bank_split"
-              ? t("paymentPendingVerificationHint")
-              : t("orderConfirmedHint")}
+            {orderPaymentMethod === "bank_split" && splitPayVia === "chapa"
+              ? t("orderConfirmedHint")
+              : orderPaymentMethod === "bank_split"
+                ? t("paymentPendingVerificationHint")
+                : t("orderConfirmedHint")}
           </p>
           <div className="card" style={{ padding: 18, marginTop: 24, textAlign: "left" }}>
             <div className="row" style={{ justifyContent: "space-between" }}>

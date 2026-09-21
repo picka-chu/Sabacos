@@ -323,10 +323,12 @@ export const checkoutSchema = z.object({
   deliveryType: z.enum(["standard", "express"]).optional(),
   /** Optional spinner coupon code to redeem on this order. */
   couponCode: z.string().trim().min(1).max(40).optional(),
-  /** Payment method — "wallet" uses the customer's referral wallet balance, "cod" for cash on delivery, "bank_split" for half now half on delivery. */
+  /** Payment method — "wallet" uses the customer's referral wallet balance, "bank_split" for half now half on delivery. */
   paymentMethod: z.enum(["telegram", "wallet", "bank_split"]).default("telegram").optional(),
-  /** Bank account ID — required when paymentMethod is "bank_split". */
+  /** Bank account ID — required when paymentMethod is "bank_split" and splitPayVia is "bank". */
   bankAccountId: z.string().uuid().optional(),
+  /** Sub-method for bank_split: "chapa" pays first half via Telegram invoice, "bank" via bank transfer. */
+  splitPayVia: z.enum(["chapa", "bank"]).optional(),
 });
 
 export const createProductSchema = z.object({

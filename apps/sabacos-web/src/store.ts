@@ -25,6 +25,7 @@ interface ShopState {
     deliveryType?: "standard" | "express";
     couponCode?: string;
     paymentMethod?: "telegram" | "wallet" | "bank_split";
+    splitPayVia?: "chapa" | "bank";
     bankAccountId?: string;
   }) => Promise<{
     order: Order;

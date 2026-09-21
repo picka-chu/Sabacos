@@ -47,6 +47,7 @@ export interface CheckoutInput {
   deliveryType?: "standard" | "express";
   couponCode?: string;
   paymentMethod?: PaymentMethod;
+  splitPayVia?: "chapa" | "bank";
   bankAccountId?: string;
 }
 
@@ -230,6 +231,34 @@ export async function checkout(
   }
 
   if (input.paymentMethod === "bank_split") {
+    // Chapa half-pay: create order, then generate Chapa invoice for 50%
+    if (input.splitPayVia === "chapa") {
+      if (coupon?.coupon) await useSpinnerCoupon(db, coupon.coupon.id, order.id);
+      // Don't finalize yet — generate invoice for 50% first
+      const depositHalala = Math.round(totalHalala / 2);
+      const halfPrices: InvoicePriceLine[] = [
+        { label: `${settings.shopNameEn ?? "Sabacos"} — Order ${order.orderNo} (50% deposit)`, amount: depositHalala },
+      ];
+      let invoiceUrl: string;
+      try {
+        invoiceUrl = await deps.createInvoiceLink({
+          payload: `split_${order.id}`,
+          title: `${settings.shopNameEn ?? "Sabacos"} — Order ${order.orderNo} (50% deposit)`,
+          description: `50% deposit for your order · ${formatETB(depositHalala)}`,
+          currency: "ETB",
+          prices: halfPrices,
+        });
+      } catch {
+        try {
+          await db.from("orders").update({ status: "cancelled", payment_status: "failed" }).eq("id", order.id);
+        } catch {}
+        throw new CartValidationError("Failed to create Chapa invoice for deposit", "insufficient_stock");
+      }
+      await clearCart(db, profileId);
+      return { order, invoiceUrl, delivery };
+    }
+
+    // Bank transfer half-pay: finalize with bank account
     const result = await finalizeBankSplitCheckout(db, order, totalHalala, delivery, input.bankAccountId);
     if (coupon?.coupon) await useSpinnerCoupon(db, coupon.coupon.id, order.id);
     await clearCart(db, profileId);
@@ -393,6 +422,41 @@ async function finalizeBankSplitCheckout(
         .eq("id", order.id);
     } catch {}
     throw new CartValidationError(`Bank split finalization failed (${status})`, "insufficient_stock");
+  }
+
+  return { order, invoiceUrl: null, delivery };
+}
+
+/**
+ * Finalizes a bank split order paid via Chapa (first half).
+ * Same as bank transfer flow but marks deposit as approved immediately.
+ */
+async function finalizeBankSplitChapa(
+  db: Db,
+  order: Order,
+  totalHalala: number,
+  delivery: DeliveryBreakdown,
+): Promise<CheckoutResult> {
+  const { data: status, error } = await db.rpc("finalize_bank_split_chapa", {
+    p_order_id: order.id,
+  });
+  if (error) {
+    try {
+      await db
+        .from("orders")
+        .update({ status: "cancelled", payment_status: "failed" })
+        .eq("id", order.id);
+    } catch {}
+    throw new CartValidationError(`Bank split (Chapa) finalization failed: ${error.message}`, "insufficient_stock");
+  }
+  if (status !== "ok") {
+    try {
+      await db
+        .from("orders")
+        .update({ status: "cancelled", payment_status: "failed" })
+        .eq("id", order.id);
+    } catch {}
+    throw new CartValidationError(`Bank split (Chapa) finalization failed (${status})`, "insufficient_stock");
   }
 
   return { order, invoiceUrl: null, delivery };

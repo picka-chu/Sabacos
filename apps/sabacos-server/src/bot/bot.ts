@@ -664,6 +664,46 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     const payment = ctx.message.successful_payment;
     const db = getDb(env);
     try {
+      const payload = payment.invoice_payload;
+      const isSplitChapa = payload.startsWith("split_");
+      const orderId = isSplitChapa ? payload.replace("split_", "") : payload;
+
+      if (isSplitChapa) {
+        // Chapa half-pay: finalize the split deposit
+        const { data: rpcStatus, error: rpcError } = await db.rpc("finalize_bank_split_chapa", {
+          p_order_id: orderId,
+        });
+        if (rpcError) throw new Error(`finalize_bank_split_chapa: ${rpcError.message}`);
+
+        if (rpcStatus === "already_processed") return;
+
+        if (rpcStatus !== "ok") {
+          await db
+            .from("orders")
+            .update({ status: "cancelled", payment_status: "failed" })
+            .eq("id", orderId);
+          await notifyAdminChannel(env, `⚠️ Split payment received but order could not be finalized (${rpcStatus}). Order: ${orderId}`);
+          await ctx.reply(
+            "We received your deposit, but could not complete the order due to a stock issue. Our team will contact you shortly.",
+          ).catch(() => {});
+          return;
+        }
+
+        const order = await getOrderWithItems(db, orderId);
+        if (!order) {
+          await notifyAdminChannel(env, `⚠️ Split payment finalized for missing order ${orderId}`);
+          return;
+        }
+
+        await notifyAdminChannelWithButtons(env, formatAdminOrderAlert(order), order.id);
+        await ctx.reply(
+          `✅ Deposit paid! Your order ${order.orderNo} is confirmed.\n` +
+          `Remaining balance: ${formatETB(order.totalHalala - Math.round(order.totalHalala / 2))} ETB — pay on delivery.`,
+        ).catch(() => {});
+        return;
+      }
+
+      // Standard full payment flow
       const { data: rpcStatus, error: rpcError } = await db.rpc("finalize_order_payment", {
         p_order_id: payment.invoice_payload,
         p_telegram_charge_id: payment.telegram_payment_charge_id,
