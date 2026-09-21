@@ -713,20 +713,21 @@ export function CheckoutPage() {
           <div className="card" style={{ marginBottom: 14, padding: 18 }}>
             <h2 style={{ fontSize: 17, margin: "0 0 12px", fontWeight: 700 }}>{t("paymentMethod")}</h2>
             <div style={{ display: "grid", gap: 6 }}>
-              <button
-                type="button"
-                className="zone-option"
-                disabled
-                style={{ opacity: 0.5, cursor: "not-allowed" }}
-              >
-                <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
-                  <Zap size={15} /> {t("payWithTelegram")}
-                  <span style={{ fontSize: 10, background: "var(--accent-soft)", color: "var(--accent-strong)", padding: "2px 6px", borderRadius: 6, fontWeight: 700 }}>
-                    {t("comingSoon")}
+              {isTelegramSession() && (
+                <button
+                  type="button"
+                  className={`zone-option${paymentMethod === "telegram" ? " active" : ""}`}
+                  onClick={() => {
+                    haptic();
+                    setPaymentMethod("telegram");
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                    <Zap size={15} /> {t("payWithTelegram")}
                   </span>
-                </span>
-                <span className="muted" style={{ fontSize: 12 }}>{t("payWithTelegramHint")}</span>
-              </button>
+                  <span className="muted" style={{ fontSize: 12 }}>{t("payWithTelegramHint")}</span>
+                </button>
+              )}
               <button
                 type="button"
                 className={`zone-option${paymentMethod === "bank_split" ? " active" : ""}`}
