@@ -8,6 +8,7 @@ const {
   createOrderMock,
   getActiveDiscountsMock,
   getTotalDiscountForProfileMock,
+  getReferredDiscountPercentMock,
 } = vi.hoisted(() => ({
   getSettingsMock: vi.fn(),
   getCartMock: vi.fn(),
@@ -15,6 +16,7 @@ const {
   createOrderMock: vi.fn(),
   getActiveDiscountsMock: vi.fn(),
   getTotalDiscountForProfileMock: vi.fn(),
+  getReferredDiscountPercentMock: vi.fn(),
 }));
 
 vi.mock("../src/db/settings.js", () => ({ getSettings: getSettingsMock }));
@@ -25,6 +27,7 @@ vi.mock("../src/db/discounts.js", async (importOriginal) => ({
   getActiveDiscounts: getActiveDiscountsMock,
 }));
 vi.mock("../src/db/waitlist.js", () => ({ getTotalDiscountForProfile: getTotalDiscountForProfileMock }));
+vi.mock("../src/db/referrals.js", () => ({ getReferredDiscountPercent: getReferredDiscountPercentMock }));
 
 const { checkout } = await import("../src/services/checkout.js");
 
@@ -84,6 +87,7 @@ beforeEach(() => {
   getSettingsMock.mockResolvedValue(settings);
   getActiveDiscountsMock.mockResolvedValue([]);
   getTotalDiscountForProfileMock.mockResolvedValue(0);
+  getReferredDiscountPercentMock.mockResolvedValue(0);
   createOrderMock.mockImplementation(async (_db: never, o: { subtotalHalala: number; deliveryFeeHalala: number; totalHalala: number }) => ({
     id: "00000000-0000-0000-0000-000000000009",
     orderNo: "SB-000001",
@@ -250,6 +254,69 @@ describe("checkout", () => {
       checkout(db, "profile-1", input, { createInvoiceLink }),
     ).rejects.toMatchObject({ code: "min_order", message: "Could not create payment link. Please try again." });
     expect(clearCartMock).not.toHaveBeenCalled();
+  });
+
+  it("applies the referred-friend discount automatically with no coupon code", async () => {
+    getCartMock.mockResolvedValue([cartItem({ qty: 2 })]);
+    getReferredDiscountPercentMock.mockResolvedValue(5);
+    createInvoiceLink.mockResolvedValue("https://t.me/invoice/referred");
+
+    await checkout(db, "profile-1", input, { createInvoiceLink });
+
+    // subtotal 100000 → 5% = 5000 referred discount, + 12000 delivery
+    expect(getReferredDiscountPercentMock).toHaveBeenCalledWith(db, "profile-1", 100000);
+    expect(createOrderMock).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        discountHalala: 5000,
+        discountPercent: 5,
+        totalHalala: 107000,
+      }),
+    );
+    expect(createInvoiceLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prices: expect.arrayContaining([
+          { label: "Referral discount (5%)", amount: -5000 },
+        ]),
+      }),
+    );
+  });
+
+  it("prefers the referred discount over the waitlist discount (no stacking)", async () => {
+    getCartMock.mockResolvedValue([cartItem({ qty: 2 })]);
+    getReferredDiscountPercentMock.mockResolvedValue(5);
+    getTotalDiscountForProfileMock.mockResolvedValue(10);
+    createInvoiceLink.mockResolvedValue("https://t.me/invoice/referred-first");
+
+    await checkout(db, "profile-1", input, { createInvoiceLink });
+
+    expect(createOrderMock).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ discountHalala: 5000, discountPercent: 5 }),
+    );
+  });
+
+  it("skips the referred discount when a promotion already applies", async () => {
+    getCartMock.mockResolvedValue([cartItem({ qty: 2 })]);
+    getReferredDiscountPercentMock.mockResolvedValue(5);
+    getActiveDiscountsMock.mockResolvedValue([
+      {
+        id: "d1", name: "Sale", description: "", discountType: "percent",
+        discountValue: 10, scope: "all", categoryId: null, productIds: [],
+        minSubtotalHalala: null, startsAt: null, endsAt: null,
+        isActive: true, createdAt: "", updatedAt: "",
+      },
+    ]);
+    createInvoiceLink.mockResolvedValue("https://t.me/invoice/promo");
+
+    await checkout(db, "profile-1", input, { createInvoiceLink });
+
+    // 10% promo = 10000 off; referred 5% must NOT stack on top.
+    expect(createOrderMock).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ discountHalala: 10000, discountPercent: 0 }),
+    );
+    expect(getReferredDiscountPercentMock).not.toHaveBeenCalled();
   });
 });
 

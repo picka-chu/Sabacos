@@ -27,6 +27,7 @@ const SETTINGS_COLUMN_MAP: Record<string, string> = {
   isActive: "is_active",
   firstPurchasePercent: "first_purchase_percent",
   repeatPurchasePercent: "repeat_purchase_percent",
+  referredDiscountPercent: "referred_discount_percent",
   monthlyCapHalala: "monthly_cap_halala",
   referralsPerSpin: "referrals_per_spin",
   maxSpinsPerWeek: "max_spins_per_week",
@@ -211,4 +212,45 @@ export function isTelegramAccountOldEnough(
 /** Generate a unique referral code for a user. */
 export function makeReferralCode(telegramId: number): string {
   return `ref${telegramId}`;
+}
+
+/**
+ * Discount % the referred friend gets automatically on their first qualifying
+ * order (no coupon code needed). Returns 0 when not eligible.
+ *
+ * Eligibility mirrors the reward side: program active, a still-pending
+ * referral row (i.e. this is the first order), order subtotal at/above the
+ * minimum, and the referrer's Telegram account old enough to pass the
+ * anti-fraud heuristic.
+ */
+export async function getReferredDiscountPercent(
+  db: Db,
+  profileId: string,
+  subtotalHalala: number,
+): Promise<number> {
+  const settings = await getReferralSettings(db).catch(() => null);
+  if (!settings || !settings.isActive) return 0;
+  const pct = settings.referredDiscountPercent ?? 0;
+  if (pct <= 0) return 0;
+
+  const { data: referral, error: refErr } = await db
+    .from("referrals")
+    .select("id, referrer_id")
+    .eq("referred_id", profileId)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (refErr || !referral) return 0;
+
+  if (subtotalHalala < settings.minOrderValueHalala) return 0;
+
+  const { data: referrer } = await db
+    .from("profiles")
+    .select("telegram_id")
+    .eq("id", referral.referrer_id as string)
+    .maybeSingle();
+  const telegramId = (referrer as { telegram_id?: unknown } | null)?.telegram_id;
+  if (typeof telegramId !== "number") return 0;
+  if (!isTelegramAccountOldEnough(telegramId, settings.minAccountAgeDays)) return 0;
+
+  return Math.min(pct, 100);
 }

@@ -50,8 +50,55 @@ export async function getWalletBalance(
   db: Db,
   profileId: string,
 ): Promise<number> {
+  return (await getWalletBalances(db, profileId)).spendable;
+}
+
+/**
+ * Commission that has been credited but is not yet spendable: 'confirmed'
+ * rows still inside the delivery + buffer hold (available_at null/future),
+ * plus every 'pending_review' row (needs a manual check first, which flips
+ * it to 'confirmed' so the release job can pick it up). Falls back to 0 when
+ * the 0022 columns don't exist yet (migration not applied).
+ */
+export async function getLockedCommissionHalala(
+  db: Db,
+  profileId: string,
+): Promise<number> {
+  try {
+    const now = new Date().toISOString();
+    const { data, error } = await db
+      .from("referral_rewards")
+      .select("amount_halala, status, available_at")
+      .eq("referrer_id", profileId)
+      .eq("reward_type", "commission");
+    if (error) return 0;
+    return (data ?? []).reduce((sum, r) => {
+      const row = r as {
+        amount_halala?: number | null;
+        status?: string | null;
+        available_at?: string | null;
+      };
+      const amount = row.amount_halala ?? 0;
+      if (amount <= 0) return sum;
+      if (row.status === "pending_review") return sum + amount;
+      if (!row.available_at || row.available_at > now) return sum + amount;
+      return sum;
+    }, 0);
+  } catch {
+    return 0;
+  }
+}
+
+/** Total vs. locked vs. actually spendable wallet balance. */
+export async function getWalletBalances(
+  db: Db,
+  profileId: string,
+): Promise<{ total: number; locked: number; spendable: number }> {
   const wallet = await getWalletByProfileId(db, profileId);
-  return wallet?.balanceHalala ?? 0;
+  const total = wallet?.balanceHalala ?? 0;
+  if (total <= 0) return { total: 0, locked: 0, spendable: 0 };
+  const locked = Math.min(total, await getLockedCommissionHalala(db, profileId));
+  return { total, locked, spendable: Math.max(0, total - locked) };
 }
 
 /** Credit wallet using the atomic RPC function. */

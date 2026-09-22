@@ -15,6 +15,7 @@ import { getSettings } from "../db/settings.js";
 import { clearCart, getCart } from "../db/cart.js";
 import { createOrder } from "../db/orders.js";
 import { getTotalDiscountForProfile } from "../db/waitlist.js";
+import { getReferredDiscountPercent } from "../db/referrals.js";
 import { computePromotionOrderDiscount, getActiveDiscounts } from "../db/discounts.js";
 import { checkSpinnerCouponForCheckout, useSpinnerCoupon } from "../db/spinner.js";
 import { getWalletBalance } from "../db/wallet.js";
@@ -124,13 +125,31 @@ export async function checkout(
   const discounts = await getActiveDiscounts(db);
   const promo = computePromotionOrderDiscount(cart, discounts, subtotalHalala);
 
-  // Waitlist / referral discount — only applies when there are NO active
-  // promotions, to prevent double-discounting.  If there are active promos,
-  // the customer already gets the better deal from those.
-  const waitlistPercent = Math.min(await getTotalDiscountForProfile(db, profileId), 100);
-  const waitlistDiscountHalala = (promo.totalDiscountHalala === 0 && waitlistPercent > 0)
-    ? Math.round((subtotalHalala * waitlistPercent) / 100)
-    : 0;
+  // Automatic profile-percent discount layer — at most ONE of these applies
+  // per order (never stacked, so no double-discount):
+  //   1. Referred-friend discount (5%): automatic on the referred user's first
+  //      qualifying order. Takes priority because it is tied to this order.
+  //   2. Waitlist percent: only when no referred discount applies.
+  // Both are skipped when admin promotions already discount the order, and
+  // spinner coupons (user-initiated) keep stacking on top of whichever won.
+  let profileDiscountPercent = 0;
+  let profileDiscountHalala = 0;
+  let profileDiscountLabel: string | null = null;
+  if (promo.totalDiscountHalala === 0) {
+    const referredPercent = await getReferredDiscountPercent(db, profileId, subtotalHalala);
+    if (referredPercent > 0) {
+      profileDiscountPercent = referredPercent;
+      profileDiscountHalala = Math.round((subtotalHalala * referredPercent) / 100);
+      profileDiscountLabel = `Referral discount (${referredPercent}%)`;
+    } else {
+      const waitlistPercent = Math.min(await getTotalDiscountForProfile(db, profileId), 100);
+      if (waitlistPercent > 0) {
+        profileDiscountPercent = waitlistPercent;
+        profileDiscountHalala = Math.round((subtotalHalala * waitlistPercent) / 100);
+        profileDiscountLabel = `Waitlist discount (${waitlistPercent}%)`;
+      }
+    }
+  }
 
   // Spinner coupon redemption (validated against the promo-discounted subtotal).
   let coupon: Awaited<ReturnType<typeof checkSpinnerCouponForCheckout>> | null = null;
@@ -159,7 +178,7 @@ export async function checkout(
     }
   }
 
-  const discountHalala = promo.totalDiscountHalala + waitlistDiscountHalala + couponDiscountHalala;
+  const discountHalala = promo.totalDiscountHalala + profileDiscountHalala + couponDiscountHalala;
   const discountedSubtotal = subtotalHalala - discountHalala;
 
   // Zone delivery pricing (GPS coords preferred, manual zone as fallback).
@@ -201,7 +220,7 @@ export async function checkout(
     profileId,
     subtotalHalala,
     discountHalala,
-    discountPercent: waitlistPercent,
+    discountPercent: profileDiscountPercent,
     deliveryFeeHalala: delivery.totalDeliveryFeeHalala,
     totalHalala,
     customerName: input.customerName,
@@ -277,8 +296,8 @@ export async function checkout(
   for (const line of promo.lines) {
     prices.push({ label: line.label, amount: -line.discountHalala });
   }
-  if (waitlistDiscountHalala > 0) {
-    prices.push({ label: `Waitlist discount (${waitlistPercent}%)`, amount: -waitlistDiscountHalala });
+  if (profileDiscountHalala > 0 && profileDiscountLabel) {
+    prices.push({ label: profileDiscountLabel, amount: -profileDiscountHalala });
   }
   if (couponDiscountHalala > 0 && couponLabel) {
     prices.push({ label: couponLabel, amount: -couponDiscountHalala });

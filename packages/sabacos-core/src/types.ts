@@ -260,8 +260,14 @@ export interface Referral {
 export interface ReferralReward {
   id: string;
   referralId: string;
+  /** Denormalized from referrals.referrer_id (per-referrer cap queries). Null on rows predating migration 0022. */
+  referrerId: string | null;
   rewardType: ReferralRewardType;
   amountHalala: number | null;
+  /** 'confirmed' commissions can become spendable; 'pending_review' need a manual check first. */
+  status: "confirmed" | "pending_review";
+  /** When the commission became spendable (delivery + buffer). Null until released. */
+  availableAt: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
 }
@@ -357,6 +363,8 @@ export interface ReferralSettings {
   isActive: boolean;
   firstPurchasePercent: number;
   repeatPurchasePercent: number;
+  /** Discount % automatically applied to the referred friend's first qualifying order. */
+  referredDiscountPercent: number;
   monthlyCapHalala: number;
   referralsPerSpin: number;
   maxSpinsPerWeek: number;

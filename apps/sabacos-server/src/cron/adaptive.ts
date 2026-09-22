@@ -60,6 +60,16 @@ async function runNightlyJob(env: AppEnv): Promise<void> {
     const result = await runNightlyAggregation(db);
     log.info(`Nightly aggregation: ${JSON.stringify(result)}`);
 
+    // Release referral commissions whose referred order was delivered +
+    // the buffer delay (default 4 days).
+    try {
+      const { releaseAvailableCommissions } = await import("../db/referral-rewards.js");
+      const release = await releaseAvailableCommissions(db);
+      log.info(`Commission release: ${JSON.stringify(release)}`);
+    } catch (err) {
+      log.error(`Commission release failed: ${err}`);
+    }
+
     // Also run data retention cleanup once a week (on Sundays)
     if (new Date().getUTCDay() === 0) {
       const { data: cleanupResult } = await db.rpc("cleanup_old_metrics");

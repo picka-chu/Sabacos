@@ -15,6 +15,7 @@ import {
   getOrCreateWallet,
   getWalletTransactions,
   getWalletSummary,
+  getWalletBalances,
 } from "../db/wallet.js";
 import {
   getAvailableSpins,
@@ -51,6 +52,7 @@ referralRoutes.get("/", async (c) => {
   const deepLink = profile.telegramId
     ? referralDeepLink(c.env.BOT_USERNAME || "sabacosbot", profile.telegramId)
     : null;
+  const balances = await getWalletBalances(db, profile.id).catch(() => null);
 
   return c.json({
     code,
@@ -61,6 +63,8 @@ referralRoutes.get("/", async (c) => {
       ? `${qualifiedCount % settings.referralsPerSpin}/${settings.referralsPerSpin} referrals to your next spin`
       : null,
     walletBalance: wallet?.balanceHalala ?? 0,
+    spendableBalance: balances?.spendable ?? wallet?.balanceHalala ?? 0,
+    lockedBalance: balances?.locked ?? 0,
     validCoupons: validCoupons.length,
     settings: settings
       ? {
@@ -96,9 +100,12 @@ referralRoutes.get("/wallet", async (c) => {
   const wallet = await getOrCreateWallet(db, profile.id);
   const summary = await getWalletSummary(db, profile.id);
   const transactions = await getWalletTransactions(db, profile.id, { limit: 20 });
+  const balances = await getWalletBalances(db, profile.id).catch(() => null);
 
   return c.json({
     balance: wallet.balanceHalala,
+    spendable: balances?.spendable ?? wallet.balanceHalala,
+    locked: balances?.locked ?? 0,
     summary,
     transactions,
   });

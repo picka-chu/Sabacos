@@ -11,6 +11,7 @@ interface ReferralStats {
 }
 interface ReferralSettings {
   isActive: boolean; firstPurchasePercent: number; repeatPurchasePercent: number;
+  referredDiscountPercent: number;
   monthlyCapHalala: number; referralsPerSpin: number; maxSpinsPerWeek: number;
   spinExpiryDays: number; couponExpiryDays: number; maxCouponsPerOrder: number;
   minAccountAgeDays: number; minOrderValueHalala: number; rewardBudgetPct: number;
@@ -19,6 +20,12 @@ interface ReferralSettings {
   guardrailCommissionMin: number; guardrailCommissionMax: number;
   guardrailSpinCapMin: number; guardrailSpinCapMax: number;
   guardrailPrizeCostMin: number; guardrailPrizeCostMax: number; guardrailMaxBudgetPct: number;
+}
+interface CommissionRow {
+  id: string; referralId: string; referrerId: string | null;
+  amountHalala: number | null; status: "confirmed" | "pending_review";
+  availableAt: string | null; orderId: string | null; createdAt: string;
+  referrer: { telegramId: number | null; name: string | null } | null;
 }
 interface RollingAverages {
   rollingRevenue7d: number; rollingCogs7d: number; rollingRefunds7d: number;
@@ -48,7 +55,17 @@ export function ReferralsPage() {
   const [walletNote, setWalletNote] = useState("");
   const [walletMsg, setWalletMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [commissions, setCommissions] = useState<CommissionRow[]>([]);
+  const [commissionFilter, setCommissionFilter] = useState<"pending_review" | "confirmed" | "">("pending_review");
+  const [releasing, setReleasing] = useState(false);
   const toast = useToast((s) => s.add);
+
+  const loadCommissions = useCallback((status: "" | "pending_review" | "confirmed") => {
+    const qs = status ? `?status=${status}&limit=50` : "?limit=50";
+    api.get<{ commissions: CommissionRow[] }>(`/admin/referrals/commissions${qs}`, token ?? undefined)
+      .then((res) => setCommissions(res.commissions))
+      .catch(() => {});
+  }, [token]);
 
   const load = useCallback(() => {
     api.get<ReferralStats>("/admin/referrals/stats", token ?? undefined).then(setStats).catch(() => {});
@@ -56,7 +73,8 @@ export function ReferralsPage() {
     api.get<{ rolling: RollingAverages }>("/admin/referrals/metrics/latest", token ?? undefined).then((res) => setRolling(res.rolling)).catch(() => {});
     api.get<{ log: AdjustmentLogEntry[] }>("/admin/referrals/adjust/log?limit=10", token ?? undefined).then((res) => setAdjustLog(res.log)).catch(() => {})
       .finally(() => setLoading(false));
-  }, [token]);
+    loadCommissions(commissionFilter);
+  }, [token, loadCommissions, commissionFilter]);
 
   useEffect(load, [load]);
 
@@ -109,6 +127,24 @@ export function ReferralsPage() {
   };
 
   const formatETB = (halala: number) => `${(halala / 100).toFixed(2)} ETB`;
+  const availabilityLabel = (row: CommissionRow) => {
+    if (row.status === "pending_review") return "Under review";
+    if (!row.availableAt) return "Locked — awaiting delivery + hold";
+    const at = new Date(row.availableAt).getTime();
+    if (Number.isNaN(at)) return "Locked";
+    if (at <= Date.now()) return "Available now";
+    const days = Math.ceil((at - Date.now()) / (24 * 60 * 60 * 1000));
+    return `Available in ${days}d`;
+  };
+  const releaseDue = async () => {
+    setReleasing(true);
+    try {
+      const res = await api.post<{ released: number }>("/admin/referrals/commissions/release", {}, token ?? undefined);
+      toast("success", `Released ${res.released} commission(s)`);
+      loadCommissions(commissionFilter);
+    } catch (err) { setError(apiErrorMessage(err)); }
+    finally { setReleasing(false); }
+  };
   const spendRatioColor = (ratio: number) => {
     if (ratio > 1.5) return "var(--danger)";
     if (ratio > 1.1) return "var(--warning)";
@@ -313,6 +349,71 @@ export function ReferralsPage() {
         </div>
       )}
 
+      {/* Commission review — per-referrer cap flags */}
+      <div className="card" style={{ marginBottom: 24, padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-light)" }}>
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>
+              <AlertTriangle size={16} style={{ marginRight: 6, verticalAlign: "middle" }} />
+              Commissions
+              {commissions.some((r) => r.status === "pending_review") && (
+                <span className="badge badge-danger" style={{ marginLeft: 8 }}>
+                  {commissions.filter((r) => r.status === "pending_review").length} flagged
+                </span>
+              )}
+            </h3>
+            <div className="row" style={{ gap: 8 }}>
+              {(["pending_review", "confirmed", ""] as const).map((f) => (
+                <button
+                  key={f}
+                  className={`btn btn-sm ${commissionFilter === f ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => { setCommissionFilter(f); loadCommissions(f); }}
+                >
+                  {f === "" ? "All" : f === "pending_review" ? "Pending review" : "Confirmed"}
+                </button>
+              ))}
+              <button className="btn btn-outline btn-sm" onClick={releaseDue} disabled={releasing}>
+                {releasing ? "Releasing..." : "Release due"}
+              </button>
+            </div>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Review checklist: shared device/IP, same payment info, clustered order timing. Pending-review
+            rows stay locked until you flip them to confirmed (SQL) and the nightly release picks them up.
+          </div>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table className="table responsive-table" style={{ fontSize: 13 }}>
+            <thead>
+              <tr><th>Referrer</th><th>Amount</th><th>Status</th><th>Availability</th><th>Date</th></tr>
+            </thead>
+            <tbody>
+              {commissions.length === 0 && (
+                <tr><td colSpan={5} className="muted">No commissions in this view.</td></tr>
+              )}
+              {commissions.map((row) => (
+                <tr key={row.id} style={row.status === "pending_review" ? { background: "var(--danger-soft)" } : {}}>
+                  <td data-label="Referrer">
+                    {row.referrer?.name ?? "—"}
+                    {row.referrer?.telegramId != null && (
+                      <span className="muted"> ({row.referrer.telegramId})</span>
+                    )}
+                  </td>
+                  <td data-label="Amount">{formatETB(row.amountHalala ?? 0)}</td>
+                  <td data-label="Status">
+                    <span className={`badge ${row.status === "pending_review" ? "badge-danger" : "badge-success"}`}>
+                      {row.status === "pending_review" ? "pending review" : "confirmed"}
+                    </span>
+                  </td>
+                  <td data-label="Availability">{availabilityLabel(row)}</td>
+                  <td data-label="Date">{new Date(row.createdAt).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Program Settings */}
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -369,6 +470,11 @@ export function ReferralsPage() {
               <label>Repeat Purchase %</label>
               <input className="input" type="number" min="1" max="50" value={settings.repeatPurchasePercent}
                 onChange={(e) => setSettings({ ...settings, repeatPurchasePercent: Number(e.target.value) })} disabled={!editing} />
+            </div>
+            <div className="field">
+              <label>Friend Discount % (first order)</label>
+              <input className="input" type="number" min="0" max="50" value={settings.referredDiscountPercent ?? 5}
+                onChange={(e) => setSettings({ ...settings, referredDiscountPercent: Number(e.target.value) })} disabled={!editing} />
             </div>
             <div className="field">
               <label>Min Account Age (days)</label>

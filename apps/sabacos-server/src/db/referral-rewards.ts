@@ -1,6 +1,5 @@
 import type { Db } from "./client.js";
 import { getReferralById, getReferralSettings, qualifyReferral } from "./referrals.js";
-import { creditWallet } from "./wallet.js";
 import { createSpinnerCoupon, generateCouponCode, useSpin } from "./spinner.js";
 
 /**
@@ -24,6 +23,7 @@ export async function processReferralReward(
 ): Promise<{
   success: boolean;
   commissionHalala?: number;
+  flaggedForReview?: boolean;
   spinsEarned?: number;
   error?: string;
 }> {
@@ -68,47 +68,34 @@ export async function processReferralReward(
   // Mark referral as qualified
   await qualifyReferral(db, referral.id, orderId);
 
-  // Calculate commission (first purchase only)
-  const commissionHalala = Math.floor(
+  // Calculate the raw commission (first purchase only), then credit it
+  // atomically per-referrer via credit_referral_commission(). The function
+  // serializes concurrent credits for one referrer (advisory lock), enforces
+  // the rolling 30-day cap, and soft-flags at 60% of cap — the old code read
+  // a platform-wide total with no referrer filter and no locking, so the cap
+  // was shared across referrers and racable.
+  const rawCommissionHalala = Math.floor(
     (orderTotalHalala * settings.firstPurchasePercent) / 100,
   );
 
-  // Check monthly cap
-  const { data: monthlyData } = await db
-    .from("referral_rewards")
-    .select("amount_halala")
-    .eq("reward_type", "commission")
-    .gte("created_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString());
-
-  const monthlyTotal = (monthlyData ?? []).reduce(
-    (sum, r) => sum + (r.amount_halala ?? 0),
-    0,
+  const { data: creditResult, error: creditError } = await db.rpc(
+    "credit_referral_commission",
+    {
+      p_referral_id: referral.id,
+      p_order_id: orderId,
+      p_raw_commission_halala: rawCommissionHalala,
+    },
   );
-
-  const actualCommission = Math.min(
-    commissionHalala,
-    Math.max(0, settings.monthlyCapHalala - monthlyTotal),
-  );
-
-  // Credit commission to referrer's wallet
-  if (actualCommission > 0) {
-    await creditWallet(
-      db,
-      referral.referrerId,
-      actualCommission,
-      `Commission from referral order`,
-      "commission",
-      referral.id,
-    );
-
-    // Log the reward
-    await db.from("referral_rewards").insert({
-      referral_id: referral.id,
-      reward_type: "commission",
-      amount_halala: actualCommission,
-      metadata: { order_id: orderId },
-    });
+  if (creditError) {
+    throw new Error(`credit_referral_commission: ${creditError.message}`);
   }
+  const credit = (creditResult ?? {}) as {
+    status?: string;
+    credited_halala?: number;
+    flagged?: boolean;
+  };
+  const actualCommission = Number(credit.credited_halala ?? 0);
+  const flaggedForReview = credit.flagged === true;
 
   // Count qualified referrals and grant spins if threshold met
   const { count: qualifiedCount } = await db
@@ -148,8 +135,27 @@ export async function processReferralReward(
   return {
     success: true,
     commissionHalala: actualCommission,
+    flaggedForReview,
     spinsEarned: newSpinsToGrant,
   };
+}
+
+/**
+ * Release commissions whose referred order was delivered + the buffer delay.
+ * Runs daily via the nightly cron job; also triggerable from the admin API.
+ * Only 'confirmed' rows are released — 'pending_review' rows stay locked
+ * until an admin reviews them and flips status to 'confirmed'.
+ */
+export async function releaseAvailableCommissions(
+  db: Db,
+  delayDays = 4,
+): Promise<{ released: number }> {
+  const { data, error } = await db.rpc("release_available_commissions", {
+    p_delay_days: delayDays,
+  });
+  if (error) throw new Error(`release_available_commissions: ${error.message}`);
+  const released = Number((data as { released?: number } | null)?.released ?? 0);
+  return { released };
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   debitWallet,
   getWalletTransactions,
 } from "../db/wallet.js";
+import { referralRewardRowSchema } from "@sabacos/core";
 import { getAllSpinnerPrizes, createSpinnerPrize, updateSpinnerPrize, deleteSpinnerPrize, getPrizeWinCounts } from "../db/spinner.js";
 
 export const adminReferralRoutes = new Hono<{ Bindings: AppEnv }>();
@@ -121,6 +122,74 @@ adminReferralRoutes.get("/stats", async (c) => {
     totalCoupons: totalCoupons ?? 0,
     totalWalletBalance,
   });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// Commissions (per-referrer cap review workflow)
+// ──────────────────────────────────────────────────────────────────────
+
+/** GET /admin/referrals/commissions?status=pending_review|confirmed&limit= — commission reward rows */
+adminReferralRoutes.get("/commissions", async (c) => {
+  const db = getDb(c.env);
+  const status = c.req.query("status");
+  const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? "50")));
+
+  let query = db
+    .from("referral_rewards")
+    .select("*")
+    .eq("reward_type", "commission")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (status === "pending_review" || status === "confirmed") {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    return c.json({ error: { code: "query_failed", message: error.message } }, 500);
+  }
+
+  const rewards = (data ?? []).map((row) => referralRewardRowSchema.parse(row));
+
+  // Attach referrer identity for the review checklist.
+  const referrerIds = [...new Set(rewards.map((r) => r.referrerId).filter(Boolean))] as string[];
+  const referrers = new Map<string, { telegramId: number | null; name: string | null }>();
+  if (referrerIds.length > 0) {
+    const { data: profiles } = await db
+      .from("profiles")
+      .select("id, telegram_id, first_name, username")
+      .in("id", referrerIds);
+    for (const p of (profiles ?? []) as Array<{
+      id: string; telegram_id?: number | null; first_name?: string | null; username?: string | null;
+    }>) {
+      referrers.set(p.id, {
+        telegramId: p.telegram_id ?? null,
+        name: p.first_name ?? p.username ?? null,
+      });
+    }
+  }
+
+  return c.json({
+    commissions: rewards.map((r) => ({
+      ...r,
+      orderId: (r.metadata as Record<string, unknown> | null)?.order_id ?? null,
+      referrer: r.referrerId ? (referrers.get(r.referrerId) ?? null) : null,
+    })),
+  });
+});
+
+/** POST /admin/referrals/commissions/release — release due commissions now (same as the nightly job) */
+adminReferralRoutes.post("/commissions/release", async (c) => {
+  const db = getDb(c.env);
+  const body = await c.req.json().catch(() => null);
+  const delayDays = body?.delayDays === undefined ? 4 : Number(body.delayDays);
+  if (!Number.isInteger(delayDays) || delayDays < 0 || delayDays > 90) {
+    return c.json({ error: { code: "bad_request", message: "delayDays must be an integer 0-90" } }, 400);
+  }
+
+  const { releaseAvailableCommissions } = await import("../db/referral-rewards.js");
+  const result = await releaseAvailableCommissions(db, delayDays);
+  return c.json(result);
 });
 
 // ──────────────────────────────────────────────────────────────────────
