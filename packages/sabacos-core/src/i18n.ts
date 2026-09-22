@@ -277,6 +277,19 @@ const en = {
   spinnerClaimCopied: "Copied ✓",
   spinnerClaimAgain: "Another spin!",
   spinnerCouponCopyFailed: "Couldn't auto-copy — here's your code",
+  chooseLanguageTitle: "Choose your language",
+  chooseLanguageSubtitle: "You can change this anytime in Settings.",
+  termsTitle: "Terms & Policies",
+  termsEffective: "Effective September 15, 2026",
+  termsTranslationNote: "Full Amharic translation coming soon.",
+  termsScrollHint: "Scroll to the bottom to continue",
+  termsCheckbox: "I have read and agree to the Terms & Policies",
+  termsAgree: "Agree & Continue",
+  termsDecline: "Decline",
+  termsDeclinedTitle: "Please accept the Terms",
+  termsDeclinedBody: "Sabacos can't be used without agreeing to the Terms & Policies.",
+  termsReviewAgain: "Review again",
+  termsClose: "Close",
 } as const;
 
 export type I18nKey = keyof typeof en;
@@ -559,6 +572,19 @@ const am: Record<I18nKey, string> = {
   spinnerClaimCopied: "ተቀድቷል ✓",
   spinnerClaimAgain: "ሌላ ማሽከርከር!",
   spinnerCouponCopyFailed: "በራስ-ሰር መቅዳት አልተቻለም — ኮድዎ ይህ ነው",
+  chooseLanguageTitle: "ቋንቋዎን ይምረጡ",
+  chooseLanguageSubtitle: "ይህን በኋላ በቅንብሮች መቀየር ይችላሉ።",
+  termsTitle: "ውሎች እና ፖሊሲዎች",
+  termsEffective: "ከሴፕቴምበር 15, 2026 ጀምሮ ውጤታማ",
+  termsTranslationNote: "ሙሉ የአማርኛ ትርጉም በቅርቡ ይመጣል።",
+  termsScrollHint: "ለመቀጠል እስከ ታች ይሸብልሉ",
+  termsCheckbox: "ውሎቹን እና ፖሊሲዎቹን አንብቤ ተስማምቻለሁ",
+  termsAgree: "ተስማምቻለሁ እና ቀጥል",
+  termsDecline: "አልስማማም",
+  termsDeclinedTitle: "እባክዎ ውሎቹን ይቀበሉ",
+  termsDeclinedBody: "ሳባኮስ ያለ ውሎች እና ፖሊሲዎች ስምምነት መጠቀም አይቻልም።",
+  termsReviewAgain: "እንደገና ይመልከቱ",
+  termsClose: "ዝጋ",
 };
 
 export const DEFAULT_LANGUAGE: Language = "en";

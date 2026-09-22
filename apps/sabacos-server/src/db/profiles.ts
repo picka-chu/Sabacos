@@ -1,4 +1,4 @@
-import { profileRowSchema, type Profile, type ProfileRole } from "@sabacos/core";
+import { profileRowSchema, TERMS_VERSION, type Profile, type ProfileRole } from "@sabacos/core";
 import type { Db } from "./client.js";
 
 export async function getProfileByTelegramId(db: Db, telegramId: number): Promise<Profile | null> {
@@ -100,6 +100,18 @@ export async function setProfileLanguage(
 ): Promise<Profile> {
   const { data, error } = await db.from("profiles").update({ language }).eq("id", id).select("*").single();
   if (error) throw new Error(`setProfileLanguage: ${error.message}`);
+  return profileRowSchema.parse(data);
+}
+
+/** Record Terms & Policies acceptance (current TERMS_VERSION). */
+export async function acceptTerms(db: Db, id: string): Promise<Profile> {
+  const { data, error } = await db
+    .from("profiles")
+    .update({ terms_accepted_at: new Date().toISOString(), terms_version: TERMS_VERSION })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw new Error(`acceptTerms: ${error.message}`);
   return profileRowSchema.parse(data);
 }
 

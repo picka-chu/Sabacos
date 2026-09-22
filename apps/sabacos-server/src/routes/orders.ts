@@ -6,7 +6,7 @@ import { getAppEnv, type AppEnv } from "../env.js";
 import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
 import { getOrdersByProfile, getOrderWithItems, getOrderById } from "../db/orders.js";
-import { saveProfileContact, getProfileById, setProfileLanguage } from "../db/profiles.js";
+import { saveProfileContact, getProfileById, setProfileLanguage, acceptTerms } from "../db/profiles.js";
 import { submitPaymentProof } from "../db/bank-accounts.js";
 import { checkout, CartValidationError } from "../services/checkout.js";
 import { createBot, makeCreateInvoiceLink, notifyAdminChannelWithButtons, sendShareRequest, formatAdminOrderAlert } from "../bot/bot.js";
@@ -25,10 +25,18 @@ const saveProfileSchema = z
     phone: z.string().trim().min(3).max(30).optional(),
     address: z.string().trim().min(5).max(500).optional(),
     language: z.enum(["en", "am"]).optional(),
+    acceptTerms: z.boolean().optional(),
   })
-  .refine((v) => v.phone !== undefined || v.address !== undefined || v.language !== undefined, {
-    message: "phone, address or language required",
-  });
+  .refine(
+    (v) =>
+      v.phone !== undefined ||
+      v.address !== undefined ||
+      v.language !== undefined ||
+      v.acceptTerms !== undefined,
+    {
+      message: "phone, address, language or acceptTerms required",
+    },
+  );
 
 orderRoutes.post("/checkout", async (c) => {
   const env = getAppEnv();
@@ -110,6 +118,9 @@ orderRoutes.patch("/profile", async (c) => {
   }
   if (input.language) {
     updated = await setProfileLanguage(db, profile.id, input.language);
+  }
+  if (input.acceptTerms === true) {
+    updated = await acceptTerms(db, profile.id);
   }
   return c.json({ profile: updated });
 });

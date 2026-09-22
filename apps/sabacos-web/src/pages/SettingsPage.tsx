@@ -1,4 +1,5 @@
-import { Languages, Info } from "lucide-react";
+import { Languages, Info, FileText, ChevronRight } from "lucide-react";
+import { useLocation } from "wouter";
 import { useI18n } from "../i18n.js";
 import { PageTitle } from "../components/PageTitle.js";
 import { haptic } from "../telegram.js";
@@ -6,6 +7,7 @@ import { api } from "../api.js";
 
 export function SettingsPage() {
   const { t, lang, setLang } = useI18n();
+  const [, navigate] = useLocation();
 
   const changeLang = async (code: "en" | "am") => {
     haptic("light");
@@ -47,6 +49,19 @@ export function SettingsPage() {
           <Info size={18} className="muted" />
           <span style={{ fontSize: 14 }}>{t("tagline")}</span>
         </div>
+        <div className="divider" style={{ margin: 0 }} />
+        <button
+          type="button"
+          className="flex"
+          style={{ justifyContent: "space-between", alignItems: "center", background: "none", border: "none", padding: 0, cursor: "pointer", width: "100%" }}
+          onClick={() => navigate("/terms")}
+        >
+          <span className="flex" style={{ gap: 10, alignItems: "center", fontSize: 13 }}>
+            <FileText size={16} className="muted" />
+            {t("termsTitle")}
+          </span>
+          <ChevronRight size={16} className="muted" />
+        </button>
         <div className="divider" style={{ margin: 0 }} />
         <div className="flex" style={{ justifyContent: "space-between" }}>
           <span className="muted" style={{ fontSize: 13 }}>{t("appVersion")}</span>

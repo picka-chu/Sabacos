@@ -61,10 +61,17 @@ export interface Profile {
   lastLongitude: number | null;
   /** Interface language chosen in the bot (or mini app). */
   language: "en" | "am" | null;
+  /** When the user accepted the Terms & Policies (null = not yet asked/accepted). */
+  termsAcceptedAt: string | null;
+  /** Terms version the user accepted (see TERMS_VERSION). */
+  termsVersion: string | null;
   role: ProfileRole;
   createdAt: string;
   updatedAt: string;
 }
+
+/** Current Terms & Policies version. Bump when the legal text changes so users are re-asked. */
+export const TERMS_VERSION = "1.0";
 
 export interface Category {
   id: string;

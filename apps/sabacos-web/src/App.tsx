@@ -23,10 +23,14 @@ import { FaqPage } from "./pages/FaqPage.js";
 import { WaitlistPage } from "./pages/WaitlistPage.js";
 import { SpinnerPage } from "./pages/SpinnerPage.js";
 import { ReferralPage } from "./pages/ReferralPage.js";
+import { TermsPage } from "./pages/TermsPage.js";
+import { OnboardingGate } from "./components/Onboarding.js";
 
 function Shell() {
   const setProfile = useShopStore((s) => s.setProfile);
   const setProfileStatus = useShopStore((s) => s.setProfileStatus);
+  const profile = useShopStore((s) => s.profile);
+  const profileStatus = useShopStore((s) => s.profileStatus);
   const refreshCart = useShopStore((s) => s.refreshCart);
   const [location, navigate] = useLocation();
   const { t, setLang } = useI18n();
@@ -103,11 +107,23 @@ function Shell() {
   }, [location]);
 
   // Waitlist loading skeleton
-  if (waitlistActive === null) {
+  if (waitlistActive === null || profileStatus === "loading") {
     return (
       <div className="screen" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh" }}>
         <div className="skeleton" style={{ width: 48, height: 48, borderRadius: "50%" }} />
       </div>
+    );
+  }
+
+  // First-run gate: language choice → Terms & Policies agreement.
+  // Server-side acceptance (profiles.terms_accepted_at) is the source of
+  // truth, so this survives reinstalls and shows exactly once.
+  if (profileStatus === "ready" && profile && !profile.termsAcceptedAt) {
+    return (
+      <>
+        <OnboardingGate />
+        <ToastHost />
+      </>
     );
   }
 
@@ -158,6 +174,7 @@ function Shell() {
         <Route path="/settings" component={SettingsPage} />
         <Route path="/about" component={AboutPage} />
         <Route path="/faq" component={FaqPage} />
+        <Route path="/terms" component={TermsPage} />
         <Route path="/spinner" component={SpinnerPage} />
         <Route>
           <HomePage />
