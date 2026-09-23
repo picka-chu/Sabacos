@@ -437,6 +437,60 @@ export async function processSpin(
 }
 
 /**
+ * Reverse a single commission reward row: debit the referrer, log the
+ * reversal (drives the withdrawal-eligibility exclusion), and flag any cash
+ * payout that already covered it. Shared by the Track 1 and Track 2 paths.
+ */
+async function reverseRewardRow(
+  db: Db,
+  input: {
+    rewardId: string;
+    referrerId: string;
+    referralId: string | null;
+    amountHalala: number;
+    orderId: string;
+    reason: string;
+  },
+): Promise<{ reversed: boolean; amountHalala?: number }> {
+  const { rewardId, referrerId, referralId, amountHalala, orderId, reason } = input;
+
+  // Idempotency: one reversal per order, whichever path recorded it first.
+  const { data: existing } = await db
+    .from("commission_reversals")
+    .select("id")
+    .eq("order_id", orderId)
+    .limit(1);
+  if ((existing ?? []).length > 0) return { reversed: false };
+
+  // Debit from referrer's wallet
+  const { debitWallet } = await import("./wallet.js");
+  await debitWallet(
+    db,
+    referrerId,
+    amountHalala,
+    `Commission reversed: ${reason}`,
+    "commission_reversal",
+    referralId ?? undefined,
+  );
+
+  // Log the reversal
+  await db.from("commission_reversals").insert({
+    referral_id: referralId,
+    order_id: orderId,
+    amount_halala: amountHalala,
+    reason,
+  });
+
+  // Cash already sent out cannot be clawed back — flag any payout that
+  // included this reward so the admin sees it (audit trail for review).
+  await flagPayoutsForReversedReward(db, rewardId, orderId, reason).catch((err) =>
+    console.error(`Payout flag failed for order ${orderId}:`, err),
+  );
+
+  return { reversed: true, amountHalala };
+}
+
+/**
  * Reverse commission when a referred order is refunded/cancelled.
  * Debits the commission back from the referrer's wallet.
  */
@@ -453,55 +507,58 @@ export async function reverseCommissionOnRefund(
     .eq("status", "qualified")
     .single();
 
-  if (!referralRow) return { reversed: false };
+  if (referralRow) {
+    // Find the Track 1 commission reward for this order
+    const { data: reward } = await db
+      .from("referral_rewards")
+      .select("id, amount_halala, metadata")
+      .eq("referral_id", referralRow.id)
+      .eq("reward_type", "commission")
+      .contains("metadata", { order_id: orderId })
+      .single();
 
-  // Find the commission reward for this order
-  const { data: reward } = await db
+    if (reward && reward.amount_halala) {
+      return reverseRewardRow(db, {
+        rewardId: reward.id as string,
+        referrerId: referralRow.referrer_id as string,
+        referralId: referralRow.id as string,
+        amountHalala: reward.amount_halala as number,
+        orderId,
+        reason,
+      });
+    }
+  }
+
+  // Track 2 fallback: repeat-order commission rows carry no referrals row
+  // (referral_id NULL) — find them by order instead.
+  const { data: orphanRewards } = await db
     .from("referral_rewards")
-    .select("id, amount_halala, metadata")
-    .eq("referral_id", referralRow.id)
+    .select("id, referrer_id, amount_halala")
+    .is("referral_id", null)
     .eq("reward_type", "commission")
-    .contains("metadata", { order_id: orderId })
-    .single();
-
-  if (!reward || !reward.amount_halala) return { reversed: false };
-
-  // Check if already reversed
-  const { data: existing } = await db
-    .from("commission_reversals")
-    .select("id")
-    .eq("referral_id", referralRow.id)
-    .eq("order_id", orderId)
-    .single();
-
-  if (existing) return { reversed: false };
-
-  // Debit from referrer's wallet
-  const { debitWallet } = await import("./wallet.js");
-  await debitWallet(
-    db,
-    referralRow.referrer_id,
-    reward.amount_halala,
-    `Commission reversed: ${reason}`,
-    "commission_reversal",
-    referralRow.id,
-  );
-
-  // Log the reversal
-  await db.from("commission_reversals").insert({
-    referral_id: referralRow.id,
-    order_id: orderId,
-    amount_halala: reward.amount_halala,
-    reason,
-  });
-
-  // Cash already sent out cannot be clawed back — flag any payout that
-  // included this reward so the admin sees it (audit trail for review).
-  await flagPayoutsForReversedReward(db, reward.id as string, orderId, reason).catch((err) =>
-    console.error(`Payout flag failed for order ${orderId}:`, err),
-  );
-
-  return { reversed: true, amountHalala: reward.amount_halala };
+    .contains("metadata", { order_id: orderId });
+  let total = 0;
+  let count = 0;
+  for (const row of ((orphanRewards ?? []) as Array<{
+    id: string;
+    referrer_id: string;
+    amount_halala: number;
+  }>)) {
+    if (!row.amount_halala) continue;
+    const out = await reverseRewardRow(db, {
+      rewardId: row.id,
+      referrerId: row.referrer_id,
+      referralId: null,
+      amountHalala: row.amount_halala,
+      orderId,
+      reason,
+    });
+    if (out.reversed) {
+      count += 1;
+      total += out.amountHalala ?? 0;
+    }
+  }
+  return count > 0 ? { reversed: true, amountHalala: total } : { reversed: false };
 }
 
 // ──────────────────────────────────────────────────────────────────────

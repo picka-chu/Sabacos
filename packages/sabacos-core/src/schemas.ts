@@ -427,7 +427,7 @@ export type ReferralRow = z.infer<typeof referralRowSchema>;
 export const referralRewardRowSchema = z
   .object({
     id: z.uuid(),
-    referral_id: z.uuid(),
+    referral_id: z.uuid().nullable().default(null),
     referrer_id: z.uuid().nullable().default(null),
     reward_type: z.enum(REFERRAL_REWARD_TYPES as unknown as [string, ...string[]]),
     amount_halala: z.number().int().nullable(),
@@ -439,7 +439,7 @@ export const referralRewardRowSchema = z
   .transform(
     (r): ReferralReward => ({
       id: r.id,
-      referralId: r.referral_id,
+      referralId: r.referral_id ?? null,
       referrerId: r.referrer_id ?? null,
       rewardType: r.reward_type as ReferralReward["rewardType"],
       amountHalala: r.amount_halala,

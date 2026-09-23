@@ -270,7 +270,8 @@ export interface Referral {
 
 export interface ReferralReward {
   id: string;
-  referralId: string;
+  /** Null for Track 2 (repeat-order affiliate) rows, which have no referrals row. */
+  referralId: string | null;
   /** Denormalized from referrals.referrer_id (per-referrer cap queries). Null on rows predating migration 0022. */
   referrerId: string | null;
   rewardType: ReferralRewardType;

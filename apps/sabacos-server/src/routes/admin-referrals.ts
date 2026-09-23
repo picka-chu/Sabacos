@@ -221,6 +221,7 @@ adminReferralRoutes.get("/commissions", async (c) => {
         ...r,
         orderId,
         agedAt: agedAt?.available_for_withdrawal_at ?? null,
+        flags: ((r.metadata as Record<string, unknown> | null)?.flags as string) ?? null,
         withdrawal,
         referrer: r.referrerId ? (referrers.get(r.referrerId) ?? null) : null,
       };

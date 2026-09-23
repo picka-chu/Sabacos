@@ -11,7 +11,7 @@ interface ReferralStats {
 }
 interface ReferralSettings {
   isActive: boolean; firstPurchasePercent: number; repeatPurchasePercent: number;
-  referredDiscountPercent: number;
+  referredDiscountPercent: number; affiliatePercent: number;
   monthlyCapHalala: number; referralsPerSpin: number; maxSpinsPerWeek: number;
   spinExpiryDays: number; couponExpiryDays: number; maxCouponsPerOrder: number;
   minAccountAgeDays: number; minOrderValueHalala: number; rewardBudgetPct: number;
@@ -22,11 +22,11 @@ interface ReferralSettings {
   guardrailPrizeCostMin: number; guardrailPrizeCostMax: number; guardrailMaxBudgetPct: number;
 }
 interface CommissionRow {
-  id: string; referralId: string; referrerId: string | null;
+  id: string; referralId: string | null; referrerId: string | null;
   amountHalala: number | null; status: "confirmed" | "pending_review";
   availableAt: string | null; agedAt: string | null;
   withdrawal: "eligible" | "aging" | "review" | "paid" | "reversed";
-  orderId: string | null; createdAt: string;
+  flags: string | null; orderId: string | null; createdAt: string;
   referrer: { telegramId: number | null; name: string | null } | null;
 }
 interface PayoutRow {
@@ -446,6 +446,12 @@ export function ReferralsPage() {
                     <span className={`badge ${row.status === "pending_review" ? "badge-danger" : "badge-success"}`}>
                       {row.status === "pending_review" ? "pending review" : "confirmed"}
                     </span>
+                    {!row.referralId && (
+                      <span className="badge badge-info" style={{ marginLeft: 6 }} title="Repeat-order affiliate commission (no referral row)">affiliate</span>
+                    )}
+                    {row.flags && (
+                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{row.flags}</div>
+                    )}
                   </td>
                   <td data-label="Cash-out">{withdrawalLabel(row)}</td>
                   <td data-label="Date">{new Date(row.createdAt).toLocaleDateString()}</td>
@@ -602,9 +608,14 @@ export function ReferralsPage() {
               </select>
             </div>
             <div className="field">
-              <label>Commission %</label>
+              <label>Commission % (first order)</label>
               <input className="input" type="number" min="1" max="50" value={settings.firstPurchasePercent}
                 onChange={(e) => setSettings({ ...settings, firstPurchasePercent: Number(e.target.value) })} disabled={!editing} />
+            </div>
+            <div className="field">
+              <label>Affiliate % (every order)</label>
+              <input className="input" type="number" min="0" max="50" value={settings.affiliatePercent ?? 10}
+                onChange={(e) => setSettings({ ...settings, affiliatePercent: Number(e.target.value) })} disabled={!editing} />
             </div>
             <div className="field">
               <label>Monthly Cap (ETB)</label>
