@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { Info } from "lucide-react";
 import { api } from "./api.js";
+import { parseSharePayload, stampShareClick, consumeShareClick } from "./shareAttribution.js";
 import { TERMS_VERSION } from "@sabacos/core";
 import { I18nProvider, useI18n, hasUserChosenLang } from "./i18n.js";
 import { applyTelegramTheme, getTelegramWebApp, haptic, isTelegramSession } from "./telegram.js";
@@ -83,11 +84,36 @@ function Shell() {
   useEffect(() => {
     const webApp = getTelegramWebApp();
     const startParam = webApp?.startParam;
-    if (startParam && startParam.startsWith("product_")) {
-      const productId = startParam.replace("product_", "");
-      navigate(`/product/${productId}`);
+    if (!startParam) return;
+    // Attributed product share: `s<telegramId>_<uuid>` — land on the
+    // product and stamp the click (last-click wins) for Track 2.
+    if (!startParam.startsWith("product_")) {
+      const share = parseSharePayload(startParam);
+      if (share) {
+        stampShareClick({
+          sharerTelegramId: share.sharerTelegramId,
+          productId: share.productId,
+          ts: Date.now(),
+        });
+        navigate(`/product/${share.productId}`);
+      }
+      return;
     }
+    const productId = startParam.replace("product_", "");
+    navigate(`/product/${productId}`);
   }, [navigate]);
+
+  // After auth, register an attributed arrival once per click: genuinely new
+  // buyers get their pending referral row (unlocks the automatic 5% friend
+  // discount); existing customers are simply ignored server-side.
+  useEffect(() => {
+    if (!profile) return;
+    const click = consumeShareClick();
+    if (!click) return;
+    api
+      .post("/referral/attribute", { sharerTelegramId: click.sharerTelegramId })
+      .catch(() => undefined);
+  }, [profile]);
 
   useEffect(() => {
     const bb = getTelegramWebApp()?.BackButton;

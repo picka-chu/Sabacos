@@ -176,6 +176,8 @@ export interface Order {
   paymentProofUrl: string | null;
   paymentProofStatus: "none" | "pending" | "approved" | "rejected";
   paymentProofRejectionReason: string | null;
+  /** Referrer profile that drove this order via a product share link (Track 2). Null = unattributed. */
+  attributedToProfileId: string | null;
   createdAt: string;
   updatedAt: string;
 }

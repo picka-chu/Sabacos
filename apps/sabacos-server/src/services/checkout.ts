@@ -51,6 +51,9 @@ export interface CheckoutInput {
   paymentMethod?: PaymentMethod;
   splitPayVia?: "chapa" | "bank";
   bankAccountId?: string;
+  /** Client-suggested share attribution (sharer's Telegram ID + click time); server-validated. */
+  attributedToTelegramId?: number;
+  attributedAt?: string;
 }
 
 export interface CheckoutResult {
@@ -216,6 +219,15 @@ export async function checkout(
   }
   const totalHalala = discountedSubtotal + delivery.totalDeliveryFeeHalala;
 
+  // Track 2 attribution: resolve the client-suggested share click to a
+  // referrer profile id (null when anything is off — attribution never
+  // breaks checkout; fraud rules run at credit time).
+  const { resolveShareAttribution } = await import("../db/referrals.js");
+  const attributedToProfileId = await resolveShareAttribution(db, profileId, {
+    sharerTelegramId: input.attributedToTelegramId,
+    clickedAt: input.attributedAt,
+  }).catch(() => null);
+
   const order = await createOrder(db, {
     profileId,
     subtotalHalala,
@@ -233,6 +245,7 @@ export async function checkout(
     deliveryType: input.deliveryType === "express" ? "express" : "standard",
     fragile,
     paymentMethod: input.paymentMethod ?? "telegram",
+    attributedToProfileId,
     items: cart.map((i) => ({
       productId: i.productId,
       nameEn: i.product.nameEn,

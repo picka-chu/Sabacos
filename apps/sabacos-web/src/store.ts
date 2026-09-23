@@ -27,6 +27,9 @@ interface ShopState {
     paymentMethod?: "telegram" | "wallet" | "bank_split";
     splitPayVia?: "chapa" | "bank";
     bankAccountId?: string;
+    /** Track 2 attribution: sharer's Telegram ID + click time from the share stamp. */
+    attributedToTelegramId?: number;
+    attributedAt?: string;
   }) => Promise<{
     order: Order;
     invoiceUrl: string | null;

@@ -9,6 +9,7 @@ const {
   getActiveDiscountsMock,
   getTotalDiscountForProfileMock,
   getReferredDiscountPercentMock,
+  resolveShareAttributionMock,
 } = vi.hoisted(() => ({
   getSettingsMock: vi.fn(),
   getCartMock: vi.fn(),
@@ -17,6 +18,7 @@ const {
   getActiveDiscountsMock: vi.fn(),
   getTotalDiscountForProfileMock: vi.fn(),
   getReferredDiscountPercentMock: vi.fn(),
+  resolveShareAttributionMock: vi.fn(),
 }));
 
 vi.mock("../src/db/settings.js", () => ({ getSettings: getSettingsMock }));
@@ -27,7 +29,10 @@ vi.mock("../src/db/discounts.js", async (importOriginal) => ({
   getActiveDiscounts: getActiveDiscountsMock,
 }));
 vi.mock("../src/db/waitlist.js", () => ({ getTotalDiscountForProfile: getTotalDiscountForProfileMock }));
-vi.mock("../src/db/referrals.js", () => ({ getReferredDiscountPercent: getReferredDiscountPercentMock }));
+vi.mock("../src/db/referrals.js", () => ({
+  getReferredDiscountPercent: getReferredDiscountPercentMock,
+  resolveShareAttribution: resolveShareAttributionMock,
+}));
 
 const { checkout } = await import("../src/services/checkout.js");
 
@@ -88,6 +93,7 @@ beforeEach(() => {
   getActiveDiscountsMock.mockResolvedValue([]);
   getTotalDiscountForProfileMock.mockResolvedValue(0);
   getReferredDiscountPercentMock.mockResolvedValue(0);
+  resolveShareAttributionMock.mockResolvedValue(null);
   createOrderMock.mockImplementation(async (_db: never, o: { subtotalHalala: number; deliveryFeeHalala: number; totalHalala: number }) => ({
     id: "00000000-0000-0000-0000-000000000009",
     orderNo: "SB-000001",
@@ -254,6 +260,29 @@ describe("checkout", () => {
       checkout(db, "profile-1", input, { createInvoiceLink }),
     ).rejects.toMatchObject({ code: "min_order", message: "Could not create payment link. Please try again." });
     expect(clearCartMock).not.toHaveBeenCalled();
+  });
+
+  it("stamps validated share attribution onto the order", async () => {
+    getCartMock.mockResolvedValue([cartItem({ qty: 2 })]);
+    resolveShareAttributionMock.mockResolvedValue("sharer-profile-id");
+    createInvoiceLink.mockResolvedValue("https://t.me/invoice/attributed");
+
+    await checkout(
+      db,
+      "profile-1",
+      { ...input, attributedToTelegramId: 8260464827, attributedAt: new Date().toISOString() },
+      { createInvoiceLink },
+    );
+
+    expect(resolveShareAttributionMock).toHaveBeenCalledWith(
+      db,
+      "profile-1",
+      { sharerTelegramId: 8260464827, clickedAt: expect.any(String) },
+    );
+    expect(createOrderMock).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ attributedToProfileId: "sharer-profile-id" }),
+    );
   });
 
   it("applies the referred-friend discount automatically with no coupon code", async () => {

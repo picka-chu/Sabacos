@@ -27,6 +27,8 @@ export interface CreateOrderInput {
   deliveryType?: "standard" | "express";
   fragile?: boolean;
   paymentMethod?: PaymentMethod;
+  /** Resolved + validated share attribution (referrer profile id) or null. */
+  attributedToProfileId?: string | null;
   items: Array<{
     productId: string;
     nameEn: string;
@@ -57,6 +59,7 @@ export async function createOrder(db: Db, input: CreateOrderInput): Promise<Orde
       delivery_type: input.deliveryType ?? "standard",
       fragile: input.fragile ?? false,
       payment_method: input.paymentMethod ?? "telegram",
+      attributed_to_profile_id: input.attributedToProfileId ?? null,
       items: input.items.map((item) => ({
         product_id: item.productId,
         name_en: item.nameEn,
@@ -102,6 +105,7 @@ const ORDER_COLUMNS = [
   "payment_proof_url",
   "payment_proof_status",
   "payment_proof_rejection_reason",
+  "attributed_to_profile_id",
   "created_at",
   "updated_at",
 ].join(", ");

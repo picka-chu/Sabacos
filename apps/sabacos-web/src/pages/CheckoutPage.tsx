@@ -10,6 +10,7 @@ import { FormField } from "../components/FormField.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
 import { toast } from "../components/Toast.js";
 import { isTelegramSession, haptic, payInvoice, closeToChat } from "../telegram.js";
+import { readShareClick } from "../shareAttribution.js";
 
 type Phase = "form" | "pending" | "success" | "failed" | "split_choose" | "bank_select" | "receipt_upload";
 
@@ -243,6 +244,7 @@ export function CheckoutPage() {
         return;
       }
 
+      const click = readShareClick();
       const { order, invoiceUrl } = await checkout({
         customerName: form.customerName.trim(),
         phone: form.phone.trim(),
@@ -256,6 +258,8 @@ export function CheckoutPage() {
         paymentMethod,
         splitPayVia: paymentMethod === "bank_split" ? splitPayVia : undefined,
         bankAccountId: paymentMethod === "bank_split" && splitPayVia === "bank" ? selectedBankId ?? undefined : undefined,
+        attributedToTelegramId: click?.sharerTelegramId,
+        attributedAt: click ? new Date(click.ts).toISOString() : undefined,
       });
       setOrderId(order.id);
       setOrderNo(order.orderNo);
@@ -325,6 +329,7 @@ export function CheckoutPage() {
     submittingRef.current = true;
     setErrorMsg(null);
     try {
+      const click = readShareClick();
       const { order, invoiceUrl } = await checkout({
         customerName: form.customerName.trim(),
         phone: form.phone.trim(),
@@ -338,6 +343,8 @@ export function CheckoutPage() {
         paymentMethod: "bank_split",
         splitPayVia: "bank",
         bankAccountId: selectedBankId,
+        attributedToTelegramId: click?.sharerTelegramId,
+        attributedAt: click ? new Date(click.ts).toISOString() : undefined,
       });
       setOrderId(order.id);
       setOrderNo(order.orderNo);

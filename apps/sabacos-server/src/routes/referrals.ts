@@ -223,6 +223,28 @@ referralRoutes.post("/validate", async (c) => {
   return c.json({ referral: newReferral });
 });
 
+/**
+ * POST /referral/attribute — record arrival via a product share link.
+ * Creates the standard pending referral row for genuinely new buyers only
+ * (which unlocks their automatic first-order friend discount); existing
+ * customers just get their click stamped client-side for Track 2.
+ */
+referralRoutes.post("/attribute", async (c) => {
+  const profile = c.get("profile");
+  if (!profile) return c.json({ error: { code: "unauthorized", message: "Not authenticated" } }, 401);
+
+  const body = await c.req.json().catch(() => null);
+  const sharerTelegramId = body?.sharerTelegramId;
+  if (typeof sharerTelegramId !== "number" || !Number.isInteger(sharerTelegramId) || sharerTelegramId <= 0) {
+    return c.json({ error: { code: "bad_request", message: "sharerTelegramId required" } }, 400);
+  }
+
+  const db = getDb(c.env);
+  const { ensureShareReferral } = await import("../db/referrals.js");
+  const referralId = await ensureShareReferral(db, profile.id, sharerTelegramId);
+  return c.json({ referralId });
+});
+
 // ──────────────────────────────────────────────────────────────────────
 // Cash payout account (weekly Chapa withdrawals)
 // ──────────────────────────────────────────────────────────────────────

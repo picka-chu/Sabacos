@@ -166,6 +166,7 @@ export const orderRowSchema = z
     payment_proof_url: z.string().nullable().default(null),
     payment_proof_status: z.enum(["none", "pending", "approved", "rejected"]).default("none"),
     payment_proof_rejection_reason: z.string().nullable().default(null),
+    attributed_to_profile_id: z.uuid().nullable().default(null),
     created_at: z.string(),
     updated_at: z.string(),
   })
@@ -200,6 +201,7 @@ export const orderRowSchema = z
       paymentProofUrl: r.payment_proof_url ?? null,
       paymentProofStatus: r.payment_proof_status ?? "none",
       paymentProofRejectionReason: r.payment_proof_rejection_reason ?? null,
+      attributedToProfileId: r.attributed_to_profile_id ?? null,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }),
@@ -335,6 +337,10 @@ export const checkoutSchema = z.object({
   bankAccountId: z.string().uuid().optional(),
   /** Sub-method for bank_split: "chapa" pays first half via Telegram invoice, "bank" via bank transfer. */
   splitPayVia: z.enum(["chapa", "bank"]).optional(),
+  /** Product-share attribution (Track 2): sharer's Telegram ID from the packed startapp link. */
+  attributedToTelegramId: z.number().int().positive().optional(),
+  /** Client timestamp (ISO) of the share-link click; server enforces the attribution window. */
+  attributedAt: z.string().optional(),
 });
 
 export const createProductSchema = z.object({

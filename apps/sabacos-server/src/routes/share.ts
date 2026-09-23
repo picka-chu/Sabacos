@@ -5,6 +5,7 @@ import { getAppEnv, type AppEnv } from "../env.js";
 import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
 import { getProductById } from "../db/catalog.js";
+import { packSharePayload } from "../db/referrals.js";
 import { formatETB } from "@sabacos/core";
 
 export const shareRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
@@ -48,7 +49,20 @@ shareRoutes.post("/product/:id", async (c) => {
   if (chatId == null) {
     return c.json({ error: "User has no Telegram ID" }, 400);
   }
-  const keyboard = new InlineKeyboard().webApp("🛍 Buy Now", webAppUrl);
+
+  // Attributed share link: packs the sharer's Telegram ID + product ID into
+  // a startapp payload (~44 chars, inside Telegram's 64-char limit). Anyone
+  // opening it lands on the product AND credits this user for the resulting
+  // sale (Track 2). A `url` button is used because web_app buttons can't
+  // carry startapp payloads. Falls back to the plain product button when the
+  // bot username isn't configured (unattributed share still works).
+  const username = (env.BOT_USERNAME || "").replace(/^@/, "");
+  const keyboard = username
+    ? new InlineKeyboard().url(
+        "🛍 Buy Now",
+        `https://t.me/${username}?startapp=${packSharePayload(chatId, product.id)}`,
+      )
+    : new InlineKeyboard().webApp("🛍 Buy Now", webAppUrl);
 
   try {
     const photo = product.imageUrls[0];
