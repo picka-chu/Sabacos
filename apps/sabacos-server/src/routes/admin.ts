@@ -69,6 +69,7 @@ function toProductRow(body: z.infer<typeof createProductSchema>) {
     is_active: body.isActive ?? true,
     is_featured: body.isFeatured ?? false,
     is_fragile: body.isFragile ?? false,
+    commission_eligible: body.commissionEligible ?? true,
   };
 }
 
@@ -88,6 +89,7 @@ function toProductPatch(body: z.infer<typeof updateProductSchema>): Record<strin
   if (body.isActive !== undefined) patch.is_active = body.isActive;
   if (body.isFeatured !== undefined) patch.is_featured = body.isFeatured;
   if (body.isFragile !== undefined) patch.is_fragile = body.isFragile;
+  if (body.commissionEligible !== undefined) patch.commission_eligible = body.commissionEligible;
   return patch;
 }
 

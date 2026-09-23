@@ -301,6 +301,7 @@ async function createProduct(ctx: Context, env: AppEnv): Promise<void> {
       is_active: true,
       is_featured: false,
       is_fragile: false,
+      commission_eligible: true,
     })
     .select("*")
     .single();

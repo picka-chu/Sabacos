@@ -33,6 +33,7 @@ export function ProductEditPage() {
     isActive: true,
     isFeatured: false,
     isFragile: false,
+    commissionEligible: true,
   });
   const [images, setImages] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -65,6 +66,7 @@ export function ProductEditPage() {
             isActive: p.isActive,
             isFeatured: p.isFeatured,
             isFragile: p.isFragile,
+            commissionEligible: p.commissionEligible ?? true,
           });
           setImages(p.imageUrls);
         })
@@ -92,6 +94,7 @@ export function ProductEditPage() {
       isActive: form.isActive,
       isFeatured: form.isFeatured,
       isFragile: form.isFragile,
+      commissionEligible: form.commissionEligible,
     };
     try {
       if (isNew) {
@@ -334,6 +337,10 @@ export function ProductEditPage() {
                 <label className="row" style={{ gap: 6, cursor: "pointer" }}>
                   <input type="checkbox" checked={form.isFragile} onChange={(e) => set("isFragile", e.target.checked)} />
                   Fragile
+                </label>
+                <label className="row" style={{ gap: 6, cursor: "pointer" }} title="Sales of this product earn referral/affiliate commission">
+                  <input type="checkbox" checked={form.commissionEligible} onChange={(e) => set("commissionEligible", e.target.checked)} />
+                  Commission
                 </label>
               </div>
             </div>

@@ -108,6 +108,7 @@ export const productRowSchema = z
     is_active: z.boolean(),
     is_featured: z.boolean(),
     is_fragile: z.boolean().default(false),
+    commission_eligible: z.boolean().default(true),
     created_at: z.string(),
     updated_at: z.string(),
   })
@@ -128,6 +129,7 @@ export const productRowSchema = z
       isActive: r.is_active,
       isFeatured: r.is_featured,
       isFragile: r.is_fragile ?? false,
+      commissionEligible: r.commission_eligible ?? true,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }),
@@ -350,6 +352,7 @@ export const createProductSchema = z.object({
   isActive: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
   isFragile: z.boolean().optional(),
+  commissionEligible: z.boolean().optional(),
 });
 
 export const updateProductSchema = createProductSchema.partial();

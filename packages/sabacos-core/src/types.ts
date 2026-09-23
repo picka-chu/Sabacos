@@ -105,6 +105,8 @@ export interface Product {
   isActive: boolean;
   isFeatured: boolean;
   isFragile: boolean;
+  /** False excludes this product's sales from earning referral/affiliate commission. */
+  commissionEligible: boolean;
   createdAt: string;
   updatedAt: string;
   /** Set by the catalog/cart routes when an active promotion covers this product. */

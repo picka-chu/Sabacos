@@ -163,6 +163,9 @@ export function ProductsPage() {
                         {product.isFeatured && (
                           <span className="badge badge-info" style={{ marginLeft: 6 }}>Featured</span>
                         )}
+                        {product.commissionEligible === false && (
+                          <span className="badge" style={{ marginLeft: 6 }} title="Sales of this product earn no commission">No commission</span>
+                        )}
                       </td>
                     </tr>
                   );

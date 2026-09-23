@@ -3,6 +3,37 @@ import { getReferralById, getReferralSettings, qualifyReferral } from "./referra
 import { createSpinnerCoupon, generateCouponCode, useSpin } from "./spinner.js";
 
 /**
+ * Commissionable portion of an order: sum of order-item subtotals whose
+ * product is commission-eligible. Evaluated at credit time from the current
+ * product flag (toggled in the admin product form).
+ */
+export async function getCommissionableTotalHalala(db: Db, orderId: string): Promise<number> {
+  const { data: items, error: itemsErr } = await db
+    .from("order_items")
+    .select("product_id, subtotal_halala")
+    .eq("order_id", orderId);
+  if (itemsErr) throw new Error(`getCommissionableTotalHalala: ${itemsErr.message}`);
+  const rows = (items ?? []) as Array<{ product_id: string; subtotal_halala: number }>;
+  if (rows.length === 0) return 0;
+
+  const productIds = [...new Set(rows.map((r) => r.product_id))];
+  const { data: products, error: prodErr } = await db
+    .from("products")
+    .select("id, commission_eligible")
+    .in("id", productIds);
+  if (prodErr) throw new Error(`getCommissionableTotalHalala: ${prodErr.message}`);
+  const ineligible = new Set(
+    ((products ?? []) as Array<{ id: string; commission_eligible: boolean | null }>)
+      .filter((p) => p.commission_eligible === false)
+      .map((p) => p.id),
+  );
+  return rows.reduce(
+    (sum, r) => sum + (ineligible.has(r.product_id) ? 0 : (r.subtotal_halala ?? 0)),
+    0,
+  );
+}
+
+/**
  * Process referral reward after a successful purchase.
  * This is called from the order finalization flow.
  *
@@ -68,6 +99,12 @@ export async function processReferralReward(
   // Mark referral as qualified
   await qualifyReferral(db, referral.id, orderId);
 
+  // Commission base = eligible items only. Products with commission_eligible
+  // = false (thin-margin SKUs, opt-out in the admin product form) earn no
+  // commission. The friend discount and referral qualification are order-level
+  // and unaffected — only the sharer's cut is filtered.
+  const commissionBaseHalala = await getCommissionableTotalHalala(db, orderId);
+
   // Calculate the raw commission (first purchase only), then credit it
   // atomically per-referrer via credit_referral_commission(). The function
   // serializes concurrent credits for one referrer (advisory lock), enforces
@@ -75,7 +112,7 @@ export async function processReferralReward(
   // a platform-wide total with no referrer filter and no locking, so the cap
   // was shared across referrers and racable.
   const rawCommissionHalala = Math.floor(
-    (orderTotalHalala * settings.firstPurchasePercent) / 100,
+    (commissionBaseHalala * settings.firstPurchasePercent) / 100,
   );
 
   const { data: creditResult, error: creditError } = await db.rpc(
