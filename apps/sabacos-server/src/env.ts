@@ -5,6 +5,13 @@ const baseSchema = z.object({
   PORT: z.coerce.number().int().positive().default(8788),
   BOT_TOKEN: z.string().trim().min(1, "BOT_TOKEN is required"),
   CHAPA_PROVIDER_TOKEN: z.string().trim().min(1, "CHAPA_PROVIDER_TOKEN is required (from BotFather)"),
+  // Chapa Transfer API secret (CHASECK-... from Chapa Dashboard → Settings → API).
+  // This is DIFFERENT from CHAPA_PROVIDER_TOKEN (the Telegram Payments provider
+  // token): the provider token can only accept payments, while this secret key
+  // authorizes sending money out via the Transfer API (weekly referral payouts).
+  // Optional so the server boots without payouts configured; payout runs fail
+  // loudly (and notify the admin channel) when it is missing.
+  CHAPA_SECRET_KEY: z.string().trim().optional(),
   SUPABASE_URL: z.string().trim().url("SUPABASE_URL is required"),
   SUPABASE_SERVICE_ROLE_KEY: z.string().trim().min(1, "SUPABASE_SERVICE_ROLE_KEY is required"),
   SUPABASE_ANON_KEY: z.string().trim().min(1, "SUPABASE_ANON_KEY is required (for admin auth validation)"),

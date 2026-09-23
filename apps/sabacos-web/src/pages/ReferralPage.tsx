@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { formatETB } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { PageTitle } from "../components/PageTitle.js";
+import { PayoutAccountCard } from "../components/PayoutAccountCard.js";
 import { api } from "../api.js";
 import { useShopStore } from "../store.js";
 import { toast } from "../components/Toast.js";
@@ -141,7 +142,10 @@ export function ReferralPage() {
       ) : tab === "overview" ? (
         <OverviewTab info={info} copyCode={copyCode} copyLink={copyLink} shareLink={shareLink} navigate={navigate} onWalletTap={() => setTab("wallet")} />
       ) : tab === "wallet" ? (
-        <WalletTab balance={info?.walletBalance ?? 0} transactions={transactions} />
+        <>
+          <WalletTab balance={info?.walletBalance ?? 0} transactions={transactions} />
+          <PayoutAccountCard />
+        </>
       ) : (
         <HistoryTab history={history} />
       )}

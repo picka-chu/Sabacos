@@ -107,8 +107,8 @@ export function CheckoutPage() {
   }, []);
 
   useEffect(() => {
-    api.get<{ walletBalance: number; spendableBalance?: number }>("/referral")
-      .then((res) => setWalletBalance(res.spendableBalance ?? res.walletBalance ?? 0))
+    api.get<{ walletBalance: number }>("/referral")
+      .then((res) => setWalletBalance(res.walletBalance ?? 0))
       .catch(() => undefined)
       .finally(() => setWalletLoading(false));
   }, []);

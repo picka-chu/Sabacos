@@ -169,26 +169,236 @@ adminReferralRoutes.get("/commissions", async (c) => {
     }
   }
 
+  // Per-row cash-out state: aged? reversed? already paid out?
+  const now = new Date().toISOString();
+  const orderIds = [
+    ...new Set(
+      rewards
+        .map((r) => (r.metadata as Record<string, unknown> | null)?.order_id)
+        .filter((v): v is string => typeof v === "string"),
+    ),
+  ];
+  const rewardIds = rewards.map((r) => r.id);
+  const reversedOrderIds = new Set<string>();
+  const paidRewardIds = new Set<string>();
+  if (orderIds.length > 0) {
+    const { data: reversals } = await db
+      .from("commission_reversals")
+      .select("order_id")
+      .in("order_id", orderIds);
+    for (const r of (reversals ?? []) as Array<{ order_id: string }>) {
+      reversedOrderIds.add(r.order_id);
+    }
+  }
+  if (rewardIds.length > 0 && referrerIds.length > 0) {
+    const { data: payouts } = await db
+      .from("referral_payouts")
+      .select("commission_reward_ids")
+      .in("referrer_id", referrerIds)
+      .in("status", ["sent", "processing"]);
+    for (const p of (payouts ?? []) as Array<{ commission_reward_ids: string[] }>) {
+      for (const id of p.commission_reward_ids ?? []) paidRewardIds.add(id);
+    }
+  }
+
   return c.json({
-    commissions: rewards.map((r) => ({
-      ...r,
-      orderId: (r.metadata as Record<string, unknown> | null)?.order_id ?? null,
-      referrer: r.referrerId ? (referrers.get(r.referrerId) ?? null) : null,
+    commissions: rewards.map((r) => {
+      const orderId =
+        ((r.metadata as Record<string, unknown> | null)?.order_id as string) ?? null;
+      const agedAt = (data ?? []).find(
+        (row) => (row as Record<string, unknown>).id === r.id,
+      ) as unknown as { available_for_withdrawal_at?: string | null } | undefined;
+      const aged = !!agedAt?.available_for_withdrawal_at && agedAt.available_for_withdrawal_at <= now;
+      const reversed = !!orderId && reversedOrderIds.has(orderId);
+      const paid = paidRewardIds.has(r.id);
+      const withdrawal =
+        reversed ? "reversed"
+        : paid ? "paid"
+        : r.status === "pending_review" ? "review"
+        : aged ? "eligible"
+        : "aging";
+      return {
+        ...r,
+        orderId,
+        agedAt: agedAt?.available_for_withdrawal_at ?? null,
+        withdrawal,
+        referrer: r.referrerId ? (referrers.get(r.referrerId) ?? null) : null,
+      };
+    }),
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// Payouts (weekly Chapa cash withdrawals)
+// ──────────────────────────────────────────────────────────────────────
+
+/** GET /admin/referrals/payouts?status=&limit= — payout attempts, newest first */
+adminReferralRoutes.get("/payouts", async (c) => {
+  const db = getDb(c.env);
+  const status = c.req.query("status");
+  const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? "50")));
+
+  const { listPayouts } = await import("../db/referral-rewards.js");
+  const payouts = await listPayouts(
+    db,
+    status === "pending" || status === "processing" || status === "sent" || status === "failed"
+      ? { status, limit }
+      : { limit },
+  );
+
+  // Attach referrer identity + payout account snapshot for review.
+  const referrerIds = [...new Set(payouts.map((p) => p.referrerId))];
+  const accountIds = [...new Set(payouts.map((p) => p.payoutAccountId).filter(Boolean))] as string[];
+  const referrers = new Map<string, { telegramId: number | null; name: string | null }>();
+  const accounts = new Map<string, { accountName: string; accountNumber: string; bankName: string }>();
+  if (referrerIds.length > 0) {
+    const { data: profiles } = await db
+      .from("profiles")
+      .select("id, telegram_id, first_name, username")
+      .in("id", referrerIds);
+    for (const p of (profiles ?? []) as Array<{
+      id: string; telegram_id?: number | null; first_name?: string | null; username?: string | null;
+    }>) {
+      referrers.set(p.id, { telegramId: p.telegram_id ?? null, name: p.first_name ?? p.username ?? null });
+    }
+  }
+  if (accountIds.length > 0) {
+    const { data: rows } = await db
+      .from("referrer_payout_accounts")
+      .select("id, account_name, account_number, bank_name")
+      .in("id", accountIds);
+    for (const a of (rows ?? []) as Array<{
+      id: string; account_name: string; account_number: string; bank_name: string;
+    }>) {
+      accounts.set(a.id, {
+        accountName: a.account_name,
+        accountNumber: a.account_number,
+        bankName: a.bank_name,
+      });
+    }
+  }
+
+  return c.json({
+    payouts: payouts.map((p) => ({
+      ...p,
+      referrer: referrers.get(p.referrerId) ?? null,
+      account: p.payoutAccountId ? (accounts.get(p.payoutAccountId) ?? null) : null,
     })),
   });
 });
 
-/** POST /admin/referrals/commissions/release — release due commissions now (same as the nightly job) */
-adminReferralRoutes.post("/commissions/release", async (c) => {
+/** POST /admin/referrals/payouts/:id/retry — re-attempt a failed payout (same reference) */
+adminReferralRoutes.post("/payouts/:id/retry", async (c) => {
   const db = getDb(c.env);
-  const body = await c.req.json().catch(() => null);
-  const delayDays = body?.delayDays === undefined ? 4 : Number(body.delayDays);
-  if (!Number.isInteger(delayDays) || delayDays < 0 || delayDays > 90) {
-    return c.json({ error: { code: "bad_request", message: "delayDays must be an integer 0-90" } }, 400);
+  const id = c.req.param("id");
+  try {
+    const { retryPayout } = await import("../db/referral-rewards.js");
+    const payout = await retryPayout(db, c.env, id);
+    return c.json({ payout });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Retry failed";
+    return c.json({ error: { code: "retry_failed", message } }, 400);
+  }
+});
+
+/**
+ * GET /admin/referrals/payout-eligibility — every referrer with commission:
+ * total wallet vs. eligible-for-withdrawal, payout weekday, account status.
+ * Also flags account_numbers shared across profiles (manual review item).
+ */
+adminReferralRoutes.get("/payout-eligibility", async (c) => {
+  const db = getDb(c.env);
+  const { getEligibleWithdrawalAmount, payoutWeekdayName } = await import("../db/referral-rewards.js");
+
+  const { data: rewardRows } = await db
+    .from("referral_rewards")
+    .select("referrer_id")
+    .eq("reward_type", "commission")
+    .not("referrer_id", "is", null);
+  const referrerIds = [
+    ...new Set(((rewardRows ?? []) as Array<{ referrer_id: string }>).map((r) => r.referrer_id)),
+  ];
+
+  // Account numbers shared across different profiles (possible duplicate/fraud).
+  const { data: accountRows } = await db
+    .from("referrer_payout_accounts")
+    .select("profile_id, account_number");
+  const byNumber = new Map<string, string[]>();
+  for (const a of (accountRows ?? []) as Array<{ profile_id: string; account_number: string }>) {
+    const list = byNumber.get(a.account_number) ?? [];
+    list.push(a.profile_id);
+    byNumber.set(a.account_number, list);
+  }
+  const sharedNumbers = new Set(
+    [...byNumber.entries()].filter(([, ids]) => new Set(ids).size > 1).map(([n]) => n),
+  );
+
+  const entries: Array<{
+    referrerId: string;
+    name: string | null;
+    telegramId: number | null;
+    totalWalletHalala: number;
+    eligibleHalala: number;
+    payoutWeekday: string;
+    hasAccount: boolean;
+    accountVerified: boolean;
+    sharedAccount: boolean;
+  }> = [];
+  for (const referrerId of referrerIds) {
+    const [{ data: profile }, { data: wallet }, { data: account }] = await Promise.all([
+      db.from("profiles").select("first_name, username, telegram_id, created_at").eq("id", referrerId).maybeSingle(),
+      db.from("wallet_credits").select("balance_halala").eq("profile_id", referrerId).maybeSingle(),
+      db.from("referrer_payout_accounts").select("verified, account_number").eq("profile_id", referrerId).maybeSingle(),
+    ]);
+    const p = profile as {
+      first_name?: string | null; username?: string | null; telegram_id?: number | null; created_at?: string;
+    } | null;
+    const eligible = await getEligibleWithdrawalAmount(db, referrerId).catch(() => 0);
+    entries.push({
+      referrerId,
+      name: p?.first_name ?? p?.username ?? null,
+      telegramId: p?.telegram_id ?? null,
+      totalWalletHalala: (wallet as { balance_halala?: number } | null)?.balance_halala ?? 0,
+      eligibleHalala: eligible,
+      payoutWeekday: p?.created_at ? payoutWeekdayName(p.created_at) : "?",
+      hasAccount: !!account,
+      accountVerified: (account as { verified?: boolean } | null)?.verified ?? false,
+      sharedAccount: account
+        ? sharedNumbers.has((account as { account_number: string }).account_number)
+        : false,
+    });
   }
 
-  const { releaseAvailableCommissions } = await import("../db/referral-rewards.js");
-  const result = await releaseAvailableCommissions(db, delayDays);
+  entries.sort((a, b) => b.eligibleHalala - a.eligibleHalala);
+  return c.json({ referrers: entries, sharedAccountNumbers: [...sharedNumbers] });
+});
+
+/** PATCH /admin/referrals/payout-accounts/:id — verify/unverify a payout account */
+adminReferralRoutes.patch("/payout-accounts/:id", async (c) => {
+  const db = getDb(c.env);
+  const id = c.req.param("id");
+  const body = await c.req.json().catch(() => null);
+  if (typeof body?.verified !== "boolean") {
+    return c.json({ error: { code: "bad_request", message: "verified (boolean) required" } }, 400);
+  }
+  const { setPayoutAccountVerified } = await import("../db/referral-rewards.js");
+  const account = await setPayoutAccountVerified(db, id, body.verified);
+  return c.json({ account });
+});
+
+/** POST /admin/referrals/payouts/run — manually trigger the daily payout pass */
+adminReferralRoutes.post("/payouts/run", async (c) => {
+  const db = getDb(c.env);
+  const { runWeeklyPayouts } = await import("../db/referral-rewards.js");
+  const result = await runWeeklyPayouts(db, c.env);
+  return c.json(result);
+});
+
+/** POST /admin/referrals/payouts/reconcile — manually trigger the reconcile pass */
+adminReferralRoutes.post("/payouts/reconcile", async (c) => {
+  const db = getDb(c.env);
+  const { reconcileProcessingPayouts } = await import("../db/referral-rewards.js");
+  const result = await reconcileProcessingPayouts(db, c.env);
   return c.json(result);
 });
 

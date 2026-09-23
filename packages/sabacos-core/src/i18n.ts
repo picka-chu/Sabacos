@@ -290,6 +290,17 @@ const en = {
   termsDeclinedBody: "Sabacos can't be used without agreeing to the Terms & Policies.",
   termsReviewAgain: "Review again",
   termsClose: "Close",
+  payoutTitle: "Cash payouts",
+  payoutEligible: "Available for withdrawal",
+  payoutThresholdHint: "Paid out weekly once you reach 500 ETB",
+  payoutBank: "Bank",
+  payoutSelectBank: "Select bank",
+  payoutAccountName: "Account holder name",
+  payoutAccountNumber: "Account number",
+  payoutSave: "Save bank account",
+  payoutSaved: "Bank account saved",
+  payoutVerified: "Verified",
+  payoutPending: "Pending verification",
 } as const;
 
 export type I18nKey = keyof typeof en;
@@ -585,6 +596,17 @@ const am: Record<I18nKey, string> = {
   termsDeclinedBody: "ሳባኮስ ያለ ውሎች እና ፖሊሲዎች ስምምነት መጠቀም አይቻልም።",
   termsReviewAgain: "እንደገና ይመልከቱ",
   termsClose: "ዝጋ",
+  payoutTitle: "የጥሬ ገንዘብ ክፍያ",
+  payoutEligible: "ለመውጣት የሚችል",
+  payoutThresholdHint: "500 ብር ሲሞሉ በየሳምንቱ ይከፈላል",
+  payoutBank: "ባንክ",
+  payoutSelectBank: "ባንክ ምረጥ",
+  payoutAccountName: "የሂሳብ ባለቤት ስም",
+  payoutAccountNumber: "የሂሳብ ቁጥር",
+  payoutSave: "የባንክ ሂሳብ አስቀምጥ",
+  payoutSaved: "የባንክ ሂሳብ ተቀምጧል",
+  payoutVerified: "ተረጋግጧል",
+  payoutPending: "በማረጋገጥ ላይ",
 };
 
 export const DEFAULT_LANGUAGE: Language = "en";

@@ -4,6 +4,10 @@ import { log } from "../log.js";
 
 let nightlyTimer: ReturnType<typeof setInterval> | null = null;
 let weeklyTimer: ReturnType<typeof setInterval> | null = null;
+let payoutDailyTimer: ReturnType<typeof setInterval> | null = null;
+let payoutDailyTimeout: ReturnType<typeof setTimeout> | null = null;
+let reconcileTimer: ReturnType<typeof setInterval> | null = null;
+let reconcileTimeout: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Start the adaptive reward engine cron jobs.
@@ -44,13 +48,56 @@ export function startAdaptiveCron(env: AppEnv): void {
     runWeeklyJob(env);
     weeklyTimer = setInterval(() => runWeeklyJob(env), 7 * MS_DAY);
   }, msUntilWeekly);
+
+  // Weekly referral payouts: once daily (each referrer is paid on the weekday
+  // their account was created, so one daily pass covers whoever is due).
+  // 09:00 UTC = 12:00 EAT, inside Chapa's Mon–Sat transfer hours; a Sunday
+  // pass will fail at Chapa and surface via the failed-payout admin flow.
+  const next9AM = new Date(now);
+  next9AM.setUTCHours(9, 0, 0, 0);
+  if (next9AM <= now) next9AM.setTime(next9AM.getTime() + MS_DAY);
+  const msUntilPayout = next9AM.getTime() - now.getTime();
+  log.info(`Payout cron: daily payout pass in ${(msUntilPayout / MS_HOUR).toFixed(1)}h`);
+  payoutDailyTimeout = setTimeout(() => {
+    void runPayoutJob(env);
+    payoutDailyTimer = setInterval(() => void runPayoutJob(env), MS_DAY);
+  }, msUntilPayout);
+
+  // Payout reconcile: hourly verify of 'processing' payouts.
+  let reconcileRunning = false;
+  const reconcileTick = async () => {
+    if (reconcileRunning) return;
+    reconcileRunning = true;
+    try {
+      const db = getDb(env);
+      const { reconcileProcessingPayouts } = await import("../db/referral-rewards.js");
+      const out = await reconcileProcessingPayouts(db, env);
+      if (out.checked > 0) log.info(`Payout reconcile: ${JSON.stringify(out)}`);
+    } catch (err) {
+      log.error(`Payout reconcile failed: ${err}`);
+    } finally {
+      reconcileRunning = false;
+    }
+  };
+  reconcileTimeout = setTimeout(() => {
+    void reconcileTick();
+    reconcileTimer = setInterval(() => void reconcileTick(), MS_HOUR);
+  }, 5 * 60 * 1000);
 }
 
 export function stopAdaptiveCron(): void {
   if (nightlyTimer) clearInterval(nightlyTimer);
   if (weeklyTimer) clearInterval(weeklyTimer);
+  if (payoutDailyTimer) clearInterval(payoutDailyTimer);
+  if (payoutDailyTimeout) clearTimeout(payoutDailyTimeout);
+  if (reconcileTimer) clearInterval(reconcileTimer);
+  if (reconcileTimeout) clearTimeout(reconcileTimeout);
   nightlyTimer = null;
   weeklyTimer = null;
+  payoutDailyTimer = null;
+  payoutDailyTimeout = null;
+  reconcileTimer = null;
+  reconcileTimeout = null;
 }
 
 async function runNightlyJob(env: AppEnv): Promise<void> {
@@ -59,16 +106,6 @@ async function runNightlyJob(env: AppEnv): Promise<void> {
     const { runNightlyAggregation } = await import("../db/adaptive.js");
     const result = await runNightlyAggregation(db);
     log.info(`Nightly aggregation: ${JSON.stringify(result)}`);
-
-    // Release referral commissions whose referred order was delivered +
-    // the buffer delay (default 4 days).
-    try {
-      const { releaseAvailableCommissions } = await import("../db/referral-rewards.js");
-      const release = await releaseAvailableCommissions(db);
-      log.info(`Commission release: ${JSON.stringify(release)}`);
-    } catch (err) {
-      log.error(`Commission release failed: ${err}`);
-    }
 
     // Also run data retention cleanup once a week (on Sundays)
     if (new Date().getUTCDay() === 0) {
@@ -105,6 +142,25 @@ export async function triggerNightly(env: AppEnv): Promise<Record<string, unknow
   const db = getDb(env);
   const { runNightlyAggregation } = await import("../db/adaptive.js");
   return await runNightlyAggregation(db);
+}
+
+/** Daily referral payout pass (also triggerable from the admin API). */
+async function runPayoutJob(env: AppEnv): Promise<void> {
+  try {
+    const db = getDb(env);
+    const { runWeeklyPayouts } = await import("../db/referral-rewards.js");
+    const result = await runWeeklyPayouts(db, env);
+    log.info(`Weekly payouts: ${JSON.stringify(result)}`);
+  } catch (err) {
+    log.error(`Weekly payouts failed: ${err}`);
+  }
+}
+
+/** Manually trigger the payout pass (for admin endpoint). */
+export async function triggerPayouts(env: AppEnv): Promise<Record<string, unknown>> {
+  const db = getDb(env);
+  const { runWeeklyPayouts } = await import("../db/referral-rewards.js");
+  return (await runWeeklyPayouts(db, env)) as unknown as Record<string, unknown>;
 }
 
 /** Manually trigger weekly adjustment (for admin endpoint). */

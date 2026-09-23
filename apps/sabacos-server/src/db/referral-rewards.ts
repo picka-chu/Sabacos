@@ -141,24 +141,6 @@ export async function processReferralReward(
 }
 
 /**
- * Release commissions whose referred order was delivered + the buffer delay.
- * Runs daily via the nightly cron job; also triggerable from the admin API.
- * Only 'confirmed' rows are released — 'pending_review' rows stay locked
- * until an admin reviews them and flips status to 'confirmed'.
- */
-export async function releaseAvailableCommissions(
-  db: Db,
-  delayDays = 4,
-): Promise<{ released: number }> {
-  const { data, error } = await db.rpc("release_available_commissions", {
-    p_delay_days: delayDays,
-  });
-  if (error) throw new Error(`release_available_commissions: ${error.message}`);
-  const released = Number((data as { released?: number } | null)?.released ?? 0);
-  return { released };
-}
-
-/**
  * Process a spin for a user.
  * Returns the prize won and creates a coupon if applicable.
  */
@@ -327,5 +309,566 @@ export async function reverseCommissionOnRefund(
     reason,
   });
 
+  // Cash already sent out cannot be clawed back — flag any payout that
+  // included this reward so the admin sees it (audit trail for review).
+  await flagPayoutsForReversedReward(db, reward.id as string, orderId, reason).catch((err) =>
+    console.error(`Payout flag failed for order ${orderId}:`, err),
+  );
+
   return { reversed: true, amountHalala: reward.amount_halala };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Weekly cash withdrawal via Chapa
+// ──────────────────────────────────────────────────────────────────────
+
+/** Withdrawal floor: below this on payout day, the balance carries over. */
+export const WITHDRAWAL_THRESHOLD_HALALA = 50_000; // 500 ETB
+
+/** Buffer between credit and cash-out eligibility (mirrors the SQL default). */
+export const WITHDRAWAL_AGE_DAYS = 7;
+
+export interface PayoutAccount {
+  id: string;
+  profileId: string;
+  accountName: string;
+  accountNumber: string;
+  bankCode: string;
+  bankName: string;
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ReferralPayoutStatus = "pending" | "processing" | "sent" | "failed";
+
+export interface ReferralPayout {
+  id: string;
+  referrerId: string;
+  amountHalala: number;
+  status: ReferralPayoutStatus;
+  chapaReference: string;
+  chapaTransferId: string | null;
+  payoutAccountId: string | null;
+  commissionRewardIds: string[];
+  reviewFlag: boolean;
+  reviewNote: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  failedReason: string | null;
+}
+
+function mapPayoutAccount(row: Record<string, unknown>): PayoutAccount {
+  return {
+    id: row.id as string,
+    profileId: row.profile_id as string,
+    accountName: row.account_name as string,
+    accountNumber: row.account_number as string,
+    bankCode: row.bank_code as string,
+    bankName: row.bank_name as string,
+    verified: row.verified as boolean,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+function mapPayout(row: Record<string, unknown>): ReferralPayout {
+  return {
+    id: row.id as string,
+    referrerId: row.referrer_id as string,
+    amountHalala: row.amount_halala as number,
+    status: row.status as ReferralPayoutStatus,
+    chapaReference: row.chapa_reference as string,
+    chapaTransferId: (row.chapa_transfer_id as string) ?? null,
+    payoutAccountId: (row.payout_account_id as string) ?? null,
+    commissionRewardIds: (row.commission_reward_ids as string[]) ?? [],
+    reviewFlag: (row.review_flag as boolean) ?? false,
+    reviewNote: (row.review_note as string) ?? null,
+    createdAt: row.created_at as string,
+    sentAt: (row.sent_at as string) ?? null,
+    failedReason: (row.failed_reason as string) ?? null,
+  };
+}
+
+/**
+ * Payout weekday for a referrer = weekday of profiles.created_at (UTC, to
+ * match SQL EXTRACT(DOW)). Computed, never stored — spreads payouts evenly
+ * across the week instead of one global payout day.
+ */
+export function payoutWeekday(createdAt: string | Date): number {
+  return new Date(createdAt).getUTCDay(); // 0 = Sunday … 6 = Saturday
+}
+
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+export function payoutWeekdayName(createdAt: string | Date): string {
+  return WEEKDAY_NAMES[payoutWeekday(createdAt)] ?? "?";
+}
+
+/** Monday 00:00 UTC of the current week (matches PG date_trunc('week')). */
+export function startOfWeekUtc(now: Date = new Date()): Date {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d;
+}
+
+/** Canonical cash-out eligibility (single source of truth lives in SQL). */
+export async function getEligibleWithdrawalAmount(db: Db, referrerId: string): Promise<number> {
+  const { data, error } = await db.rpc("get_eligible_withdrawal_amount", {
+    p_referrer_id: referrerId,
+  });
+  if (error) throw new Error(`get_eligible_withdrawal_amount: ${error.message}`);
+  return Number(data ?? 0);
+}
+
+/**
+ * The specific commission rows backing a payout. Same filters as the SQL
+ * function — keep the two in sync: confirmed, aged 7+ days, not reversed,
+ * not already in a sent/processing payout.
+ */
+export async function getEligibleCommissionRewards(
+  db: Db,
+  referrerId: string,
+): Promise<Array<{ id: string; amountHalala: number; orderId: string | null }>> {
+  const now = new Date().toISOString();
+  const { data, error } = await db
+    .from("referral_rewards")
+    .select("id, amount_halala, available_for_withdrawal_at, metadata, created_at")
+    .eq("referrer_id", referrerId)
+    .eq("reward_type", "commission")
+    .eq("status", "confirmed")
+    .lte("available_for_withdrawal_at", now);
+  if (error) throw new Error(`getEligibleCommissionRewards: ${error.message}`);
+
+  const candidates = ((data ?? []) as Array<Record<string, unknown>>)
+    .map((r) => ({
+      id: r.id as string,
+      amountHalala: (r.amount_halala as number) ?? 0,
+      orderId: ((r.metadata as Record<string, unknown> | null)?.order_id as string) ?? null,
+    }))
+    .filter((r) => r.amountHalala > 0);
+
+  if (candidates.length === 0) return [];
+
+  const orderIds = [...new Set(candidates.map((r) => r.orderId).filter(Boolean))] as string[];
+
+  // Exclude reversed orders.
+  let reversedOrderIds = new Set<string>();
+  if (orderIds.length > 0) {
+    const { data: reversals } = await db
+      .from("commission_reversals")
+      .select("order_id")
+      .in("order_id", orderIds);
+    reversedOrderIds = new Set(
+      ((reversals ?? []) as Array<{ order_id: string }>).map((r) => r.order_id),
+    );
+  }
+
+  // Exclude rewards already covered by a sent/processing payout.
+  const { data: payouts } = await db
+    .from("referral_payouts")
+    .select("commission_reward_ids")
+    .eq("referrer_id", referrerId)
+    .in("status", ["sent", "processing"]);
+  const paidRewardIds = new Set<string>();
+  for (const p of ((payouts ?? []) as Array<{ commission_reward_ids: string[] }>)) {
+    for (const id of p.commission_reward_ids ?? []) paidRewardIds.add(id);
+  }
+
+  return candidates.filter(
+    (r) => (!r.orderId || !reversedOrderIds.has(r.orderId)) && !paidRewardIds.has(r.id),
+  );
+}
+
+export async function getPayoutAccount(db: Db, profileId: string): Promise<PayoutAccount | null> {
+  const { data, error } = await db
+    .from("referrer_payout_accounts")
+    .select("*")
+    .eq("profile_id", profileId)
+    .maybeSingle();
+  if (error) throw new Error(`getPayoutAccount: ${error.message}`);
+  return data ? mapPayoutAccount(data as Record<string, unknown>) : null;
+}
+
+/** Create or replace the referrer's payout account (resets verification). */
+export async function upsertPayoutAccount(
+  db: Db,
+  profileId: string,
+  input: { accountName: string; accountNumber: string; bankCode: string; bankName: string },
+): Promise<PayoutAccount> {
+  const { data, error } = await db
+    .from("referrer_payout_accounts")
+    .upsert(
+      {
+        profile_id: profileId,
+        account_name: input.accountName,
+        account_number: input.accountNumber,
+        bank_code: input.bankCode,
+        bank_name: input.bankName,
+        verified: false,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "profile_id" },
+    )
+    .select("*")
+    .single();
+  if (error) throw new Error(`upsertPayoutAccount: ${error.message}`);
+  return mapPayoutAccount(data as Record<string, unknown>);
+}
+
+export async function setPayoutAccountVerified(
+  db: Db,
+  accountId: string,
+  verified: boolean,
+): Promise<PayoutAccount> {
+  const { data, error } = await db
+    .from("referrer_payout_accounts")
+    .update({ verified, updated_at: new Date().toISOString() })
+    .eq("id", accountId)
+    .select("*")
+    .single();
+  if (error) throw new Error(`setPayoutAccountVerified: ${error.message}`);
+  return mapPayoutAccount(data as Record<string, unknown>);
+}
+
+export async function getPayoutById(db: Db, id: string): Promise<ReferralPayout | null> {
+  const { data, error } = await db.from("referral_payouts").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(`getPayoutById: ${error.message}`);
+  return data ? mapPayout(data as Record<string, unknown>) : null;
+}
+
+export async function listPayouts(
+  db: Db,
+  filters: { referrerId?: string; status?: ReferralPayoutStatus | null; limit?: number } = {},
+): Promise<ReferralPayout[]> {
+  let query = db.from("referral_payouts").select("*").order("created_at", { ascending: false });
+  if (filters.referrerId) query = query.eq("referrer_id", filters.referrerId);
+  if (filters.status) query = query.eq("status", filters.status);
+  query = query.limit(Math.min(200, Math.max(1, filters.limit ?? 50)));
+  const { data, error } = await query;
+  if (error) throw new Error(`listPayouts: ${error.message}`);
+  return ((data ?? []) as Record<string, unknown>[]).map(mapPayout);
+}
+
+/**
+ * Flag payouts that already covered a now-reversed reward. The cash can't be
+ * clawed back — this is the audit trail + admin heads-up for future payouts.
+ */
+export async function flagPayoutsForReversedReward(
+  db: Db,
+  rewardId: string,
+  orderId: string,
+  reason: string,
+): Promise<number> {
+  const { data, error } = await db
+    .from("referral_payouts")
+    .select("id, status")
+    .contains("commission_reward_ids", [rewardId])
+    .in("status", ["sent", "processing"]);
+  if (error) throw new Error(`flagPayoutsForReversedReward: ${error.message}`);
+  const rows = (data ?? []) as Array<{ id: string }>;
+  for (const row of rows) {
+    await db
+      .from("referral_payouts")
+      .update({
+        review_flag: true,
+        review_note: `Commission reversed after payout (order ${orderId}): ${reason}`,
+      })
+      .eq("id", row.id);
+  }
+  if (rows.length > 0) {
+    // Visible in the admin Payouts tab (review_flag/review_note). Cash sent
+    // out cannot be clawed back — the admin reviews the referrer there.
+    console.warn(
+      `[payouts] commission reversed after payout: reward ${rewardId} (order ${orderId}) covered by ${rows.length} sent payout(s)`,
+    );
+  }
+  return rows.length;
+}
+
+export interface PayoutRunResult {
+  checked: number;
+  paid: number;
+  paidHalala: number;
+  skippedBelowThreshold: number;
+  skippedNoAccount: number;
+  failed: number;
+}
+
+/**
+ * Daily payout pass. For every referrer whose payout weekday is today and who
+ * has no payout already created this week: pay the eligible amount via Chapa
+ * when it meets the 500 ETB threshold and a verified account exists.
+ * Below threshold or no verified account → untouched, carries over.
+ */
+export async function runWeeklyPayouts(
+  db: Db,
+  env: { CHAPA_SECRET_KEY?: string; BOT_TOKEN: string; ADMIN_CHANNEL_ID?: string },
+  now: Date = new Date(),
+): Promise<PayoutRunResult> {
+  const result: PayoutRunResult = {
+    checked: 0,
+    paid: 0,
+    paidHalala: 0,
+    skippedBelowThreshold: 0,
+    skippedNoAccount: 0,
+    failed: 0,
+  };
+  const todayDow = now.getUTCDay();
+  const weekStart = startOfWeekUtc(now).toISOString();
+
+  // Referrers with any commission history.
+  const { data: rewardRows, error: rewardErr } = await db
+    .from("referral_rewards")
+    .select("referrer_id")
+    .eq("reward_type", "commission")
+    .not("referrer_id", "is", null);
+  if (rewardErr) throw new Error(`runWeeklyPayouts: ${rewardErr.message}`);
+  const referrerIds = [
+    ...new Set(((rewardRows ?? []) as Array<{ referrer_id: string }>).map((r) => r.referrer_id)),
+  ];
+  if (referrerIds.length === 0) return result;
+
+  const { data: profiles, error: profileErr } = await db
+    .from("profiles")
+    .select("id, created_at, first_name, username")
+    .in("id", referrerIds);
+  if (profileErr) throw new Error(`runWeeklyPayouts: ${profileErr.message}`);
+
+  const { notifyAdminChannel } = await import("../bot/bot.js");
+  const { createChapaTransfer, verifyChapaTransfer } = await import("../services/chapa.js");
+
+  for (const p of (profiles ?? []) as Array<{
+    id: string;
+    created_at: string;
+    first_name?: string | null;
+    username?: string | null;
+  }>) {
+    if (payoutWeekday(p.created_at) !== todayDow) continue;
+
+    // AC6: never two payouts for one referrer in the same week.
+    const { data: existing } = await db
+      .from("referral_payouts")
+      .select("id")
+      .eq("referrer_id", p.id)
+      .in("status", ["pending", "processing", "sent"])
+      .gte("created_at", weekStart)
+      .limit(1);
+    if ((existing ?? []).length > 0) continue;
+
+    result.checked += 1;
+    const eligible = await getEligibleWithdrawalAmount(db, p.id).catch(() => 0);
+    if (eligible < WITHDRAWAL_THRESHOLD_HALALA) {
+      result.skippedBelowThreshold += 1;
+      continue;
+    }
+
+    const account = await getPayoutAccount(db, p.id).catch(() => null);
+    const who = p.first_name ?? p.username ?? p.id;
+    if (!account || !account.verified) {
+      result.skippedNoAccount += 1;
+      await notifyAdminChannel(
+        env as never,
+        `💸 <b>Payout needs a bank account</b>\n\nReferrer ${who} has ${(eligible / 100).toFixed(2)} ETB eligible for withdrawal but no verified payout account on file. Ask them to add one in the app (Referrals → Wallet).`,
+      ).catch(() => undefined);
+      continue;
+    }
+
+    const rewards = await getEligibleCommissionRewards(db, p.id).catch(() => []);
+    const rewardIds = rewards.map((r) => r.id);
+    if (rewardIds.length === 0) {
+      result.skippedBelowThreshold += 1;
+      continue;
+    }
+
+    if (!env.CHAPA_SECRET_KEY) {
+      result.failed += 1;
+      await db.from("referral_payouts").insert({
+        referrer_id: p.id,
+        amount_halala: eligible,
+        status: "failed",
+        chapa_reference: `payout-${p.id}-${weekStart.slice(0, 10)}`,
+        payout_account_id: account.id,
+        commission_reward_ids: rewardIds,
+        failed_reason: "CHAPA_SECRET_KEY not configured",
+      });
+      await notifyAdminChannel(
+        env as never,
+        `💸 <b>Payout failed</b>\n\nReferrer ${who}: CHAPA_SECRET_KEY is not configured on the server.`,
+      ).catch(() => undefined);
+      continue;
+    }
+
+    // Insert first (reference = row id = idempotency key), then transfer.
+    const { data: payoutRow, error: insertErr } = await db
+      .from("referral_payouts")
+      .insert({
+        referrer_id: p.id,
+        amount_halala: eligible,
+        status: "pending",
+        chapa_reference: "tmp",
+        payout_account_id: account.id,
+        commission_reward_ids: rewardIds,
+      })
+      .select("*")
+      .single();
+    if (insertErr || !payoutRow) {
+      result.failed += 1;
+      continue;
+    }
+    const payout = mapPayout(payoutRow as Record<string, unknown>);
+    await db.from("referral_payouts").update({ chapa_reference: payout.id }).eq("id", payout.id);
+
+    const transfer = await createChapaTransfer(env.CHAPA_SECRET_KEY, {
+      accountName: account.accountName,
+      accountNumber: account.accountNumber,
+      amountHalala: eligible,
+      bankCode: account.bankCode,
+      reference: payout.id,
+    });
+
+    if (transfer.ok) {
+      await db
+        .from("referral_payouts")
+        .update({
+          status: "processing",
+          chapa_transfer_id: transfer.transferId,
+        })
+        .eq("id", payout.id);
+      // A live transfer proves the account details — mark verified.
+      if (!account.verified) {
+        await setPayoutAccountVerified(db, account.id, true).catch(() => undefined);
+      }
+      result.paid += 1;
+      result.paidHalala += eligible;
+    } else if (transfer.referenceUsedBefore) {
+      // Response was likely lost on a previous attempt — verify instead.
+      const verified = await verifyChapaTransfer(env.CHAPA_SECRET_KEY, payout.id);
+      if (verified.status === "success") {
+        await db
+          .from("referral_payouts")
+          .update({ status: "sent", sent_at: new Date().toISOString() })
+          .eq("id", payout.id);
+        result.paid += 1;
+        result.paidHalala += eligible;
+      } else {
+        await db
+          .from("referral_payouts")
+          .update({ status: "failed", failed_reason: transfer.message })
+          .eq("id", payout.id);
+        result.failed += 1;
+      }
+    } else {
+      await db
+        .from("referral_payouts")
+        .update({ status: "failed", failed_reason: transfer.message })
+        .eq("id", payout.id);
+      result.failed += 1;
+      await notifyAdminChannel(
+        env as never,
+        `💸 <b>Payout failed</b>\n\nReferrer ${who} (${(eligible / 100).toFixed(2)} ETB): ${transfer.message}. Retry from Admin → Referrals → Payouts.`,
+      ).catch(() => undefined);
+    }
+  }
+
+  return result;
+}
+
+/** Hourly reconcile: close the loop on 'processing' payouts via Chapa verify. */
+export async function reconcileProcessingPayouts(
+  db: Db,
+  env: { CHAPA_SECRET_KEY?: string },
+): Promise<{ checked: number; sent: number; failed: number }> {
+  const out = { checked: 0, sent: 0, failed: 0 };
+  if (!env.CHAPA_SECRET_KEY) return out;
+
+  const { data, error } = await db
+    .from("referral_payouts")
+    .select("id, chapa_reference")
+    .eq("status", "processing")
+    .limit(100);
+  if (error) throw new Error(`reconcileProcessingPayouts: ${error.message}`);
+
+  const { verifyChapaTransfer } = await import("../services/chapa.js");
+  for (const row of ((data ?? []) as Array<{ id: string; chapa_reference: string }>)) {
+    out.checked += 1;
+    const verified = await verifyChapaTransfer(env.CHAPA_SECRET_KEY, row.chapa_reference).catch(() => ({
+      status: "unknown" as const,
+      message: "verify call failed",
+    }));
+    if (verified.status === "success") {
+      await db
+        .from("referral_payouts")
+        .update({ status: "sent", sent_at: new Date().toISOString() })
+        .eq("id", row.id);
+      out.sent += 1;
+    } else if (verified.status === "failed") {
+      await db
+        .from("referral_payouts")
+        .update({ status: "failed", failed_reason: verified.message })
+        .eq("id", row.id);
+      out.failed += 1;
+    }
+    // pending/unknown: leave processing, retry next hour.
+  }
+  return out;
+}
+
+/** Manual retry of a failed payout — reuses the same Chapa reference (idempotent). */
+export async function retryPayout(
+  db: Db,
+  env: { CHAPA_SECRET_KEY?: string; BOT_TOKEN: string; ADMIN_CHANNEL_ID?: string },
+  payoutId: string,
+): Promise<ReferralPayout> {
+  const payout = await getPayoutById(db, payoutId);
+  if (!payout) throw new Error("Payout not found");
+  if (payout.status !== "failed") throw new Error("Only failed payouts can be retried");
+  if (!env.CHAPA_SECRET_KEY) throw new Error("CHAPA_SECRET_KEY not configured");
+
+  const account = payout.payoutAccountId
+    ? await db
+        .from("referrer_payout_accounts")
+        .select("*")
+        .eq("id", payout.payoutAccountId)
+        .maybeSingle()
+        .then((r) => (r.data ? mapPayoutAccount(r.data as Record<string, unknown>) : null))
+    : null;
+  if (!account) throw new Error("Payout account no longer exists");
+
+  const { createChapaTransfer, verifyChapaTransfer } = await import("../services/chapa.js");
+  await db.from("referral_payouts").update({ status: "pending", failed_reason: null }).eq("id", payout.id);
+
+  const transfer = await createChapaTransfer(env.CHAPA_SECRET_KEY, {
+    accountName: account.accountName,
+    accountNumber: account.accountNumber,
+    amountHalala: payout.amountHalala,
+    bankCode: account.bankCode,
+    reference: payout.chapaReference,
+  });
+
+  if (transfer.ok) {
+    await db
+      .from("referral_payouts")
+      .update({ status: "processing", chapa_transfer_id: transfer.transferId })
+      .eq("id", payout.id);
+  } else if (transfer.referenceUsedBefore) {
+    const verified = await verifyChapaTransfer(env.CHAPA_SECRET_KEY, payout.chapaReference);
+    await db
+      .from("referral_payouts")
+      .update(
+        verified.status === "success"
+          ? { status: "sent", sent_at: new Date().toISOString() }
+          : { status: "failed", failed_reason: transfer.message },
+      )
+      .eq("id", payout.id);
+  } else {
+    await db
+      .from("referral_payouts")
+      .update({ status: "failed", failed_reason: transfer.message })
+      .eq("id", payout.id);
+  }
+
+  const updated = await getPayoutById(db, payout.id);
+  if (!updated) throw new Error("Payout vanished during retry");
+  return updated;
 }

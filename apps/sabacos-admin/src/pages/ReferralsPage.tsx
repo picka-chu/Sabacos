@@ -24,8 +24,24 @@ interface ReferralSettings {
 interface CommissionRow {
   id: string; referralId: string; referrerId: string | null;
   amountHalala: number | null; status: "confirmed" | "pending_review";
-  availableAt: string | null; orderId: string | null; createdAt: string;
+  availableAt: string | null; agedAt: string | null;
+  withdrawal: "eligible" | "aging" | "review" | "paid" | "reversed";
+  orderId: string | null; createdAt: string;
   referrer: { telegramId: number | null; name: string | null } | null;
+}
+interface PayoutRow {
+  id: string; referrerId: string; amountHalala: number;
+  status: "pending" | "processing" | "sent" | "failed";
+  chapaReference: string; chapaTransferId: string | null;
+  reviewFlag: boolean; reviewNote: string | null;
+  createdAt: string; sentAt: string | null; failedReason: string | null;
+  referrer: { telegramId: number | null; name: string | null } | null;
+  account: { accountName: string; accountNumber: string; bankName: string } | null;
+}
+interface PayoutEligibilityRow {
+  referrerId: string; name: string | null; telegramId: number | null;
+  totalWalletHalala: number; eligibleHalala: number; payoutWeekday: string;
+  hasAccount: boolean; accountVerified: boolean; sharedAccount: boolean;
 }
 interface RollingAverages {
   rollingRevenue7d: number; rollingCogs7d: number; rollingRefunds7d: number;
@@ -57,13 +73,26 @@ export function ReferralsPage() {
   const [loading, setLoading] = useState(true);
   const [commissions, setCommissions] = useState<CommissionRow[]>([]);
   const [commissionFilter, setCommissionFilter] = useState<"pending_review" | "confirmed" | "">("pending_review");
-  const [releasing, setReleasing] = useState(false);
+  const [payouts, setPayouts] = useState<PayoutRow[]>([]);
+  const [payoutFilter, setPayoutFilter] = useState<"pending" | "processing" | "sent" | "failed" | "">("");
+  const [eligibility, setEligibility] = useState<PayoutEligibilityRow[]>([]);
+  const [payoutBusy, setPayoutBusy] = useState(false);
   const toast = useToast((s) => s.add);
 
   const loadCommissions = useCallback((status: "" | "pending_review" | "confirmed") => {
     const qs = status ? `?status=${status}&limit=50` : "?limit=50";
     api.get<{ commissions: CommissionRow[] }>(`/admin/referrals/commissions${qs}`, token ?? undefined)
       .then((res) => setCommissions(res.commissions))
+      .catch(() => {});
+  }, [token]);
+
+  const loadPayouts = useCallback((status: "" | "pending" | "processing" | "sent" | "failed") => {
+    const qs = status ? `?status=${status}&limit=50` : "?limit=50";
+    api.get<{ payouts: PayoutRow[] }>(`/admin/referrals/payouts${qs}`, token ?? undefined)
+      .then((res) => setPayouts(res.payouts))
+      .catch(() => {});
+    api.get<{ referrers: PayoutEligibilityRow[] }>("/admin/referrals/payout-eligibility", token ?? undefined)
+      .then((res) => setEligibility(res.referrers))
       .catch(() => {});
   }, [token]);
 
@@ -74,7 +103,8 @@ export function ReferralsPage() {
     api.get<{ log: AdjustmentLogEntry[] }>("/admin/referrals/adjust/log?limit=10", token ?? undefined).then((res) => setAdjustLog(res.log)).catch(() => {})
       .finally(() => setLoading(false));
     loadCommissions(commissionFilter);
-  }, [token, loadCommissions, commissionFilter]);
+    loadPayouts(payoutFilter);
+  }, [token, loadCommissions, loadPayouts, commissionFilter, payoutFilter]);
 
   useEffect(load, [load]);
 
@@ -127,23 +157,38 @@ export function ReferralsPage() {
   };
 
   const formatETB = (halala: number) => `${(halala / 100).toFixed(2)} ETB`;
-  const availabilityLabel = (row: CommissionRow) => {
-    if (row.status === "pending_review") return "Under review";
-    if (!row.availableAt) return "Locked — awaiting delivery + hold";
-    const at = new Date(row.availableAt).getTime();
-    if (Number.isNaN(at)) return "Locked";
-    if (at <= Date.now()) return "Available now";
-    const days = Math.ceil((at - Date.now()) / (24 * 60 * 60 * 1000));
-    return `Available in ${days}d`;
+  const withdrawalLabel = (row: CommissionRow) => {
+    switch (row.withdrawal) {
+      case "eligible": return "Eligible";
+      case "aging": {
+        if (!row.agedAt) return "Aging";
+        const at = new Date(row.agedAt).getTime();
+        if (Number.isNaN(at)) return "Aging";
+        const days = Math.max(0, Math.ceil((at - Date.now()) / (24 * 60 * 60 * 1000)));
+        return days <= 0 ? "Eligible" : `Ages in ${days}d`;
+      }
+      case "review": return "Under review";
+      case "paid": return "Paid out";
+      case "reversed": return "Reversed";
+    }
   };
-  const releaseDue = async () => {
-    setReleasing(true);
+  const retryPayout = async (id: string) => {
+    setPayoutBusy(true);
     try {
-      const res = await api.post<{ released: number }>("/admin/referrals/commissions/release", {}, token ?? undefined);
-      toast("success", `Released ${res.released} commission(s)`);
-      loadCommissions(commissionFilter);
+      await api.post(`/admin/referrals/payouts/${id}/retry`, {}, token ?? undefined);
+      toast("success", "Payout retried");
+      loadPayouts(payoutFilter);
     } catch (err) { setError(apiErrorMessage(err)); }
-    finally { setReleasing(false); }
+    finally { setPayoutBusy(false); }
+  };
+  const runPayoutsNow = async () => {
+    setPayoutBusy(true);
+    try {
+      const res = await api.post<{ paid: number; paidHalala: number; failed: number }>("/admin/referrals/payouts/run", {}, token ?? undefined);
+      toast("success", `Payout pass done: ${res.paid} paid (${formatETB(res.paidHalala)}), ${res.failed} failed`);
+      loadPayouts(payoutFilter);
+    } catch (err) { setError(apiErrorMessage(err)); }
+    finally { setPayoutBusy(false); }
   };
   const spendRatioColor = (ratio: number) => {
     if (ratio > 1.5) return "var(--danger)";
@@ -372,20 +417,17 @@ export function ReferralsPage() {
                   {f === "" ? "All" : f === "pending_review" ? "Pending review" : "Confirmed"}
                 </button>
               ))}
-              <button className="btn btn-outline btn-sm" onClick={releaseDue} disabled={releasing}>
-                {releasing ? "Releasing..." : "Release due"}
-              </button>
             </div>
           </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
             Review checklist: shared device/IP, same payment info, clustered order timing. Pending-review
-            rows stay locked until you flip them to confirmed (SQL) and the nightly release picks them up.
+            rows never count toward cash withdrawal — resolve them (flip to confirmed via SQL) before payout day.
           </div>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="table responsive-table" style={{ fontSize: 13 }}>
             <thead>
-              <tr><th>Referrer</th><th>Amount</th><th>Status</th><th>Availability</th><th>Date</th></tr>
+              <tr><th>Referrer</th><th>Amount</th><th>Status</th><th>Cash-out</th><th>Date</th></tr>
             </thead>
             <tbody>
               {commissions.length === 0 && (
@@ -405,13 +447,131 @@ export function ReferralsPage() {
                       {row.status === "pending_review" ? "pending review" : "confirmed"}
                     </span>
                   </td>
-                  <td data-label="Availability">{availabilityLabel(row)}</td>
+                  <td data-label="Cash-out">{withdrawalLabel(row)}</td>
                   <td data-label="Date">{new Date(row.createdAt).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Payouts — weekly Chapa cash withdrawals */}
+      <div className="card" style={{ marginBottom: 24, padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-light)" }}>
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>
+              <Wallet size={16} style={{ marginRight: 6, verticalAlign: "middle" }} />
+              Payouts
+              {payouts.some((p) => p.reviewFlag) && (
+                <span className="badge badge-danger" style={{ marginLeft: 8 }}>
+                  {payouts.filter((p) => p.reviewFlag).length} need review
+                </span>
+              )}
+            </h3>
+            <div className="row" style={{ gap: 8 }}>
+              {(["", "pending", "processing", "sent", "failed"] as const).map((f) => (
+                <button
+                  key={f}
+                  className={`btn btn-sm ${payoutFilter === f ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => { setPayoutFilter(f); loadPayouts(f); }}
+                >
+                  {f === "" ? "All" : f}
+                </button>
+              ))}
+              <button className="btn btn-outline btn-sm" onClick={runPayoutsNow} disabled={payoutBusy}>
+                {payoutBusy ? "Running..." : "Run payouts now"}
+              </button>
+            </div>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Paid weekly on each referrer's account-creation weekday (min 500 ETB eligible). Failed rows can be retried.
+          </div>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table className="table responsive-table" style={{ fontSize: 13 }}>
+            <thead>
+              <tr><th>Referrer</th><th>Amount</th><th>Status</th><th>Account</th><th>Date</th><th></th></tr>
+            </thead>
+            <tbody>
+              {payouts.length === 0 && (
+                <tr><td colSpan={6} className="muted">No payouts in this view.</td></tr>
+              )}
+              {payouts.map((p) => (
+                <tr key={p.id} style={p.reviewFlag ? { background: "var(--danger-soft)" } : {}}>
+                  <td data-label="Referrer">
+                    {p.referrer?.name ?? "—"}
+                    {p.referrer?.telegramId != null && (
+                      <span className="muted"> ({p.referrer.telegramId})</span>
+                    )}
+                    {p.reviewFlag && (
+                      <div style={{ fontSize: 11, color: "var(--danger)" }} title={p.reviewNote ?? ""}>
+                        Reversed after payout — review
+                      </div>
+                    )}
+                  </td>
+                  <td data-label="Amount">{formatETB(p.amountHalala)}</td>
+                  <td data-label="Status">
+                    <span className={`badge ${p.status === "sent" ? "badge-success" : p.status === "failed" ? "badge-danger" : "badge-info"}`}>
+                      {p.status}
+                    </span>
+                    {p.failedReason && (
+                      <div className="muted" style={{ fontSize: 11, maxWidth: 220 }}>{p.failedReason}</div>
+                    )}
+                  </td>
+                  <td data-label="Account">
+                    {p.account ? `${p.account.bankName} · ${p.account.accountNumber}` : "—"}
+                  </td>
+                  <td data-label="Date">{new Date(p.createdAt).toLocaleDateString()}</td>
+                  <td>
+                    {p.status === "failed" && (
+                      <button className="btn btn-outline btn-sm" onClick={() => retryPayout(p.id)} disabled={payoutBusy}>
+                        Retry
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {eligibility.length > 0 && (
+          <div style={{ padding: "16px 20px", borderTop: "1px solid var(--border-light)" }}>
+            <h4 style={{ margin: "0 0 10px", fontSize: 13 }}>Eligibility overview</h4>
+            <div style={{ overflowX: "auto" }}>
+              <table className="table responsive-table" style={{ fontSize: 13 }}>
+                <thead>
+                  <tr><th>Referrer</th><th>Wallet</th><th>Eligible</th><th>Payout day</th><th>Account</th></tr>
+                </thead>
+                <tbody>
+                  {eligibility.map((e) => (
+                    <tr key={e.referrerId}>
+                      <td data-label="Referrer">
+                        {e.name ?? "—"}
+                        {e.telegramId != null && <span className="muted"> ({e.telegramId})</span>}
+                        {e.sharedAccount && (
+                          <span className="badge badge-danger" style={{ marginLeft: 6 }}>shared account</span>
+                        )}
+                      </td>
+                      <td data-label="Wallet">{formatETB(e.totalWalletHalala)}</td>
+                      <td data-label="Eligible">{formatETB(e.eligibleHalala)}</td>
+                      <td data-label="Payout day">{e.payoutWeekday}</td>
+                      <td data-label="Account">
+                        {!e.hasAccount ? (
+                          <span className="muted">none</span>
+                        ) : (
+                          <span className={`badge ${e.accountVerified ? "badge-success" : "badge-info"}`}>
+                            {e.accountVerified ? "verified" : "unverified"}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Program Settings */}

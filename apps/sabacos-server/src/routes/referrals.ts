@@ -15,7 +15,6 @@ import {
   getOrCreateWallet,
   getWalletTransactions,
   getWalletSummary,
-  getWalletBalances,
 } from "../db/wallet.js";
 import {
   getAvailableSpins,
@@ -24,6 +23,13 @@ import {
   getActiveSpinnerPrizes,
 } from "../db/spinner.js";
 import { processSpin } from "../db/referral-rewards.js";
+import {
+  getPayoutAccount,
+  upsertPayoutAccount,
+  getEligibleWithdrawalAmount,
+  WITHDRAWAL_THRESHOLD_HALALA,
+} from "../db/referral-rewards.js";
+import { getChapaBanks } from "../services/chapa.js";
 import { getProfileById, getProfileByTelegramId } from "../db/profiles.js";
 import type { UserContext } from "../auth/telegram.js";
 import { referralDeepLink } from "@sabacos/core";
@@ -52,7 +58,6 @@ referralRoutes.get("/", async (c) => {
   const deepLink = profile.telegramId
     ? referralDeepLink(c.env.BOT_USERNAME || "sabacosbot", profile.telegramId)
     : null;
-  const balances = await getWalletBalances(db, profile.id).catch(() => null);
 
   return c.json({
     code,
@@ -63,8 +68,6 @@ referralRoutes.get("/", async (c) => {
       ? `${qualifiedCount % settings.referralsPerSpin}/${settings.referralsPerSpin} referrals to your next spin`
       : null,
     walletBalance: wallet?.balanceHalala ?? 0,
-    spendableBalance: balances?.spendable ?? wallet?.balanceHalala ?? 0,
-    lockedBalance: balances?.locked ?? 0,
     validCoupons: validCoupons.length,
     settings: settings
       ? {
@@ -100,12 +103,9 @@ referralRoutes.get("/wallet", async (c) => {
   const wallet = await getOrCreateWallet(db, profile.id);
   const summary = await getWalletSummary(db, profile.id);
   const transactions = await getWalletTransactions(db, profile.id, { limit: 20 });
-  const balances = await getWalletBalances(db, profile.id).catch(() => null);
 
   return c.json({
     balance: wallet.balanceHalala,
-    spendable: balances?.spendable ?? wallet.balanceHalala,
-    locked: balances?.locked ?? 0,
     summary,
     transactions,
   });
@@ -221,4 +221,99 @@ referralRoutes.post("/validate", async (c) => {
   });
 
   return c.json({ referral: newReferral });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// Cash payout account (weekly Chapa withdrawals)
+// ──────────────────────────────────────────────────────────────────────
+
+/** GET /referral/banks — Chapa bank list for the payout-account form */
+referralRoutes.get("/banks", async (c) => {
+  const secret = c.env.CHAPA_SECRET_KEY;
+  if (!secret) {
+    return c.json({ error: { code: "payouts_disabled", message: "Cash payouts are not configured yet" } }, 503);
+  }
+  try {
+    const banks = await getChapaBanks(secret);
+    return c.json({ banks });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Bank list unavailable";
+    return c.json({ error: { code: "banks_unavailable", message } }, 502);
+  }
+});
+
+/** GET /profile/payout-account — current payout account + withdrawal eligibility */
+referralRoutes.get("/profile/payout-account", async (c) => {
+  const profile = c.get("profile");
+  if (!profile) return c.json({ error: { code: "unauthorized", message: "Not authenticated" } }, 401);
+
+  const db = getDb(c.env);
+  const account = await getPayoutAccount(db, profile.id).catch(() => null);
+  const eligibleHalala = await getEligibleWithdrawalAmount(db, profile.id).catch(() => 0);
+
+  return c.json({
+    account,
+    eligibleHalala,
+    thresholdHalala: WITHDRAWAL_THRESHOLD_HALALA,
+  });
+});
+
+const payoutAccountSchema = {
+  accountName: (v: unknown) => typeof v === "string" && v.trim().length >= 2 && v.trim().length <= 120,
+  accountNumber: (v: unknown) => typeof v === "string" && /^[0-9]{6,20}$/.test(v.trim()),
+  bankCode: (v: unknown) => typeof v === "string" && v.trim().length >= 1 && v.trim().length <= 64,
+};
+
+/** POST /profile/payout-account — submit/update payout bank account */
+referralRoutes.post("/profile/payout-account", async (c) => {
+  const profile = c.get("profile");
+  if (!profile) return c.json({ error: { code: "unauthorized", message: "Not authenticated" } }, 401);
+
+  const body = await c.req.json().catch(() => null);
+  const accountName = typeof body?.accountName === "string" ? body.accountName.trim() : "";
+  const accountNumber = typeof body?.accountNumber === "string" ? body.accountNumber.trim() : "";
+  const bankCode = typeof body?.bankCode === "string" ? body.bankCode.trim() : "";
+  if (
+    !payoutAccountSchema.accountName(accountName) ||
+    !payoutAccountSchema.accountNumber(accountNumber) ||
+    !payoutAccountSchema.bankCode(bankCode)
+  ) {
+    return c.json({
+      error: {
+        code: "bad_request",
+        message: "accountName (2-120 chars), numeric accountNumber (6-20 digits), and bankCode are required",
+      },
+    }, 400);
+  }
+
+  // Resolve the human-readable bank name and confirm the code is real.
+  // If Chapa is unreachable we still accept (verified=false) — full
+  // validation happens by attempting a real transfer, never silently.
+  let bankName = typeof body?.bankName === "string" ? body.bankName.trim().slice(0, 120) : "";
+  const secret = c.env.CHAPA_SECRET_KEY;
+  if (secret) {
+    try {
+      const banks = await getChapaBanks(secret);
+      const match = banks.find((b) => b.code === bankCode);
+      if (!match) {
+        return c.json({ error: { code: "bad_request", message: "Unknown bank code — pick a bank from the list" } }, 400);
+      }
+      bankName = match.name;
+    } catch {
+      if (!bankName) {
+        return c.json({ error: { code: "banks_unavailable", message: "Could not verify the bank right now — please try again" } }, 502);
+      }
+    }
+  } else if (!bankName) {
+    bankName = bankCode;
+  }
+
+  const db = getDb(c.env);
+  const account = await upsertPayoutAccount(db, profile.id, {
+    accountName,
+    accountNumber,
+    bankCode,
+    bankName,
+  });
+  return c.json({ account });
 });
