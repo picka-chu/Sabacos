@@ -4,6 +4,7 @@ import { formatETB } from "@sabacos/core";
 import { useI18n } from "../i18n.js";
 import { api } from "../api.js";
 import { toast } from "../components/Toast.js";
+import { apiErrorMessage } from "../store.js";
 import { haptic } from "../telegram.js";
 
 interface PayoutAccount {
@@ -22,10 +23,12 @@ interface ChapaBank {
 
 /** Weekly Chapa cash-out: bank account form + eligible balance. */
 export function PayoutAccountCard() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [account, setAccount] = useState<PayoutAccount | null>(null);
   const [eligible, setEligible] = useState(0);
+  const [payoutWeekday, setPayoutWeekday] = useState<number | null>(null);
   const [banks, setBanks] = useState<ChapaBank[]>([]);
+  const [banksFailed, setBanksFailed] = useState(false);
   const [bankCode, setBankCode] = useState("");
   const [accountName, setAccountName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
@@ -34,22 +37,34 @@ export function PayoutAccountCard() {
 
   useEffect(() => {
     Promise.all([
-      api.get<{ account: PayoutAccount | null; eligibleHalala: number }>("/referral/profile/payout-account").catch(() => null),
+      api.get<{ account: PayoutAccount | null; eligibleHalala: number; payoutWeekday: number }>("/referral/profile/payout-account").catch(() => null),
       api.get<{ banks: ChapaBank[] }>("/referral/banks").catch(() => null),
     ]).then(([acc, bankList]) => {
       if (acc) {
         setAccount(acc.account);
         setEligible(acc.eligibleHalala ?? 0);
+        setPayoutWeekday(typeof acc.payoutWeekday === "number" ? acc.payoutWeekday : null);
         if (acc.account) {
           setBankCode(acc.account.bankCode);
           setAccountName(acc.account.accountName);
           setAccountNumber(acc.account.accountNumber);
         }
       }
-      if (bankList) setBanks(bankList.banks);
+      if (bankList) {
+        setBanks(bankList.banks);
+      } else {
+        setBanksFailed(true);
+      }
       setLoaded(true);
     });
   }, []);
+
+  const weekdayName =
+    payoutWeekday === null
+      ? null
+      : new Intl.DateTimeFormat(lang === "am" ? "am-ET" : "en-US", { weekday: "long" }).format(
+          new Date(Date.UTC(2026, 7, 2 + payoutWeekday)),
+        );
 
   const save = async () => {
     if (saving || !bankCode || accountName.trim().length < 2 || !/^[0-9]{6,20}$/.test(accountNumber.trim())) return;
@@ -63,8 +78,8 @@ export function PayoutAccountCard() {
       });
       setAccount(res.account);
       toast(t("payoutSaved"));
-    } catch {
-      // api throws with the server message; surfaced by the global handler.
+    } catch (err) {
+      toast(apiErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -91,7 +106,18 @@ export function PayoutAccountCard() {
         <span className="muted" style={{ fontSize: 13 }}>{t("payoutEligible")}</span>
         <strong style={{ fontSize: 16 }}>{formatETB(eligible)}</strong>
       </div>
-      <p className="muted" style={{ fontSize: 12, margin: "0 0 12px" }}>{t("payoutThresholdHint")}</p>
+      <p className="muted" style={{ fontSize: 12, margin: "0 0 4px" }}>{t("payoutThresholdHint")}</p>
+      <p className="muted" style={{ fontSize: 12, margin: "0 0 4px" }}>{t("payoutAgingHint")}</p>
+      {weekdayName && (
+        <p className="muted" style={{ fontSize: 12, margin: "0 0 12px" }}>
+          {t("payoutDay")}: <strong>{weekdayName}</strong>
+        </p>
+      )}
+      {banksFailed && (
+        <p style={{ fontSize: 12.5, color: "var(--danger, #d32f2f)", margin: "0 0 12px" }}>
+          {t("payoutBanksUnavailable")}
+        </p>
+      )}
 
       <div className="field" style={{ marginBottom: 10 }}>
         <label>{t("payoutBank")}</label>

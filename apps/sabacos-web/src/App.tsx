@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { Info } from "lucide-react";
 import { api } from "./api.js";
+import { TERMS_VERSION } from "@sabacos/core";
 import { I18nProvider, useI18n, hasUserChosenLang } from "./i18n.js";
 import { applyTelegramTheme, getTelegramWebApp, haptic, isTelegramSession } from "./telegram.js";
 import { BottomNav } from "./components/BottomNav.js";
@@ -116,9 +117,14 @@ function Shell() {
   }
 
   // First-run gate: language choice → Terms & Policies agreement.
-  // Server-side acceptance (profiles.terms_accepted_at) is the source of
-  // truth, so this survives reinstalls and shows exactly once.
-  if (profileStatus === "ready" && profile && !profile.termsAcceptedAt) {
+  // Server-side acceptance (profiles.terms_accepted_at + terms_version) is
+  // the source of truth, so this survives reinstalls and re-asks whenever
+  // the legal text version changes.
+  if (
+    profileStatus === "ready" &&
+    profile &&
+    (!profile.termsAcceptedAt || profile.termsVersion !== TERMS_VERSION)
+  ) {
     return (
       <>
         <OnboardingGate />

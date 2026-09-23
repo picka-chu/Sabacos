@@ -145,7 +145,15 @@ export async function triggerNightly(env: AppEnv): Promise<Record<string, unknow
 }
 
 /** Daily referral payout pass (also triggerable from the admin API). */
+let payoutRunning = false;
 async function runPayoutJob(env: AppEnv): Promise<void> {
+  // Overlap guard: two concurrent passes could both clear the weekly
+  // no-duplicate check and pay the same referrer twice.
+  if (payoutRunning) {
+    log.info("Payout pass already running — skipping overlapping tick");
+    return;
+  }
+  payoutRunning = true;
   try {
     const db = getDb(env);
     const { runWeeklyPayouts } = await import("../db/referral-rewards.js");
@@ -153,6 +161,8 @@ async function runPayoutJob(env: AppEnv): Promise<void> {
     log.info(`Weekly payouts: ${JSON.stringify(result)}`);
   } catch (err) {
     log.error(`Weekly payouts failed: ${err}`);
+  } finally {
+    payoutRunning = false;
   }
 }
 

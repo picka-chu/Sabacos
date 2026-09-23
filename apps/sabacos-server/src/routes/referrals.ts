@@ -255,6 +255,9 @@ referralRoutes.get("/profile/payout-account", async (c) => {
     account,
     eligibleHalala,
     thresholdHalala: WITHDRAWAL_THRESHOLD_HALALA,
+    // Payout weekday (0 = Sunday … 6 = Saturday, UTC — matches the cron's
+    // EXTRACT(DOW) check, so the app shows the same day payouts run on.
+    payoutWeekday: new Date(profile.createdAt).getUTCDay(),
   });
 });
 

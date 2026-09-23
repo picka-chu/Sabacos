@@ -105,14 +105,24 @@ const SECTIONS: TermsSection[] = [
     ],
   },
   {
-    title: "12. Limitation of Liability",
+    title: "12. Referral Cash Payouts",
+    body: [
+      "In addition to spending commission in the app, you may withdraw it as cash to your bank account. Each commission becomes withdrawable 7 days after it is earned, provided it has not been reversed or flagged for review.",
+      "Payouts run once a week, on the weekday your account was created, and only when your withdrawable balance reaches at least 500 ETB. Smaller balances carry over to the following week — nothing is forfeited.",
+      "To receive payouts you must save a valid bank account in the app (Referrals → Wallet). Transfers are sent through our payment provider; a payout may fail (for example outside banking hours), in which case the amount is returned to your wallet automatically.",
+      "When a payout is created, the amount is immediately deducted from your wallet so it cannot be spent twice. If the transfer fails, it is refunded to your wallet.",
+      "If commission included in an already-sent payout is later reversed (for example the underlying order is refunded), the cash cannot be clawed back; the payout is flagged and your account may be reviewed before future payouts.",
+    ],
+  },
+  {
+    title: "13. Limitation of Liability",
     body: [
       "Products are for personal use; perform a patch test before full use. We are not liable for allergic reactions where ingredients were disclosed.",
       "To the maximum extent permitted by law, our total liability for any order is limited to the amount you paid for that order. We are not liable for indirect or consequential losses.",
     ],
   },
   {
-    title: "13. Changes & Governing Law",
+    title: "14. Changes & Governing Law",
     body: [
       "We may update these Terms; material changes will be announced in the app/channel, and continued use constitutes acceptance.",
       "These Terms are governed by the laws of the Federal Democratic Republic of Ethiopia. Disputes will first be addressed through good-faith negotiation via +2519302998.",

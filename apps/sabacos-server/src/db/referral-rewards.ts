@@ -657,13 +657,29 @@ export async function runWeeklyPayouts(
     if ((existing ?? []).length > 0) continue;
 
     result.checked += 1;
-    const eligible = await getEligibleWithdrawalAmount(db, p.id).catch(() => 0);
+    let eligible = 0;
+    try {
+      eligible = await getEligibleWithdrawalAmount(db, p.id);
+    } catch (err) {
+      // Loud, not silent: a missing/broken eligibility function must never
+      // look like "nobody is eligible". The referrer is skipped this pass.
+      console.error(`[payouts] eligibility check failed for ${p.id}:`, err);
+      result.failed += 1;
+      continue;
+    }
     if (eligible < WITHDRAWAL_THRESHOLD_HALALA) {
       result.skippedBelowThreshold += 1;
       continue;
     }
 
-    const account = await getPayoutAccount(db, p.id).catch(() => null);
+    let account: PayoutAccount | null = null;
+    try {
+      account = await getPayoutAccount(db, p.id);
+    } catch (err) {
+      console.error(`[payouts] payout-account lookup failed for ${p.id}:`, err);
+      result.failed += 1;
+      continue;
+    }
     const who = p.first_name ?? p.username ?? p.id;
     if (!account || !account.verified) {
       result.skippedNoAccount += 1;
@@ -674,7 +690,14 @@ export async function runWeeklyPayouts(
       continue;
     }
 
-    const rewards = await getEligibleCommissionRewards(db, p.id).catch(() => []);
+    let rewards: Array<{ id: string; amountHalala: number; orderId: string | null }> = [];
+    try {
+      rewards = await getEligibleCommissionRewards(db, p.id);
+    } catch (err) {
+      console.error(`[payouts] eligible-rewards lookup failed for ${p.id}:`, err);
+      result.failed += 1;
+      continue;
+    }
     const rewardIds = rewards.map((r) => r.id);
     if (rewardIds.length === 0) {
       result.skippedBelowThreshold += 1;
@@ -683,11 +706,12 @@ export async function runWeeklyPayouts(
 
     if (!env.CHAPA_SECRET_KEY) {
       result.failed += 1;
+      const { randomUUID: uuid } = await import("node:crypto");
       await db.from("referral_payouts").insert({
         referrer_id: p.id,
         amount_halala: eligible,
         status: "failed",
-        chapa_reference: `payout-${p.id}-${weekStart.slice(0, 10)}`,
+        chapa_reference: uuid(),
         payout_account_id: account.id,
         commission_reward_ids: rewardIds,
         failed_reason: "CHAPA_SECRET_KEY not configured",
@@ -699,14 +723,17 @@ export async function runWeeklyPayouts(
       continue;
     }
 
-    // Insert first (reference = row id = idempotency key), then transfer.
+    // Insert first (reference = idempotency key, generated up front so the
+    // UNIQUE constraint genuinely guards duplicates — never a placeholder).
+    const { randomUUID } = await import("node:crypto");
+    const chapaReference = randomUUID();
     const { data: payoutRow, error: insertErr } = await db
       .from("referral_payouts")
       .insert({
         referrer_id: p.id,
         amount_halala: eligible,
         status: "pending",
-        chapa_reference: "tmp",
+        chapa_reference: chapaReference,
         payout_account_id: account.id,
         commission_reward_ids: rewardIds,
       })
@@ -717,7 +744,6 @@ export async function runWeeklyPayouts(
       continue;
     }
     const payout = mapPayout(payoutRow as Record<string, unknown>);
-    await db.from("referral_payouts").update({ chapa_reference: payout.id }).eq("id", payout.id);
 
     // Lock the funds BEFORE calling Chapa (same "lock the resource before you
     // commit to using it" pattern finalize_order_payment uses for stock): the
@@ -761,7 +787,7 @@ export async function runWeeklyPayouts(
       accountNumber: account.accountNumber,
       amountHalala: eligible,
       bankCode: account.bankCode,
-      reference: payout.id,
+      reference: payout.chapaReference,
     });
 
     if (transfer.ok) {
@@ -781,7 +807,7 @@ export async function runWeeklyPayouts(
     } else if (transfer.referenceUsedBefore) {
       // Response was likely lost on a previous attempt — verify instead.
       // Only refund when verification definitively says the money didn't move.
-      const verified = await verifyChapaTransfer(env.CHAPA_SECRET_KEY, payout.id);
+      const verified = await verifyChapaTransfer(env.CHAPA_SECRET_KEY, payout.chapaReference);
       if (verified.status === "success") {
         await db
           .from("referral_payouts")
