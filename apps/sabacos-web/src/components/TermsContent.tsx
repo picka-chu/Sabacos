@@ -10,7 +10,7 @@ const SECTIONS: TermsSection[] = [
     title: "1. About Sabacos",
     body: [
       "Sabacos (\"we\", \"us\") operates an online cosmetics and beauty store serving customers in Ethiopia, accessible through our Telegram bot, mini app, and web storefront. By placing an order or using our services, you agree to these Terms.",
-      "Contact: +2519302998 · Addis Ababa, Ethiopia",
+      "Contact: +251930529985 · Addis Ababa, Ethiopia",
     ],
   },
   {
@@ -101,7 +101,7 @@ const SECTIONS: TermsSection[] = [
       "We collect: Telegram ID and profile details, name, phone, delivery address, GPS location (only when you share it), order history, payment receipts, and support messages.",
       "We use this data to process orders, verify payments, calculate delivery, operate rewards, and prevent fraud. We never sell your data.",
       "Payment card/bank details are processed by our payment providers (e.g. Chapa); we do not store full card numbers.",
-      "You may request correction or deletion of your data via +2519302998, subject to legal record-keeping duties.",
+      "You may request correction or deletion of your data via +251930529985, subject to legal record-keeping duties.",
     ],
   },
   {
@@ -125,7 +125,7 @@ const SECTIONS: TermsSection[] = [
     title: "14. Changes & Governing Law",
     body: [
       "We may update these Terms; material changes will be announced in the app/channel, and continued use constitutes acceptance.",
-      "These Terms are governed by the laws of the Federal Democratic Republic of Ethiopia. Disputes will first be addressed through good-faith negotiation via +2519302998.",
+      "These Terms are governed by the laws of the Federal Democratic Republic of Ethiopia. Disputes will first be addressed through good-faith negotiation via +251930529985.",
     ],
   },
 ];

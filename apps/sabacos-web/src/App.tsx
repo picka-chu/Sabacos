@@ -58,6 +58,10 @@ function Shell() {
       .post<{ profile: import("@sabacos/core").Profile }>("/auth/telegram", {})
       .then((res) => {
         setProfile(res.profile);
+        // Definitive signal: the server validated our initData, so we are
+        // inside Telegram regardless of what client-side detection said
+        // (fixes keyboard-button launches sticking in preview mode).
+        setInTelegram(true);
         // Only set language from server if the user hasn't explicitly chosen
         // one in this session (prevents overwriting localStorage on reload).
         if (

@@ -8,7 +8,7 @@ import { PayoutAccountCard } from "../components/PayoutAccountCard.js";
 import { api } from "../api.js";
 import { useShopStore } from "../store.js";
 import { toast } from "../components/Toast.js";
-import { haptic } from "../telegram.js";
+import { haptic, openExternalLink } from "../telegram.js";
 
 interface ReferralInfo {
   code: string | null;
@@ -106,7 +106,7 @@ export function ReferralPage() {
     if (!info?.deepLink) return;
     haptic("light");
     const text = encodeURIComponent(`${t("inviteFriendsHint")} ${info.deepLink}`);
-    window.open(`https://t.me/share/url?url=${encodeURIComponent(info.deepLink)}&text=${text}`, "_blank");
+    openExternalLink(`https://t.me/share/url?url=${encodeURIComponent(info.deepLink)}&text=${text}`);
   };
 
   if (!profile) {

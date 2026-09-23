@@ -1,6 +1,4 @@
 import { Hono } from "hono";
-import { Bot, InlineKeyboard } from "grammy";
-import { escapeHtml } from "../bot/bot.js";
 import { getAppEnv, type AppEnv } from "../env.js";
 import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
@@ -23,65 +21,47 @@ shareRoutes.post("/product/:id", async (c) => {
     return c.json({ error: "Product not found" }, 404);
   }
 
-  const webAppUrl = `${env.WEBAPP_URL.replace(/\/$/, "")}/product/${product.id}`;
-  if (!/^https:\/\//i.test(webAppUrl)) {
-    return c.json({ error: "WEBAPP_URL must be https" }, 500);
-  }
-
-  const lang = profile.language === "am" ? "am" : "en";
-  const name = lang === "am" ? product.nameAm : product.nameEn;
-  const desc = lang === "am" ? product.descriptionAm : product.descriptionEn;
-  const price = formatETB(product.priceHalala);
-
-  const lines = [
-    `<b>${escapeHtml(name)}</b>`,
-    lang === "en" && product.nameAm ? `<i>${escapeHtml(product.nameAm)}</i>` : "",
-    lang === "am" && product.nameEn ? `<i>${escapeHtml(product.nameEn)}</i>` : "",
-    "",
-    desc ? escapeHtml(desc).slice(0, 300) : "",
-    "",
-    `💰 <b>${escapeHtml(price)}</b>`,
-  ];
-  const caption = lines.filter(Boolean).join("\n");
-
-  const bot = new Bot(env.BOT_TOKEN);
   const chatId = profile.telegramId;
   if (chatId == null) {
     return c.json({ error: "User has no Telegram ID" }, 400);
   }
 
-  // Attributed share link: packs the sharer's Telegram ID + product ID into
-  // a startapp payload (~44 chars, inside Telegram's 64-char limit). Anyone
-  // opening it lands on the product AND credits this user for the resulting
-  // sale (Track 2). A `url` button is used because web_app buttons can't
-  // carry startapp payloads. Falls back to the plain product button when the
-  // bot username isn't configured (unattributed share still works).
+  // Attributed share link (Track 2): packs this user as the sharer so any
+  // resulting sale credits their commission. Falls back to the plain product
+  // link when the bot username isn't configured (still shareable, just
+  // unattributed). The client opens this in the native share sheet so the
+  // user picks the chat — bot-sent messages lose their buttons on forward.
   const username = (env.BOT_USERNAME || "").replace(/^@/, "");
-  const keyboard = username
-    ? new InlineKeyboard().url(
-        "🛍 Buy Now",
-        `https://t.me/${username}?startapp=${packSharePayload(chatId, product.id)}`,
-      )
-    : new InlineKeyboard().webApp("🛍 Buy Now", webAppUrl);
+  const webAppUrl = `${env.WEBAPP_URL.replace(/\/$/, "")}/product/${product.id}`;
+  const url = username
+    ? `https://t.me/${username}?startapp=${packSharePayload(chatId, product.id)}`
+    : webAppUrl;
 
-  try {
-    const photo = product.imageUrls[0];
-    if (photo) {
-      await bot.api.sendPhoto(chatId, photo, {
-        caption,
-        parse_mode: "HTML",
-        reply_markup: keyboard,
-      });
-    } else {
-      await bot.api.sendMessage(chatId, caption, {
-        parse_mode: "HTML",
-        reply_markup: keyboard,
-      });
-    }
-    return c.json({ ok: true });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`share/product failed for user ${chatId}:`, msg);
-    return c.json({ error: `Failed to send: ${msg}` }, 500);
-  }
+  return c.json({ url, text: shareCaption(product) });
 });
+
+/**
+ * Professional share-sheet text: name, one-line benefit, price with the
+ * half-now option, and the original-only guarantee. Plain text (no HTML —
+ * t.me/share/url takes raw text).
+ */
+function shareCaption(product: {
+  nameEn: string;
+  nameAm: string;
+  descriptionEn: string;
+  descriptionAm: string;
+  priceHalala: number;
+}): string {
+  const price = formatETB(product.priceHalala);
+  const half = formatETB(Math.round(product.priceHalala / 2));
+  const benefit = (product.descriptionEn || product.descriptionAm || "").split("\n")[0]?.slice(0, 120) ?? "";
+  const lines = [
+    `✨ ${product.nameEn}`,
+    product.nameAm && product.nameAm !== product.nameEn ? product.nameAm : "",
+    benefit,
+    "",
+    `💰 ${price} — or pay ${half} now, rest on delivery`,
+    "✅ 100% original · Delivered in Addis in 1–3 days",
+  ];
+  return lines.filter((l) => l && l.trim().length > 0).join("\n");
+}

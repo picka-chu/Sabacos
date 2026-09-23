@@ -175,8 +175,35 @@ export function haptic(style: "light" | "medium" | "heavy" = "light"): void {
   }
 }
 
+/**
+ * True when running inside a Telegram client (any launch entry: menu button,
+ * keyboard button, inline, direct startapp link). Object presence alone
+ * counts — Telegram always injects window.Telegram.WebApp, while initData
+ * can lag a beat behind on slower clients.
+ */
+export function isTelegramClient(): boolean {
+  try {
+    const w = window as unknown as { Telegram?: { WebApp?: { version?: unknown } } };
+    return typeof w.Telegram?.WebApp?.version === "string";
+  } catch {
+    return false;
+  }
+}
+
+function hasLaunchParams(): boolean {
+  try {
+    const hash = window.location.hash;
+    const search = window.location.search;
+    return (
+      /tgWebApp(Data|Platform|Version)=/.test(hash) || /tgWebApp(Data|Platform|Version)=/.test(search)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function isTelegramSession(): boolean {
-  return Boolean(getInitData());
+  return Boolean(getInitData()) || isTelegramClient() || hasLaunchParams();
 }
 
 export function getInitData(): string {

@@ -8,6 +8,7 @@ import { useProduct } from "../hooks.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
 import { api } from "../api.js";
 import { toast } from "../components/Toast.js";
+import { openExternalLink } from "../telegram.js";
 
 export function ProductPage() {
   const params = useParams<{ id: string }>();
@@ -83,8 +84,14 @@ export function ProductPage() {
 
   const handleShare = async () => {
     try {
-      await api.post(`/share/product/${product.id}`, {});
-      toast(t("shared"));
+      // Attributed share link + professional caption from the server, opened
+      // in Telegram's native share sheet so the user picks the chat. (Bot-sent
+      // messages lose their buttons when forwarded — this keeps the Buy link
+      // intact and credits the sharer for resulting sales.)
+      const res = await api.post<{ url: string; text: string }>(`/share/product/${product.id}`, {});
+      openExternalLink(
+        `https://t.me/share/url?url=${encodeURIComponent(res.url)}&text=${encodeURIComponent(res.text)}`,
+      );
     } catch (err) {
       toast(apiErrorMessage(err));
     }
