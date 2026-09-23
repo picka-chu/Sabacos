@@ -739,13 +739,26 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
         return;
       }
 
-      // Process referral reward (commission + spins) — fire-and-forget
-      const { processReferralReward } = await import("../db/referral-rewards.js");
+      // Process referral reward (Track 1: commission + spins) — fire-and-forget
+      const { processReferralReward, processAttributedCommission } = await import(
+        "../db/referral-rewards.js"
+      );
       await processReferralReward(db, {
         referredProfileId: order.profileId,
         orderId: order.id,
         orderTotalHalala: order.totalHalala,
       }).catch((err) => console.error("referral reward failed", err));
+
+      // Track 2: per-order affiliate commission when this order came from a
+      // product share link. Skips itself when Track 1 owned the order.
+      if (order.attributedToProfileId) {
+        await processAttributedCommission(db, {
+          orderId: order.id,
+          sharerProfileId: order.attributedToProfileId,
+          buyerProfileId: order.profileId,
+          orderTotalHalala: order.totalHalala,
+        }).catch((err) => console.error("attributed commission failed", err));
+      }
 
       await notifyAdminChannelWithButtons(env, formatAdminOrderAlert(order), order.id);
       await sendReceipt(ctx, env, order);

@@ -405,13 +405,26 @@ async function finalizeWithWallet(
     throw new CartValidationError(`Wallet payment failed (${status})`, "wallet_insufficient");
   }
 
-  // Credit referral rewards (commission + spins) just like a paid order.
-  const { processReferralReward } = await import("../db/referral-rewards.js");
+  // Credit referral rewards (Track 1 commission + spins) just like a paid order.
+  const { processReferralReward, processAttributedCommission } = await import(
+    "../db/referral-rewards.js"
+  );
   await processReferralReward(db, {
     referredProfileId: order.profileId,
     orderId: order.id,
     orderTotalHalala: order.totalHalala,
   }).catch((err) => console.error("wallet checkout: referral reward failed", err));
+
+  // Track 2: attributed repeat orders earn affiliate commission (no-op when
+  // Track 1 owned this order).
+  if (order.attributedToProfileId) {
+    await processAttributedCommission(db, {
+      orderId: order.id,
+      sharerProfileId: order.attributedToProfileId,
+      buyerProfileId: order.profileId,
+      orderTotalHalala: order.totalHalala,
+    }).catch((err) => console.error("wallet checkout: attributed commission failed", err));
+  }
 
   return { order, invoiceUrl: null, delivery };
 }

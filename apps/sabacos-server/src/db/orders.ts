@@ -174,7 +174,9 @@ export async function updateOrderStatus(
   // referral row is already qualified), so full-payment orders rewarded at
   // charge time are unaffected by this second call.
   if (status === "delivered" && order.status !== "delivered") {
-    const { processReferralReward } = await import("./referral-rewards.js");
+    const { processReferralReward, processAttributedCommission } = await import(
+      "./referral-rewards.js"
+    );
     const delivered = orderRowSchema.parse(data);
     await processReferralReward(db, {
       referredProfileId: delivered.profileId,
@@ -183,6 +185,16 @@ export async function updateOrderStatus(
     }).catch((err) =>
       console.error(`Delivery commission failed for order ${orderId}:`, err),
     );
+    if (delivered.attributedToProfileId) {
+      await processAttributedCommission(db, {
+        orderId: delivered.id,
+        sharerProfileId: delivered.attributedToProfileId,
+        buyerProfileId: delivered.profileId,
+        orderTotalHalala: delivered.totalHalala,
+      }).catch((err) =>
+        console.error(`Delivery attributed commission failed for order ${orderId}:`, err),
+      );
+    }
   }
 
   return orderRowSchema.parse(data);

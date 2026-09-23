@@ -177,6 +177,155 @@ export async function processReferralReward(
   };
 }
 
+// Velocity-fraud thresholds for Track 2 (tunable; promote to settings if
+// they ever need per-deploy tuning without a code change).
+/** Attributed commissions in 24h at/above this → velocity_spike flag. */
+export const ATTRIBUTED_24H_FLAG_COUNT = 10;
+/** Distinct attributed buyers in 7d at/above this → buyer_cluster flag. */
+export const ATTRIBUTED_BUYER_CLUSTER_FLAG_COUNT = 8;
+/** Buyer account younger than this at order time → instant_farm flag. */
+export const ATTRIBUTED_INSTANT_FARM_MINUTES = 30;
+
+/**
+ * Track 2: commission on an attributed repeat order (product share link).
+ *
+ * No-double-pay rule with Track 1: when the buyer's referral row is still
+ * pending (Track 1 will consume this order) or was already qualified BY this
+ * order (Track 1 just consumed it), this returns early — the first
+ * attributed order always belongs to Track 1 alone. No spins here (spins
+ * reward acquisition, i.e. Track 1 only) and no buyer discount beyond the
+ * first order.
+ *
+ * Fraud: self-attribution is blocked at checkout (attributed_to is
+ * server-validated); velocity signals below only ever soft-flag
+ * (pending_review, still credited), never hard-block a legitimate whale.
+ */
+export async function processAttributedCommission(
+  db: Db,
+  params: {
+    orderId: string;
+    sharerProfileId: string;
+    buyerProfileId: string;
+    orderTotalHalala: number;
+  },
+): Promise<{
+  success: boolean;
+  commissionHalala?: number;
+  flaggedForReview?: boolean;
+  error?: string;
+}> {
+  const { orderId, sharerProfileId, buyerProfileId, orderTotalHalala } = params;
+  if (!sharerProfileId || sharerProfileId === buyerProfileId) {
+    return { success: false, error: "no_attribution" };
+  }
+
+  const settings = await getReferralSettings(db);
+  if (!settings || !settings.isActive) {
+    return { success: false, error: "referral_program_inactive" };
+  }
+
+  if (settings.dailySpendCapEnabled) {
+    const { data: capResult } = await db.rpc("check_daily_spend_cap");
+    if (capResult?.exceeded) {
+      return { success: false, error: "daily_spend_cap_exceeded" };
+    }
+  }
+
+  if (orderTotalHalala < settings.minOrderValueHalala) {
+    return { success: false, error: "order_below_minimum" };
+  }
+
+  // No-double-pay: Track 1 owns the first attributed order.
+  const { getReferralByReferredId } = await import("./referrals.js");
+  const buyerReferral = await getReferralByReferredId(db, buyerProfileId).catch(() => null);
+  if (
+    buyerReferral &&
+    (buyerReferral.status === "pending" || buyerReferral.orderId === orderId)
+  ) {
+    return { success: false, error: "track1_owns_order" };
+  }
+
+  // Cancelled orders earn nothing (reversal covers post-credit refunds).
+  const { data: orderRow } = await db
+    .from("orders")
+    .select("id, status, created_at")
+    .eq("id", orderId)
+    .maybeSingle();
+  const order = orderRow as { id: string; status: string; created_at: string } | null;
+  if (!order) return { success: false, error: "order_not_found" };
+  if (order.status === "cancelled") return { success: false, error: "order_cancelled" };
+
+  // Commission base = eligible items only (same toggle as Track 1).
+  const commissionBaseHalala = await getCommissionableTotalHalala(db, orderId);
+  const affiliatePercent = settings.affiliatePercent ?? 10;
+  const rawCommissionHalala = Math.floor((commissionBaseHalala * affiliatePercent) / 100);
+  if (rawCommissionHalala <= 0) {
+    return { success: true, commissionHalala: 0, flaggedForReview: false };
+  }
+
+  // Velocity fraud signals (soft flags only).
+  const flags: string[] = [];
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { count: attributed24h } = await db
+    .from("referral_rewards")
+    .select("id", { count: "exact", head: true })
+    .eq("referrer_id", sharerProfileId)
+    .eq("reward_type", "commission")
+    .gte("created_at", dayAgo);
+  if ((attributed24h ?? 0) >= ATTRIBUTED_24H_FLAG_COUNT) flags.push("velocity_spike");
+
+  const { data: recentAttributed } = await db
+    .from("orders")
+    .select("profile_id")
+    .eq("attributed_to_profile_id", sharerProfileId)
+    .gte("created_at", weekAgo)
+    .limit(200);
+  const distinctBuyers = new Set(
+    ((recentAttributed ?? []) as Array<{ profile_id: string }>).map((o) => o.profile_id),
+  );
+  if (distinctBuyers.size >= ATTRIBUTED_BUYER_CLUSTER_FLAG_COUNT) flags.push("buyer_cluster");
+
+  const { data: buyerProfile } = await db
+    .from("profiles")
+    .select("created_at")
+    .eq("id", buyerProfileId)
+    .maybeSingle();
+  const buyerCreatedAt = (buyerProfile as { created_at?: string } | null)?.created_at;
+  if (buyerCreatedAt) {
+    const ageAtOrderMs =
+      new Date(order.created_at).getTime() - new Date(buyerCreatedAt).getTime();
+    if (ageAtOrderMs >= 0 && ageAtOrderMs < ATTRIBUTED_INSTANT_FARM_MINUTES * 60 * 1000) {
+      flags.push("instant_farm");
+    }
+  }
+
+  const { data: creditResult, error: creditError } = await db.rpc(
+    "credit_referral_commission",
+    {
+      p_referral_id: null,
+      p_order_id: orderId,
+      p_raw_commission_halala: rawCommissionHalala,
+      p_referrer_id: sharerProfileId,
+      p_flag_reason: flags.length > 0 ? flags.join(",") : null,
+    },
+  );
+  if (creditError) {
+    throw new Error(`credit_referral_commission: ${creditError.message}`);
+  }
+  const credit = (creditResult ?? {}) as {
+    status?: string;
+    credited_halala?: number;
+    flagged?: boolean;
+  };
+  return {
+    success: true,
+    commissionHalala: Number(credit.credited_halala ?? 0),
+    flaggedForReview: credit.flagged === true,
+  };
+}
+
 /**
  * Process a spin for a user.
  * Returns the prize won and creates a coupon if applicable.

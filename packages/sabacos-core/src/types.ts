@@ -376,6 +376,8 @@ export interface ReferralSettings {
   repeatPurchasePercent: number;
   /** Discount % automatically applied to the referred friend's first qualifying order. */
   referredDiscountPercent: number;
+  /** Per-order affiliate rate (Track 2, repeat attributed orders). */
+  affiliatePercent: number;
   monthlyCapHalala: number;
   referralsPerSpin: number;
   maxSpinsPerWeek: number;

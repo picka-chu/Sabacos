@@ -28,6 +28,7 @@ const SETTINGS_COLUMN_MAP: Record<string, string> = {
   firstPurchasePercent: "first_purchase_percent",
   repeatPurchasePercent: "repeat_purchase_percent",
   referredDiscountPercent: "referred_discount_percent",
+  affiliatePercent: "affiliate_percent",
   monthlyCapHalala: "monthly_cap_halala",
   referralsPerSpin: "referrals_per_spin",
   maxSpinsPerWeek: "max_spins_per_week",
