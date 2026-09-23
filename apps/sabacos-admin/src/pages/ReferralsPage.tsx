@@ -71,6 +71,7 @@ export function ReferralsPage() {
   const [walletNote, setWalletNote] = useState("");
   const [walletMsg, setWalletMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [commissions, setCommissions] = useState<CommissionRow[]>([]);
   const [commissionFilter, setCommissionFilter] = useState<"pending_review" | "confirmed" | "">("pending_review");
   const [payouts, setPayouts] = useState<PayoutRow[]>([]);
@@ -98,7 +99,20 @@ export function ReferralsPage() {
 
   const load = useCallback(() => {
     api.get<ReferralStats>("/admin/referrals/stats", token ?? undefined).then(setStats).catch(() => {});
-    api.get<{ settings: ReferralSettings }>("/admin/referrals/settings", token ?? undefined).then((res) => setSettings(res.settings)).catch(() => {});
+    api.get<{ settings: ReferralSettings | null }>("/admin/referrals/settings", token ?? undefined).then((res) => {
+      if (!res.settings) {
+        setSettingsError("The server returned no program settings. The referral_settings row may be missing — make sure migration 0011 was applied in Supabase.");
+      } else {
+        setSettings(res.settings);
+        setSettingsError(null);
+      }
+    }).catch((err) => {
+      setSettingsError(
+        `Could not load program settings (${err instanceof Error ? err.message : "request failed"}). ` +
+        "Usually this means database migrations are not applied (run them in Supabase SQL Editor) " +
+        "or the server is running an old deploy.",
+      );
+    });
     api.get<{ rolling: RollingAverages }>("/admin/referrals/metrics/latest", token ?? undefined).then((res) => setRolling(res.rolling)).catch(() => {});
     api.get<{ log: AdjustmentLogEntry[] }>("/admin/referrals/adjust/log?limit=10", token ?? undefined).then((res) => setAdjustLog(res.log)).catch(() => {})
       .finally(() => setLoading(false));
@@ -596,6 +610,17 @@ export function ReferralsPage() {
             </button>
           )}
         </div>
+
+        {settingsError && !settings && (
+          <div style={{ padding: "12px 16px", borderRadius: "var(--radius-sm)", background: "var(--danger-soft)", color: "var(--danger)", fontSize: 13 }}>
+            {settingsError}
+            <div style={{ marginTop: 8 }}>
+              <button className="btn btn-outline btn-sm" onClick={() => { setSettingsError(null); load(); }}>
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
 
         {settings && (
           <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
