@@ -304,6 +304,7 @@ const en = {
   payoutDay: "Payout day",
   payoutAgingHint: "Each commission becomes withdrawable 7 days after it's earned.",
   payoutBanksUnavailable: "Could not load the bank list — check your connection and reopen this page.",
+  payoutBanksOffline: "Showing the standard bank list (offline) — your bank will be verified automatically.",
 } as const;
 
 export type I18nKey = keyof typeof en;
@@ -613,6 +614,7 @@ const am: Record<I18nKey, string> = {
   payoutDay: "የክፍያ ቀን",
   payoutAgingHint: "እያንዳንዱ ኮሚሽን ከተገኘ ከ7 ቀናት በኋላ ለመውጣት ይቻላል።",
   payoutBanksUnavailable: "የባንኮች ዝርዝር መጫን አልተቻለም — ግንኙነትዎን ያረጋግጡ እና ገጹን እንደገና ይክፈቱ።",
+  payoutBanksOffline: "መደበኛውን የባንኮች ዝርዝር በማሳየት ላይ (ከመስመር ውጪ) — ባንክዎ በራስ-ሰር ይረጋገጣል።",
 };
 
 export const DEFAULT_LANGUAGE: Language = "en";

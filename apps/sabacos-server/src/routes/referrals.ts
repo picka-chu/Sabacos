@@ -29,7 +29,7 @@ import {
   getEligibleWithdrawalAmount,
   WITHDRAWAL_THRESHOLD_HALALA,
 } from "../db/referral-rewards.js";
-import { getChapaBanks } from "../services/chapa.js";
+import { getChapaBanks, PAYOUT_METHODS_FALLBACK } from "../services/chapa.js";
 import { getProfileById, getProfileByTelegramId } from "../db/profiles.js";
 import type { UserContext } from "../auth/telegram.js";
 import { referralDeepLink } from "@sabacos/core";
@@ -249,19 +249,18 @@ referralRoutes.post("/attribute", async (c) => {
 // Cash payout account (weekly Chapa withdrawals)
 // ──────────────────────────────────────────────────────────────────────
 
-/** GET /referral/banks — Chapa bank list for the payout-account form */
+/** GET /referral/banks — bank list for the payout-account form (live from Chapa, static fallback otherwise) */
 referralRoutes.get("/banks", async (c) => {
   const secret = c.env.CHAPA_SECRET_KEY;
-  if (!secret) {
-    return c.json({ error: { code: "payouts_disabled", message: "Cash payouts are not configured yet" } }, 503);
+  if (secret) {
+    try {
+      const banks = await getChapaBanks(secret);
+      return c.json({ banks, live: true });
+    } catch {
+      // Fall through to the static list below.
+    }
   }
-  try {
-    const banks = await getChapaBanks(secret);
-    return c.json({ banks });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Bank list unavailable";
-    return c.json({ error: { code: "banks_unavailable", message } }, 502);
-  }
+  return c.json({ banks: PAYOUT_METHODS_FALLBACK, live: false });
 });
 
 /** GET /profile/payout-account — current payout account + withdrawal eligibility */
@@ -312,25 +311,33 @@ referralRoutes.post("/profile/payout-account", async (c) => {
   }
 
   // Resolve the human-readable bank name and confirm the code is real.
-  // If Chapa is unreachable we still accept (verified=false) — full
-  // validation happens by attempting a real transfer, never silently.
+  // Accept codes from the live Chapa list or the static fallback list; the
+  // code is re-resolved live at payout time, and full validation happens by
+  // attempting a real transfer — never silently.
   let bankName = typeof body?.bankName === "string" ? body.bankName.trim().slice(0, 120) : "";
   const secret = c.env.CHAPA_SECRET_KEY;
+  let liveBanks: Array<{ code: string; name: string }> | null = null;
   if (secret) {
     try {
-      const banks = await getChapaBanks(secret);
-      const match = banks.find((b) => b.code === bankCode);
-      if (!match) {
-        return c.json({ error: { code: "bad_request", message: "Unknown bank code — pick a bank from the list" } }, 400);
-      }
-      bankName = match.name;
+      liveBanks = await getChapaBanks(secret);
     } catch {
-      if (!bankName) {
-        return c.json({ error: { code: "banks_unavailable", message: "Could not verify the bank right now — please try again" } }, 502);
-      }
+      liveBanks = null;
     }
-  } else if (!bankName) {
-    bankName = bankCode;
+  }
+  const knownCodes = new Set([
+    ...(liveBanks ?? []).map((b) => b.code),
+    ...PAYOUT_METHODS_FALLBACK.map((b) => b.code),
+  ]);
+  if (!knownCodes.has(bankCode)) {
+    return c.json({ error: { code: "bad_request", message: "Unknown bank — pick a bank from the list" } }, 400);
+  }
+  if (liveBanks) {
+    const match = liveBanks.find((b) => b.code === bankCode);
+    if (match) bankName = match.name;
+  }
+  if (!bankName) {
+    const fallback = PAYOUT_METHODS_FALLBACK.find((b) => b.code === bankCode);
+    bankName = fallback?.name ?? bankCode;
   }
 
   const db = getDb(c.env);

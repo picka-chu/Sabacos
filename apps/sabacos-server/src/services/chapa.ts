@@ -91,6 +91,32 @@ function normalizeBanks(body: unknown): ChapaBank[] {
   return banks;
 }
 
+/**
+ * Static fallback bank list (payout-capable methods from
+ * https://developer.chapa.co/payment-methods). Served when the live
+ * GET /v1/banks lookup fails so the payout-account form always works.
+ *
+ * Codes here are best-effort display values — Chapa's real numeric codes
+ * come from the live endpoint and can change. resolveBankCode() below
+ * upgrades any stored code to the live one right before a transfer, so a
+ * stale fallback code can never send money to the wrong bank (Chapa also
+ * rejects unknown codes outright — failures are safe, never misdirected).
+ */
+export const PAYOUT_METHODS_FALLBACK: ChapaBank[] = [
+  { code: "telebirr", name: "Telebirr" },
+  { code: "cbebirr", name: "CBE Birr" },
+  { code: "awashbirr", name: "Awash Birr" },
+  { code: "awash", name: "Awash Bank" },
+  { code: "coopay-ebirr", name: "Coopay-Ebirr" },
+  { code: "mpesa", name: "M-Pesa" },
+  { code: "boa", name: "BOA Card" },
+  { code: "amole", name: "Amole" },
+  { code: "enat", name: "Enat Bank" },
+  { code: "amhara", name: "Amhara Bank" },
+  { code: "cbe-transfer", name: "CBE Bank Transfer" },
+  { code: "coop", name: "COOP" },
+];
+
 /** Bank list for the payout-account form. Throws when Chapa is unreachable. */
 export async function getChapaBanks(secret: string): Promise<ChapaBank[]> {
   if (banksCache && Date.now() - banksCache.at < BANKS_TTL_MS) return banksCache.banks;
@@ -103,6 +129,33 @@ export async function getChapaBanks(secret: string): Promise<ChapaBank[]> {
   if (banks.length === 0) throw new Error("Chapa returned an empty bank list");
   banksCache = { at: Date.now(), banks };
   return banks;
+}
+
+/**
+ * Upgrade a stored bank code to Chapa's current live code, matching by stored
+ * code first, then by bank name (case-insensitive). Returns null when the
+ * live list is unreachable or contains neither — callers must NOT transfer
+ * in that case. Throws when there is no secret key at all.
+ */
+export async function resolveBankCode(
+  secret: string | undefined,
+  storedCode: string,
+  storedName: string,
+): Promise<string | null> {
+  if (!secret) throw new Error("CHAPA_SECRET_KEY not configured");
+  let live: ChapaBank[];
+  try {
+    // Bypass the cache: money is about to move, so re-validate live.
+    banksCache = null;
+    live = await getChapaBanks(secret);
+  } catch {
+    return null;
+  }
+  const byCode = live.find((b) => b.code === storedCode);
+  if (byCode) return byCode.code;
+  const want = storedName.trim().toLowerCase();
+  const byName = want ? live.find((b) => b.name.trim().toLowerCase() === want) : undefined;
+  return byName?.code ?? null;
 }
 
 // ──────────────────────────────────────────────────────────────────────

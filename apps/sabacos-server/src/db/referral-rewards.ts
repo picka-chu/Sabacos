@@ -966,6 +966,26 @@ export async function runWeeklyPayouts(
       continue;
     }
 
+    // Upgrade the stored code to Chapa's current live code BEFORE locking
+    // any funds — a stale/unknown code must fail here, not after a debit.
+    const { resolveBankCode } = await import("../services/chapa.js");
+    let liveBankCode: string | null = null;
+    try {
+      liveBankCode = await resolveBankCode(env.CHAPA_SECRET_KEY, account.bankCode, account.bankName);
+    } catch (err) {
+      console.error(`[payouts] bank-code resolution failed for ${p.id}:`, err);
+      result.failed += 1;
+      continue;
+    }
+    if (!liveBankCode) {
+      result.failed += 1;
+      await notifyAdminChannel(
+        env as never,
+        `💸 <b>Payout failed</b>\n\nReferrer ${who}: bank "${account.bankName}" could not be verified with Chapa right now. Ask them to re-save their account, then retry.`,
+      ).catch(() => undefined);
+      continue;
+    }
+
     // Insert first (reference = idempotency key, generated up front so the
     // UNIQUE constraint genuinely guards duplicates — never a placeholder).
     const { randomUUID } = await import("node:crypto");
@@ -1029,7 +1049,7 @@ export async function runWeeklyPayouts(
       accountName: account.accountName,
       accountNumber: account.accountNumber,
       amountHalala: eligible,
-      bankCode: account.bankCode,
+      bankCode: liveBankCode,
       reference: payout.chapaReference,
     });
 
@@ -1153,8 +1173,20 @@ export async function retryPayout(
     : null;
   if (!account) throw new Error("Payout account no longer exists");
 
-  const { createChapaTransfer, verifyChapaTransfer } = await import("../services/chapa.js");
+  const { createChapaTransfer, verifyChapaTransfer, resolveBankCode } = await import(
+    "../services/chapa.js"
+  );
   const { debitWallet, creditWallet } = await import("./wallet.js");
+
+  // Upgrade to the live bank code before locking funds (same rule as the
+  // weekly run: never debit for a transfer we can't address).
+  const liveBankCode = await resolveBankCode(env.CHAPA_SECRET_KEY, account.bankCode, account.bankName).catch(
+    () => null,
+  );
+  if (!liveBankCode) {
+    throw new Error("Could not verify the bank with Chapa right now — ask the referrer to re-save their account");
+  }
+
   await db.from("referral_payouts").update({ status: "pending", failed_reason: null }).eq("id", payout.id);
 
   // Re-lock the funds: every failed payout holds no locked balance (either it
@@ -1183,7 +1215,7 @@ export async function retryPayout(
     accountName: account.accountName,
     accountNumber: account.accountNumber,
     amountHalala: payout.amountHalala,
-    bankCode: account.bankCode,
+    bankCode: liveBankCode,
     reference: payout.chapaReference,
   });
 

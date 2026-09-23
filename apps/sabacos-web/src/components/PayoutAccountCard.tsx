@@ -28,7 +28,7 @@ export function PayoutAccountCard() {
   const [eligible, setEligible] = useState(0);
   const [payoutWeekday, setPayoutWeekday] = useState<number | null>(null);
   const [banks, setBanks] = useState<ChapaBank[]>([]);
-  const [banksFailed, setBanksFailed] = useState(false);
+  const [banksLive, setBanksLive] = useState(true);
   const [bankCode, setBankCode] = useState("");
   const [accountName, setAccountName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
@@ -38,7 +38,7 @@ export function PayoutAccountCard() {
   useEffect(() => {
     Promise.all([
       api.get<{ account: PayoutAccount | null; eligibleHalala: number; payoutWeekday: number }>("/referral/profile/payout-account").catch(() => null),
-      api.get<{ banks: ChapaBank[] }>("/referral/banks").catch(() => null),
+      api.get<{ banks: ChapaBank[]; live: boolean }>("/referral/banks").catch(() => null),
     ]).then(([acc, bankList]) => {
       if (acc) {
         setAccount(acc.account);
@@ -52,8 +52,9 @@ export function PayoutAccountCard() {
       }
       if (bankList) {
         setBanks(bankList.banks);
-      } else {
-        setBanksFailed(true);
+        // Offline list still works for saving — Chapa re-validates live at
+        // payout time — but tell the user it may be slightly out of date.
+        setBanksLive(bankList.live !== false);
       }
       setLoaded(true);
     });
@@ -113,11 +114,15 @@ export function PayoutAccountCard() {
           {t("payoutDay")}: <strong>{weekdayName}</strong>
         </p>
       )}
-      {banksFailed && (
+      {banks.length === 0 ? (
         <p style={{ fontSize: 12.5, color: "var(--danger, #d32f2f)", margin: "0 0 12px" }}>
           {t("payoutBanksUnavailable")}
         </p>
-      )}
+      ) : !banksLive ? (
+        <p className="muted" style={{ fontSize: 12, margin: "0 0 12px" }}>
+          {t("payoutBanksOffline")}
+        </p>
+      ) : null}
 
       <div className="field" style={{ marginBottom: 10 }}>
         <label>{t("payoutBank")}</label>
