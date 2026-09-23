@@ -719,6 +719,43 @@ export async function runWeeklyPayouts(
     const payout = mapPayout(payoutRow as Record<string, unknown>);
     await db.from("referral_payouts").update({ chapa_reference: payout.id }).eq("id", payout.id);
 
+    // Lock the funds BEFORE calling Chapa (same "lock the resource before you
+    // commit to using it" pattern finalize_order_payment uses for stock): the
+    // debited amount can't be spent in-app while the transfer is in flight.
+    // Any definitive Chapa failure credits it straight back below.
+    const { debitWallet, creditWallet } = await import("./wallet.js");
+    try {
+      await debitWallet(db, p.id, eligible, "Referral cash payout via Chapa", "payout", payout.id);
+    } catch (err) {
+      const reason = `Wallet debit failed: ${err instanceof Error ? err.message : String(err)}`;
+      await db
+        .from("referral_payouts")
+        .update({ status: "failed", failed_reason: reason })
+        .eq("id", payout.id);
+      result.failed += 1;
+      await notifyAdminChannel(
+        env as never,
+        `💸 <b>Payout failed</b>\n\nReferrer ${who} (${(eligible / 100).toFixed(2)} ETB): ${reason}. Retry from Admin → Referrals → Payouts.`,
+      ).catch(() => undefined);
+      continue;
+    }
+
+    const refundLockedFunds = async (reason: string) => {
+      await creditWallet(
+        db,
+        p.id,
+        eligible,
+        "Payout refund: Chapa transfer failed",
+        "payout_refund",
+        payout.id,
+      ).catch((err) => console.error(`[payouts] refund credit failed for ${payout.id}:`, err));
+      await db
+        .from("referral_payouts")
+        .update({ status: "failed", failed_reason: reason })
+        .eq("id", payout.id);
+      result.failed += 1;
+    };
+
     const transfer = await createChapaTransfer(env.CHAPA_SECRET_KEY, {
       accountName: account.accountName,
       accountNumber: account.accountNumber,
@@ -743,6 +780,7 @@ export async function runWeeklyPayouts(
       result.paidHalala += eligible;
     } else if (transfer.referenceUsedBefore) {
       // Response was likely lost on a previous attempt — verify instead.
+      // Only refund when verification definitively says the money didn't move.
       const verified = await verifyChapaTransfer(env.CHAPA_SECRET_KEY, payout.id);
       if (verified.status === "success") {
         await db
@@ -751,22 +789,23 @@ export async function runWeeklyPayouts(
           .eq("id", payout.id);
         result.paid += 1;
         result.paidHalala += eligible;
+      } else if (verified.status === "failed") {
+        await refundLockedFunds(transfer.message);
       } else {
+        // pending/unknown: money may still be in flight — keep processing,
+        // keep the funds locked; the hourly reconcile decides the outcome.
         await db
           .from("referral_payouts")
-          .update({ status: "failed", failed_reason: transfer.message })
+          .update({ status: "processing" })
           .eq("id", payout.id);
-        result.failed += 1;
+        result.paid += 1;
+        result.paidHalala += eligible;
       }
     } else {
-      await db
-        .from("referral_payouts")
-        .update({ status: "failed", failed_reason: transfer.message })
-        .eq("id", payout.id);
-      result.failed += 1;
+      await refundLockedFunds(transfer.message);
       await notifyAdminChannel(
         env as never,
-        `💸 <b>Payout failed</b>\n\nReferrer ${who} (${(eligible / 100).toFixed(2)} ETB): ${transfer.message}. Retry from Admin → Referrals → Payouts.`,
+        `💸 <b>Payout failed</b>\n\nReferrer ${who} (${(eligible / 100).toFixed(2)} ETB): ${transfer.message}. Locked funds were refunded to the wallet. Retry from Admin → Referrals → Payouts.`,
       ).catch(() => undefined);
     }
   }
@@ -784,13 +823,14 @@ export async function reconcileProcessingPayouts(
 
   const { data, error } = await db
     .from("referral_payouts")
-    .select("id, chapa_reference")
+    .select("id, referrer_id, amount_halala, chapa_reference")
     .eq("status", "processing")
     .limit(100);
   if (error) throw new Error(`reconcileProcessingPayouts: ${error.message}`);
 
   const { verifyChapaTransfer } = await import("../services/chapa.js");
-  for (const row of ((data ?? []) as Array<{ id: string; chapa_reference: string }>)) {
+  const { creditWallet } = await import("./wallet.js");
+  for (const row of ((data ?? []) as Array<{ id: string; referrer_id: string; amount_halala: number; chapa_reference: string }>)) {
     out.checked += 1;
     const verified = await verifyChapaTransfer(env.CHAPA_SECRET_KEY, row.chapa_reference).catch(() => ({
       status: "unknown" as const,
@@ -803,13 +843,22 @@ export async function reconcileProcessingPayouts(
         .eq("id", row.id);
       out.sent += 1;
     } else if (verified.status === "failed") {
+      // Definitive failure discovered late — refund the locked funds too.
+      await creditWallet(
+        db,
+        row.referrer_id,
+        row.amount_halala,
+        "Payout refund: Chapa transfer failed",
+        "payout_refund",
+        row.id,
+      ).catch((err) => console.error(`[payouts] refund credit failed for ${row.id}:`, err));
       await db
         .from("referral_payouts")
         .update({ status: "failed", failed_reason: verified.message })
         .eq("id", row.id);
       out.failed += 1;
     }
-    // pending/unknown: leave processing, retry next hour.
+    // pending/unknown: leave processing (funds stay locked), retry next hour.
   }
   return out;
 }
@@ -836,7 +885,30 @@ export async function retryPayout(
   if (!account) throw new Error("Payout account no longer exists");
 
   const { createChapaTransfer, verifyChapaTransfer } = await import("../services/chapa.js");
+  const { debitWallet, creditWallet } = await import("./wallet.js");
   await db.from("referral_payouts").update({ status: "pending", failed_reason: null }).eq("id", payout.id);
+
+  // Re-lock the funds: every failed payout holds no locked balance (either it
+  // never debited, or the failure path refunded), so a fresh debit is safe.
+  try {
+    await debitWallet(db, payout.referrerId, payout.amountHalala, "Referral cash payout via Chapa", "payout", payout.id);
+  } catch (err) {
+    const reason = `Wallet debit failed: ${err instanceof Error ? err.message : String(err)}`;
+    await db.from("referral_payouts").update({ status: "failed", failed_reason: reason }).eq("id", payout.id);
+    throw new Error(reason);
+  }
+
+  const refundLockedFunds = async (reason: string) => {
+    await creditWallet(
+      db,
+      payout.referrerId,
+      payout.amountHalala,
+      "Payout refund: Chapa transfer failed",
+      "payout_refund",
+      payout.id,
+    ).catch((err) => console.error(`[payouts] refund credit failed for ${payout.id}:`, err));
+    await db.from("referral_payouts").update({ status: "failed", failed_reason: reason }).eq("id", payout.id);
+  };
 
   const transfer = await createChapaTransfer(env.CHAPA_SECRET_KEY, {
     accountName: account.accountName,
@@ -853,19 +925,21 @@ export async function retryPayout(
       .eq("id", payout.id);
   } else if (transfer.referenceUsedBefore) {
     const verified = await verifyChapaTransfer(env.CHAPA_SECRET_KEY, payout.chapaReference);
-    await db
-      .from("referral_payouts")
-      .update(
-        verified.status === "success"
-          ? { status: "sent", sent_at: new Date().toISOString() }
-          : { status: "failed", failed_reason: transfer.message },
-      )
-      .eq("id", payout.id);
+    if (verified.status === "success") {
+      await db
+        .from("referral_payouts")
+        .update({ status: "sent", sent_at: new Date().toISOString() })
+        .eq("id", payout.id);
+    } else if (verified.status === "failed") {
+      await refundLockedFunds(transfer.message);
+    } else {
+      await db
+        .from("referral_payouts")
+        .update({ status: "processing" })
+        .eq("id", payout.id);
+    }
   } else {
-    await db
-      .from("referral_payouts")
-      .update({ status: "failed", failed_reason: transfer.message })
-      .eq("id", payout.id);
+    await refundLockedFunds(transfer.message);
   }
 
   const updated = await getPayoutById(db, payout.id);
