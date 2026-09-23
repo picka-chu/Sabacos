@@ -164,6 +164,23 @@ export async function updateOrderStatus(
     );
   }
 
+  // Full-payment rule: split orders (deposit first, balance on delivery) earn
+  // commission only once the balance is collected, i.e. at delivery — never
+  // on the deposit. processReferralReward is idempotent (no-op when the
+  // referral row is already qualified), so full-payment orders rewarded at
+  // charge time are unaffected by this second call.
+  if (status === "delivered" && order.status !== "delivered") {
+    const { processReferralReward } = await import("./referral-rewards.js");
+    const delivered = orderRowSchema.parse(data);
+    await processReferralReward(db, {
+      referredProfileId: delivered.profileId,
+      orderId: delivered.id,
+      orderTotalHalala: delivered.totalHalala,
+    }).catch((err) =>
+      console.error(`Delivery commission failed for order ${orderId}:`, err),
+    );
+  }
+
   return orderRowSchema.parse(data);
 }
 
