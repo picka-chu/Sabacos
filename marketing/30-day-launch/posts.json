@@ -1,0 +1,916 @@
+{
+ "campaign": "Sabacos Mini-App Launch - 30-Day Content",
+ "audience": "Women in Addis Ababa, university students, young professionals",
+ "cta_default": {
+  "en": "Shop inside Telegram: t.me/sabacosbot",
+  "am": "በቴሌግራም ውስጥ ይግዙ: t.me/sabacosbot"
+ },
+ "hashtags_default": [
+  "#Sabacos",
+  "#AddisAbaba",
+  "#HabeshaBeauty",
+  "#OriginalOnly"
+ ],
+ "days": [
+  {
+   "day": 1,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "DAY 1 - READ THIS FIRST",
+     "headline": "ADDIS, STOP BUYING FAKE MAKEUP.",
+     "sub": "Every street-corner original is eating your skin.",
+     "am": "ሐሰተኛ መዋቢያ ቆዳችሁን እያወደመ ነው።"
+    }
+   ],
+   "caption_en": "If the price looks too good to be true, your skin pays the difference. Sabacos sells 100% ORIGINAL cosmetics, ordered inside Telegram, delivered in Addis in 1 to 3 days.",
+   "caption_am": "ሐሰተኛ መዋቢያ መግዛት አቁሙ። ሳባኮስ 100% ኦርጅናል መዋቢያዎችን በቴሌግራም ውስጥ እስከ ቤታችሁ ያደርሳል።",
+   "design": {
+    "bg": "#F3EAD8",
+    "ink": "#141414",
+    "accent": "#C8102E",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#CampusGlow",
+    "#EthiopianSkincare"
+   ],
+   "week_theme": "WEEK 1 - LAUNCH: Addis, your glow plug is here"
+  },
+  {
+   "day": 2,
+   "format": "carousel",
+   "slides": [
+    {
+     "kicker": "WHAT IS SABACOS? 1 OF 3",
+     "headline": "A BEAUTY SHOP LIVING INSIDE YOUR TELEGRAM.",
+     "sub": "No app download. No password you will forget.",
+     "am": "ምንም አፕ አያስፈልግም።"
+    },
+    {
+     "kicker": "WHAT IS SABACOS? 2 OF 3",
+     "headline": "100% ORIGINAL. EVERY PRODUCT. EVERY TIME.",
+     "sub": "Curated skincare, makeup and fragrance.",
+     "am": "ሁሉም ምርት ኦርጅናል, ሁልጊዜ።"
+    },
+    {
+     "kicker": "WHAT IS SABACOS? 3 OF 3",
+     "headline": "PAY HALF NOW. HALF ON DELIVERY.",
+     "sub": "No interest. No stories. Just glow.",
+     "am": "ግማሽ አሁን, ግማሽ ሲደርስ።"
+    }
+   ],
+   "caption_en": "Sabacos in 3 slides. Shop in Telegram, everything original, pay half now and half when it arrives. Save this post.",
+   "caption_am": "ሳባኮስ በአጭሩ። በቴሌግራም ይግዙ, ሁሉም ኦርጅናል, ግማሽ አሁን ግማሽ ሲደርስ።",
+   "design": {
+    "bg": "#141414",
+    "ink": "#F3EAD8",
+    "accent": "#E8A020",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#TelegramShopping",
+    "#GlowUpAddis"
+   ],
+   "week_theme": "WEEK 1 - LAUNCH: Addis, your glow plug is here"
+  },
+  {
+   "day": 3,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "POV - PAYDAY EDITION",
+     "headline": "POV: YOU PAID HALF AND YOUR SERUM IS ALREADY ON A BAJAJ.",
+     "sub": "Pay half now, half on delivery. Zero interest.",
+     "am": "ግማሽ አሁን ይክፈሉ, ግማሽ ሲደርስ, ያለ ወለድ።"
+    }
+   ],
+   "caption_en": "Glow now, pay comfortably. Which product would you grab first if you only pay half today? Tell us below.",
+   "caption_am": "ዛሬ ግማሽ ብቻ ከፍላችሁ ይዘዙ። መጀመሪያ የምትገዙት ምርት የቱ ነው?",
+   "design": {
+    "bg": "#E85D1F",
+    "ink": "#FFFFFF",
+    "accent": "#141414",
+    "layout": "split"
+   },
+   "hashtags": [
+    "#PayHalf",
+    "#AddisShopping"
+   ],
+   "week_theme": "WEEK 1 - LAUNCH: Addis, your glow plug is here"
+  },
+  {
+   "day": 4,
+   "format": "carousel",
+   "slides": [
+    {
+     "kicker": "ORDER IN 60 SECONDS 1 OF 4",
+     "headline": "OPEN THE BOT. TAP SHOP.",
+     "sub": "The shop lives where you already chat.",
+     "am": "ሱቁ የሚገኘው በቴሌግራም ውስጥ ነው።"
+    },
+    {
+     "kicker": "ORDER IN 60 SECONDS 2 OF 4",
+     "headline": "ADD TO CART. CHECKOUT.",
+     "sub": "Address plus phone. That is the whole form.",
+     "am": "አድራሻ እና ስልክ, ያ ብቻ።"
+    },
+    {
+     "kicker": "ORDER IN 60 SECONDS 3 OF 4",
+     "headline": "PAY SECURELY WITH CHAPA.",
+     "sub": "Half now or full, your choice.",
+     "am": "በቻፓ በደህና ይክፈሉ።"
+    },
+    {
+     "kicker": "ORDER IN 60 SECONDS 4 OF 4",
+     "headline": "DOOR IN 1 TO 3 DAYS.",
+     "sub": "Live status updates until it lands.",
+     "am": "በ1-3 ቀን እስከ በራችሁ።"
+    }
+   ],
+   "caption_en": "Ordering on Sabacos takes less time than choosing a filter. Screenshot slide 1 and send it to the friend who still buys foundation from a taxi-window vendor.",
+   "caption_am": "በሳባኮስ ማዘዝ ከፊልተር ከመምረጥ ያነሰ ጊዜ ይወስዳል።",
+   "design": {
+    "bg": "#F3EAD8",
+    "ink": "#141414",
+    "accent": "#1E5B3F",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#HowToOrder",
+    "#OnlineShoppingET"
+   ],
+   "week_theme": "WEEK 1 - LAUNCH: Addis, your glow plug is here"
+  },
+  {
+   "day": 5,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "UNPOPULAR TRUTH",
+     "headline": "YOUR BIGGEST SKIN PROBLEM IS NOT YOUR SKIN.",
+     "sub": "It is the fake products you layer on it.",
+     "am": "ትልቁ ችግር ቆዳችሁ አይደለም, ሐሰተኛ ምርቶች ናቸው።"
+    }
+   ],
+   "caption_en": "Breakouts and dark patches? Check your shelf before you blame your skin. 100 percent original or nothing.",
+   "caption_am": "ቆዳችሁን ከመውቀስ በፊት መደርደሪያችሁን ቃኙ። ኦርጅናል ብቻ።",
+   "design": {
+    "bg": "#141414",
+    "ink": "#F3EAD8",
+    "accent": "#C8102E",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#SkinTruth",
+    "#FakeFree"
+   ],
+   "week_theme": "WEEK 1 - LAUNCH: Addis, your glow plug is here"
+  },
+  {
+   "day": 6,
+   "format": "carousel",
+   "slides": [
+    {
+     "kicker": "SPOT THE FAKE 1 OF 3",
+     "headline": "IT SMELLS LIKE CHEMICALS, NOT PERFUME.",
+     "sub": "Originals smell the same every single bottle.",
+     "am": "ኦርጅናሉ ሁልጊዜ አንድ ዓይነት ይሸታል።"
+    },
+    {
+     "kicker": "SPOT THE FAKE 2 OF 3",
+     "headline": "THE SEAL WAS ALREADY BROKEN.",
+     "sub": "No seal, no deal. Walk away.",
+     "am": "ማህተም ከሌለ አትግዙ።"
+    },
+    {
+     "kicker": "SPOT THE FAKE 3 OF 3",
+     "headline": "IT COSTS LESS THAN YOUR TAXI RIDE.",
+     "sub": "Originals have batch codes. Ask before you buy.",
+     "am": "ኦርጅናል የቡድን ቁጥር አለው።"
+    }
+   ],
+   "caption_en": "3 signs your makeup is fake. Save this and check your shelf tonight. Sabacos products arrive sealed, coded and original.",
+   "caption_am": "መዋቢያችሁ ሐሰተኛ መሆኑን የሚያሳዩ 3 ምልክቶች። ሼር አድርጉ።",
+   "design": {
+    "bg": "#F3EAD8",
+    "ink": "#141414",
+    "accent": "#C8102E",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#SpotTheFake",
+    "#OriginalOnly"
+   ],
+   "week_theme": "WEEK 1 - LAUNCH: Addis, your glow plug is here"
+  },
+  {
+   "day": 7,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "SUNDAY RESET",
+     "headline": "CHECK YOUR SHELF. WHAT RUNS OUT BY FRIDAY?",
+     "sub": "Order today, glowing by midweek.",
+     "am": "እሁድ ዕለት መደርደሪያችሁን ቃኙ።"
+    }
+   ],
+   "caption_en": "Sunday habit of glowing girls: check the shelf, list what is finishing, order before the week starts. Delivery lands in 1 to 3 days.",
+   "caption_am": "የእሁድ ልማድ። የሚያልቀውን ዝርዝር አውጡ, ከሳምንቱ በፊት ይዘዙ።",
+   "design": {
+    "bg": "#1E5B3F",
+    "ink": "#F3EAD8",
+    "accent": "#E8A020",
+    "layout": "split"
+   },
+   "hashtags": [
+    "#SundayReset",
+    "#SkincareRoutine"
+   ],
+   "week_theme": "WEEK 1 - LAUNCH: Addis, your glow plug is here"
+  },
+  {
+   "day": 8,
+   "format": "carousel",
+   "slides": [
+    {
+     "kicker": "DORM-ROOM ROUTINE 1 OF 4",
+     "headline": "STEP 1: CLEANSE. 60 SECONDS.",
+     "sub": "Wash off the Addis dust before anything else.",
+     "am": "የአዲስ አበባ አፈርን መጀመሪያ ታጠቡ።"
+    },
+    {
+     "kicker": "DORM-ROOM ROUTINE 2 OF 4",
+     "headline": "STEP 2: TREAT. ONE SERUM.",
+     "sub": "Vitamin C in the morning. That is enough.",
+     "am": "ጠዋት አንድ ሴረም በቂ ነው።"
+    },
+    {
+     "kicker": "DORM-ROOM ROUTINE 3 OF 4",
+     "headline": "STEP 3: MOISTURIZE. SEAL IT IN.",
+     "sub": "Dorm air is dry. Your skin should not be.",
+     "am": "ቆዳችሁን እርጥብ አድርጉ።"
+    },
+    {
+     "kicker": "DORM-ROOM ROUTINE 4 OF 4",
+     "headline": "STEP 4: SPF. EVERY MORNING.",
+     "sub": "Addis sun at 2400 meters does not forgive.",
+     "am": "የአዲስ አበባ ፀሐይ አያስምርም።"
+    }
+   ],
+   "caption_en": "Your dorm-room routine: 4 steps, 5 minutes, morning and night. All four live on Sabacos, all original, pay half now.",
+   "caption_am": "አራት ደረጃዎች, አምስት ደቂቃዎች። ሁሉም በሳባኮስ, ሁሉም ኦርጅናል።",
+   "design": {
+    "bg": "#F3EAD8",
+    "ink": "#141414",
+    "accent": "#E83E8C",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#CampusGlow",
+    "#Skincare101"
+   ],
+   "week_theme": "WEEK 2 - PRODUCT: campus glow on a budget"
+  },
+  {
+   "day": 9,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "PRODUCT SPOTLIGHT",
+     "headline": "MEET THE BOTTLE YOUR ROOMMATE KEEPS BORROWING.",
+     "sub": "Brightening vitamin-C serum for daily glow.",
+     "am": "ጓደኛሽ በተደጋጋሚ የምትበደርበት ጠርሙስ።"
+    }
+   ],
+   "caption_en": "One bottle, morning and night, two weeks. Then check the mirror. 100 percent original vitamin-C serum, delivered to your dorm.",
+   "caption_am": "አንድ ጠርሙስ, ጠዋት እና ማታ, ሁለት ሳምንት። ከዚያ መስታወቱን ቃኙ።",
+   "design": {
+    "bg": "#E83E8C",
+    "ink": "#FFFFFF",
+    "accent": "#141414",
+    "layout": "split"
+   },
+   "hashtags": [
+    "#SerumLove",
+    "#ProductSpotlight"
+   ],
+   "week_theme": "WEEK 2 - PRODUCT: campus glow on a budget"
+  },
+  {
+   "day": 10,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "MYTH VS FACT",
+     "headline": "MYTH: YOU NEED 10 STEPS. FACT: 3 CONSISTENT STEPS BEAT 10 RANDOM ONES.",
+     "sub": "Consistency is the active ingredient.",
+     "am": "አፈ-ታሪክ 10 ደረጃዎች። እውነት 3 ወጥ ደረጃዎች።"
+    }
+   ],
+   "caption_en": "Stop buying a new product every week. Cleanse, treat, moisturize, repeat for 30 days. Your skin keeps score.",
+   "caption_am": "በየሳምንቱ አዲስ ምርት መግዛት አቁሙ። ታጠቡ, ሴረም ቀቡ, እርጥበት አድርጉ, ለ30 ቀን ድገሙ።",
+   "design": {
+    "bg": "#141414",
+    "ink": "#F3EAD8",
+    "accent": "#F2B705",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#MythVsFact",
+    "#SkincareTruth"
+   ],
+   "week_theme": "WEEK 2 - PRODUCT: campus glow on a budget"
+  },
+  {
+   "day": 11,
+   "format": "carousel",
+   "slides": [
+    {
+     "kicker": "KNOW YOUR SKIN 1 OF 3",
+     "headline": "OILY BY NOON? BLAME THE DUST, NOT YOUR GENES.",
+     "sub": "Gel cleanser, light moisturizer. Done.",
+     "am": "በቀን እኩለ ቀን ቅባት? ጄል ማጽጃ ይጠቀሙ።"
+    },
+    {
+     "kicker": "KNOW YOUR SKIN 2 OF 3",
+     "headline": "TIGHT AND FLAKY AFTER WASHING? YOU ARE DRY.",
+     "sub": "Cream cleanser, rich moisturizer. Done.",
+     "am": "ደረቅ ከሆናችሁ, ክሬም ማጽጃ ይጠቀሙ።"
+    },
+    {
+     "kicker": "KNOW YOUR SKIN 3 OF 3",
+     "headline": "SHINY NOSE, DRY CHEEKS? COMBINATION.",
+     "sub": "Match the product to the zone, not the trend.",
+     "am": "ምርቱን ከቆዳችሁ ጋር አዛምዱ።"
+    }
+   ],
+   "caption_en": "Addis dust hits every skin type differently. First learn your type, then buy for it. Comment OILY, DRY or COMBO and we will reply with a routine.",
+   "caption_am": "መጀመሪያ የቆዳችሁን ዓይነት እወቁ, ከዚያ ለእሱ ይግዙ።",
+   "design": {
+    "bg": "#F3EAD8",
+    "ink": "#141414",
+    "accent": "#7B5EA7",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#KnowYourSkin",
+    "#AddisDust"
+   ],
+   "week_theme": "WEEK 2 - PRODUCT: campus glow on a budget"
+  },
+  {
+   "day": 12,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "ONE SHADE FITS ALL",
+     "headline": "THE ONE RED THAT SUITS EVERY HABESHA SKIN TONE.",
+     "sub": "Blue-based red. Melanin approved.",
+     "am": "ለኢትዮጵያ ቆዳ የሚሆን አንድ ቀይ።"
+    }
+   ],
+   "caption_en": "Deep, blue-based reds make Habesha skin glow. One swipe, instant confidence. Find your red on Sabacos today.",
+   "caption_am": "ጥልቅ ቀይ የሐበሻ ቆዳን ያበራል። ቀያችሁን ዛሬ በሳባኮስ አግኙ።",
+   "design": {
+    "bg": "#C8102E",
+    "ink": "#FFFFFF",
+    "accent": "#141414",
+    "layout": "split"
+   },
+   "hashtags": [
+    "#RedLipstick",
+    "#HabeshaBeauty"
+   ],
+   "week_theme": "WEEK 2 - PRODUCT: campus glow on a budget"
+  },
+  {
+   "day": 13,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "STUDENT BUDGET APPROVED",
+     "headline": "A FULL ROUTINE FOR LESS THAN YOUR WEEKLY TAXI MONEY.",
+     "sub": "Cleanser, serum, moisturizer, SPF. Original.",
+     "am": "ሙሉ እንክብካቤ, ከሳምንታዊ ታክሲያችሁ ባነሰ።"
+    }
+   ],
+   "caption_en": "You do not need a salary to have a routine. You need the right 4 products and the pay-half option. Build yours on Sabacos.",
+   "caption_am": "ልማድ ለማግኘት ደመወዝ አያስፈልግም። ትክክለኛዎቹ 4 ምርቶች እና የግማሽ ክፍያ በቂ ናቸው።",
+   "design": {
+    "bg": "#F2B705",
+    "ink": "#141414",
+    "accent": "#C8102E",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#StudentBudget",
+    "#CampusGlow"
+   ],
+   "week_theme": "WEEK 2 - PRODUCT: campus glow on a budget"
+  },
+  {
+   "day": 14,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "REEL SCRIPT INCLUDED",
+     "headline": "GET READY WITH ME: CAMPUS EDITION. 5 MINUTES.",
+     "sub": "Film it with Sabacos products, tag us.",
+     "am": "በሳባኮስ ምርቶች ቅረጹ, tag አድርጉን።"
+    }
+   ],
+   "caption_en": "REEL SCRIPT: 0-3s bare face hook, 3-15s apply 3 products fast, 15-25s the walk to class, 25-30s final glow + Sabacos name. Post it and tag us for a repost.",
+   "caption_am": "ፊታችሁን አሳዩ, 3 ምርቶችን በፍጥነት ቀቡ, ወደ ክፍል ስትሄዱ አሳዩ, መጨረሻውን glow አሳዩ።",
+   "design": {
+    "bg": "#141414",
+    "ink": "#F3EAD8",
+    "accent": "#E83E8C",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#GRWM",
+    "#CampusEdition"
+   ],
+   "week_theme": "WEEK 2 - PRODUCT: campus glow on a budget"
+  },
+  {
+   "day": 15,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "THE 10 PERCENT RULE",
+     "headline": "YOUR FRIENDS ORDER EQUALS YOUR 10 PERCENT. EVERY SINGLE TIME.",
+     "sub": "She shops. You earn. That is the deal.",
+     "am": "ጓደኛሽ ትገዛለች, አንቺ 10% ታገኛለሽ።"
+    }
+   ],
+   "caption_en": "Share your Sabacos link. Every time a friend orders through it, 10 percent of the sale lands in your wallet. No limit talk, just math.",
+   "caption_am": "ሊንክሽን ሼር አድርጊ። ጓደኛሽ በዚያ ስትገዛ 10% ወደ walletሽ ይገባል።",
+   "design": {
+    "bg": "#141414",
+    "ink": "#F3EAD8",
+    "accent": "#E8A020",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#Earn10Percent",
+    "#ReferAndEarn"
+   ],
+   "week_theme": "WEEK 3 - MONEY: your phone is your salary"
+  },
+  {
+   "day": 16,
+   "format": "carousel",
+   "slides": [
+    {
+     "kicker": "HOW REFERRAL WORKS 1 OF 3",
+     "headline": "STEP 1: SHARE YOUR LINK.",
+     "sub": "One tap from the Referral page in the app.",
+     "am": "ከReferral ገጽ ሊንክሽን ላኪ።"
+    },
+    {
+     "kicker": "HOW REFERRAL WORKS 2 OF 3",
+     "headline": "STEP 2: FRIEND ORDERS.",
+     "sub": "She gets 5 percent off her first order.",
+     "am": "እሷ በመጀመሪያ ትዕዛዟ 5% ቅናሽ ታገኛለች።"
+    },
+    {
+     "kicker": "HOW REFERRAL WORKS 3 OF 3",
+     "headline": "STEP 3: YOU EARN 10 PERCENT.",
+     "sub": "Lands in your wallet. Paid out weekly.",
+     "am": "10% ወደ walletሽ። በየሳምንቱ ክፍያ።"
+    }
+   ],
+   "caption_en": "Referral in 3 steps. Your link is waiting in the Sabacos app under Referral. First person to share today wins the day.",
+   "caption_am": "ሪፈራል በ3 ደረጃዎች። ሊንክሽ በመተግበሪያው ውስጥ።",
+   "design": {
+    "bg": "#F3EAD8",
+    "ink": "#141414",
+    "accent": "#1E5B3F",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#HowReferralWorks",
+    "#SideHustleET"
+   ],
+   "week_theme": "WEEK 3 - MONEY: your phone is your salary"
+  },
+  {
+   "day": 17,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "FRIEND CODE",
+     "headline": "FRIENDS DO NOT LET FRIENDS PAY FULL PRICE.",
+     "sub": "5 percent off your first order, through a friend.",
+     "am": "ጓደኞች ሙሉ ዋጋ አይከፍሉም።"
+    }
+   ],
+   "caption_en": "New here? Order through a friend's Sabacos link and your first order drops 5 percent. Ask your group chat who has a link.",
+   "caption_am": "አዲስ ነሽ? በጓደኛሽ ሊንክ ይዘዙ እና በመጀመሪያ ትዕዛዝሽ 5% ቅናሽ አግኚ።",
+   "design": {
+    "bg": "#E83E8C",
+    "ink": "#FFFFFF",
+    "accent": "#141414",
+    "layout": "split"
+   },
+   "hashtags": [
+    "#FriendDiscount",
+    "#FirstOrder"
+   ],
+   "week_theme": "WEEK 3 - MONEY: your phone is your salary"
+  },
+  {
+   "day": 18,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "STUDENT SIDE-HUSTLE",
+     "headline": "NO SHOP. NO CAPITAL. JUST YOUR TELEGRAM.",
+     "sub": "The side-hustle Addis did not see coming.",
+     "am": "ሱቅ አያስፈልግም። ካፒታል አያስፈልግም።"
+    }
+   ],
+   "caption_en": "Between lectures, share your link. When classmates order, you earn 10 percent. Your phone already does the work.",
+   "caption_am": "በመማሪያ ክፍሎች መካከል ሊንክሽን ሼር አድርጊ።",
+   "design": {
+    "bg": "#F2B705",
+    "ink": "#141414",
+    "accent": "#141414",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#StudentHustle",
+    "#CampusMoney"
+   ],
+   "week_theme": "WEEK 3 - MONEY: your phone is your salary"
+  },
+  {
+   "day": 19,
+   "format": "carousel",
+   "slides": [
+    {
+     "kicker": "SPIN THE WHEEL 1 OF 3",
+     "headline": "REFER 3 FRIENDS.",
+     "sub": "Every 3 qualified referrals unlocks a spin.",
+     "am": "3 ጓደኞችን ጠቅሚ።"
+    },
+    {
+     "kicker": "SPIN THE WHEEL 2 OF 3",
+     "headline": "SPIN THE PRIZE WHEEL.",
+     "sub": "Prizes, coupons and surprises inside.",
+     "am": "ሽልማቶች እና ኩፖኖች።"
+    },
+    {
+     "kicker": "SPIN THE WHEEL 3 OF 3",
+     "headline": "COUPONS WORK ON YOUR NEXT ORDER.",
+     "sub": "Your referrals literally pay for your glow.",
+     "am": "ሪፈራልሽ ለ glowሽ ይከፍላል።"
+    }
+   ],
+   "caption_en": "Every 3 referrals equals 1 free spin on the Sabacos prize wheel. Coupons drop straight into your account.",
+   "caption_am": "እያንዳንዱ 3 ሪፈራል 1 ነፃ spin ይሰጣል።",
+   "design": {
+    "bg": "#7B5EA7",
+    "ink": "#FFFFFF",
+    "accent": "#F2B705",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#SpinToWin",
+    "#SabacosWheel"
+   ],
+   "week_theme": "WEEK 3 - MONEY: your phone is your salary"
+  },
+  {
+   "day": 20,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "FRIDAY MONEY",
+     "headline": "FRIDAY EQUALS PAYOUT DAY. CHECK YOUR WALLET.",
+     "sub": "Referral earnings, paid out weekly.",
+     "am": "ዓርብ የክፍያ ቀን ነው።"
+    }
+   ],
+   "caption_en": "All week your links work for you. On Friday the wallet pays out. Screenshot your balance and tag us.",
+   "caption_am": "በየሳምንቱ walletሽ ይከፈላል።",
+   "design": {
+    "bg": "#1E5B3F",
+    "ink": "#F3EAD8",
+    "accent": "#E8A020",
+    "layout": "split"
+   },
+   "hashtags": [
+    "#PayoutFriday",
+    "#WalletCheck"
+   ],
+   "week_theme": "WEEK 3 - MONEY: your phone is your salary"
+  },
+  {
+   "day": 21,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "TAG HER",
+     "headline": "TAG THE FRIEND WHO STILL OWES YOU A BIRTHDAY GIFT.",
+     "sub": "She can pay you back in glow. You both earn.",
+     "am": "ጓደኛሽን tag አድርጊ።"
+    }
+   ],
+   "caption_en": "Tag her below. If she orders through your link, she saves 5 percent and you earn 10 percent. Debt settled.",
+   "caption_am": "Tag አድርጊያት። ስትገዛ እሷ 5% ትቆጥባለች, አንቺ 10% ታገኛለሽ።",
+   "design": {
+    "bg": "#F3EAD8",
+    "ink": "#141414",
+    "accent": "#E83E8C",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#TagAFriend",
+    "#GiftGlow"
+   ],
+   "week_theme": "WEEK 3 - MONEY: your phone is your salary"
+  },
+  {
+   "day": 22,
+   "format": "carousel",
+   "slides": [
+    {
+     "kicker": "HER STORY 1 OF 3",
+     "headline": "SHE ORDERED ON MONDAY.",
+     "sub": "Skeptical. First online beauty order ever.",
+     "am": "በመጀመሪያ ተጠራጠረች።"
+    },
+    {
+     "kicker": "HER STORY 2 OF 3",
+     "headline": "THE BAJAJ CAME ON WEDNESDAY.",
+     "sub": "Sealed box. Batch codes. Real perfumes.",
+     "am": "ታሽጎ ሳጥን። ኦርጅናል ሽቶ።"
+    },
+    {
+     "kicker": "HER STORY 3 OF 3",
+     "headline": "GLOWING BY FRIDAY.",
+     "sub": "Now her whole dorm orders through her link.",
+     "am": "አሁን መላው dorm በሊንኳ ይገዛል።"
+    }
+   ],
+   "caption_en": "Real customer arc. Monday doubt, Wednesday delivery, Friday glow. Send us your story for a repost and a coupon.",
+   "caption_am": "እውን ታሪክ። ታሪክሽን ላኪልን, repost እና ኩፖን አግኚ።",
+   "design": {
+    "bg": "#F3EAD8",
+    "ink": "#141414",
+    "accent": "#C8102E",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#GlowStory",
+    "#CustomerLove"
+   ],
+   "week_theme": "WEEK 4 - TRUST + FINALE: proof, party, payout"
+  },
+  {
+   "day": 23,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "DELIVERY PROMISE",
+     "headline": "PIASSA TO CMC IN 1 TO 3 DAYS.",
+     "sub": "That is the Sabacos promise, with live tracking.",
+     "am": "ፒያሳ እስከ ሲኤምሲ በ1-3 ቀን።"
+    }
+   ],
+   "caption_en": "Order anywhere in Addis, track it live, receive it sealed. Delivery that respects your week.",
+   "caption_am": "በአዲስ አበባ የትም ይሁን, በቀጥታ ይከታተሉ, ታሽጎ ይቀበሉ።",
+   "design": {
+    "bg": "#141414",
+    "ink": "#F3EAD8",
+    "accent": "#E85D1F",
+    "layout": "split"
+   },
+   "hashtags": [
+    "#FastDelivery",
+    "#AddisAbaba"
+   ],
+   "week_theme": "WEEK 4 - TRUST + FINALE: proof, party, payout"
+  },
+  {
+   "day": 24,
+   "format": "carousel",
+   "slides": [
+    {
+     "kicker": "YOU ASKED 1 OF 4",
+     "headline": "IS EVERYTHING REALLY ORIGINAL?",
+     "sub": "Yes. Sealed, coded, sourced from authorized channels.",
+     "am": "አዎ። ታሽጎ, ቁጥር ያለው, ኦርጅናል።"
+    },
+    {
+     "kicker": "YOU ASKED 2 OF 4",
+     "headline": "CAN I REALLY PAY HALF?",
+     "sub": "Half now with Chapa, half cash on delivery.",
+     "am": "አዎ። ግማሽ አሁን, ግማሽ ሲደርስ።"
+    },
+    {
+     "kicker": "YOU ASKED 3 OF 4",
+     "headline": "HOW FAST IS DELIVERY?",
+     "sub": "1 to 3 days across Addis Ababa.",
+     "am": "በአዲስ አበባ በ1-3 ቀን።"
+    },
+    {
+     "kicker": "YOU ASKED 4 OF 4",
+     "headline": "HOW DO I EARN 10 PERCENT?",
+     "sub": "Share your link. Friends order. Wallet grows.",
+     "am": "ሊንክሽን ሼር አድርጊ, walletሽ ያድጋል።"
+    }
+   ],
+   "caption_en": "The 4 questions everyone asks, answered. Drop any other question below and we reply within a day.",
+   "caption_am": "4ቱም ጥያቄዎች ተመልሰዋል። ሌላ ጥያቄ ካለሽ በታች ጻፊ።",
+   "design": {
+    "bg": "#F3EAD8",
+    "ink": "#141414",
+    "accent": "#7B5EA7",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#FAQ",
+    "#AskSabacos"
+   ],
+   "week_theme": "WEEK 4 - TRUST + FINALE: proof, party, payout"
+  },
+  {
+   "day": 25,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "WEDDING SEASON",
+     "headline": "WEDDING SEASON IS HERE. YOUR SKIN GOT THE INVITE TOO.",
+     "sub": "30-day glow plans start with one serum.",
+     "am": "የሰርግ ወቅት ደርሷል። ቆዳሽም ተጋብዟል።"
+    }
+   ],
+   "caption_en": "Bridesmaid, bride, or professional guest. Start your skin prep 30 days out with originals that actually work.",
+   "caption_am": "ሙሽሪት, ሚዜ, ወይም እንግዳ። የቆዳ ዝግጅትሽን 30 ቀን ቀደም ብለሽ ጀምሪ።",
+   "design": {
+    "bg": "#E83E8C",
+    "ink": "#FFFFFF",
+    "accent": "#F2B705",
+    "layout": "split"
+   },
+   "hashtags": [
+    "#WeddingGlow",
+    "#BridalPrep"
+   ],
+   "week_theme": "WEEK 4 - TRUST + FINALE: proof, party, payout"
+  },
+  {
+   "day": 26,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "FOR THE HUSTLERS",
+     "headline": "WHAT I WISH SOMEONE TOLD ME BEFORE MY SMALL BUSINESS.",
+     "sub": "You do not need capital. You need a link.",
+     "am": "ካፒታል አያስፈልግሽም። ሊንክ ብቻ።"
+    }
+   ],
+   "caption_en": "No rent. No stock. No capital. Share your Sabacos link and earn 10 percent on every order it brings. Start tonight.",
+   "caption_am": "ኪራይ የለም። ካፒታል የለም። ሊንክሽን ሼር አድርጊ እና 10% አግኚ።",
+   "design": {
+    "bg": "#141414",
+    "ink": "#F3EAD8",
+    "accent": "#E8A020",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#SmallBusiness",
+    "#NoCapital"
+   ],
+   "week_theme": "WEEK 4 - TRUST + FINALE: proof, party, payout"
+  },
+  {
+   "day": 27,
+   "format": "carousel",
+   "slides": [
+    {
+     "kicker": "STOP DOING THIS 1 OF 5",
+     "headline": "MISTAKE 1: SLEEPING IN MAKEUP.",
+     "sub": "Your pillow is not a cleanser.",
+     "am": "ትራስሽ ማጽጃ አይደለም።"
+    },
+    {
+     "kicker": "STOP DOING THIS 2 OF 5",
+     "headline": "MISTAKE 2: SHARING FOUNDATION.",
+     "sub": "Her shade, her bacteria. Get your own.",
+     "am": "የራስሽን ፋውንዴሽን ብቻ ተጠቀሚ።"
+    },
+    {
+     "kicker": "STOP DOING THIS 3 OF 5",
+     "headline": "MISTAKE 3: SKIPPING SPF.",
+     "sub": "Addis sun keeps receipts.",
+     "am": "የአዲስ አበባ ፀሐይ አያስምርም።"
+    },
+    {
+     "kicker": "STOP DOING THIS 4 OF 5",
+     "headline": "MISTAKE 4: SCRUBBING EVERY DAY.",
+     "sub": "Twice a week. Your barrier will thank you.",
+     "am": "በሳምንት ሁለት ጊዜ በቂ ነው።"
+    },
+    {
+     "kicker": "STOP DOING THIS 5 OF 5",
+     "headline": "MISTAKE 5: MIXING EVERYTHING AT ONCE.",
+     "sub": "Introduce one product at a time.",
+     "am": "አንድን ምርት በአንድ ጊዜ ጀምሪ።"
+    }
+   ],
+   "caption_en": "5 skincare mistakes campus girls make. Guilty of 2 or more? The fix for each one is on Sabacos.",
+   "caption_am": "5 የቆዳ እንክብካቤ ስህተቶች። መፍትሄያቸው በሳባኮስ ላይ።",
+   "design": {
+    "bg": "#C8102E",
+    "ink": "#FFFFFF",
+    "accent": "#141414",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#SkincareMistakes",
+    "#GlowTips"
+   ],
+   "week_theme": "WEEK 4 - TRUST + FINALE: proof, party, payout"
+  },
+  {
+   "day": 28,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "GIVEAWAY TIME",
+     "headline": "TAG 2 FRIENDS. WIN A FULL ROUTINE.",
+     "sub": "Cleanser, serum, moisturizer, SPF. Original.",
+     "am": "2 ጓደኞችሽን tag አድርጊ, ሙሉ ልማድ አሸንፊ።"
+    }
+   ],
+   "caption_en": "GIVEAWAY RULES. 1. Follow this page. 2. Tag 2 friends below. 3. Share this post to your story. Winner picked Friday, full routine delivered free.",
+   "caption_am": "ህጎች። ገጹን ተከተሊ, 2 ጓደኞች tag አድርጊ, ልጥፉን ሼር አድርጊ።",
+   "design": {
+    "bg": "#F2B705",
+    "ink": "#141414",
+    "accent": "#C8102E",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#Giveaway",
+    "#WinGlow"
+   ],
+   "week_theme": "WEEK 4 - TRUST + FINALE: proof, party, payout"
+  },
+  {
+   "day": 29,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "SHOW US",
+     "headline": "SHOW US YOUR SHELFIE. BEST SABACOS SHELF WINS.",
+     "sub": "Post your Sabacos products, tag us, win Friday.",
+     "am": "መደርደሪያሽን አሳዪ, tag አድርጊን, ዓርብ አሸንፊ።"
+    }
+   ],
+   "caption_en": "Line up your Sabacos products, take the shelfie, tag us. Best shelf Friday wins a coupon for the next order. UGC queens, this is your stage.",
+   "caption_am": "የሳባኮስ ምርቶችሽን አሰልፊ, ፎቶ አንሺ, tag አድርጊን።",
+   "design": {
+    "bg": "#7B5EA7",
+    "ink": "#FFFFFF",
+    "accent": "#F2B705",
+    "layout": "split"
+   },
+   "hashtags": [
+    "#Shelfie",
+    "#UGCQueen"
+   ],
+   "week_theme": "WEEK 4 - TRUST + FINALE: proof, party, payout"
+  },
+  {
+   "day": 30,
+   "format": "single",
+   "slides": [
+    {
+     "kicker": "DAY 30 - FINALE",
+     "headline": "30 DAYS OF GLOW. YOUR TURN. ONE TAP.",
+     "sub": "The shop lives in your Telegram. Come home.",
+     "am": "30 ቀናት glow። ተራሽ። አንድ tap።"
+    }
+   ],
+   "caption_en": "30 days of truth, routines, money moves and glow. The shop is open inside your Telegram, originals only, half-now payments, weekly payouts. Start month two glowing.",
+   "caption_am": "30 ቀናት እውነት, ልማድ እና glow። ሱቁ በቴሌግራም ውስጥ ክፍት ነው።",
+   "design": {
+    "bg": "#141414",
+    "ink": "#F3EAD8",
+    "accent": "#C8102E",
+    "layout": "bold"
+   },
+   "hashtags": [
+    "#GlowFinale",
+    "#SabacosMonth"
+   ],
+   "week_theme": "WEEK 4 - TRUST + FINALE: proof, party, payout"
+  }
+ ]
+}
