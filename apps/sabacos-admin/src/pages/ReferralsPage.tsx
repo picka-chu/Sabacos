@@ -107,10 +107,11 @@ export function ReferralsPage() {
         setSettingsError(null);
       }
     }).catch((err) => {
+      const msg = err instanceof Error ? err.message : "request failed";
       setSettingsError(
-        `Could not load program settings (${err instanceof Error ? err.message : "request failed"}). ` +
-        "Usually this means database migrations are not applied (run them in Supabase SQL Editor) " +
-        "or the server is running an old deploy.",
+        `Could not load program settings (${msg}). ` +
+        "If the detail names a column, re-run the referral migrations in Supabase SQL Editor " +
+        "(0011, 0012, 0013, 0022, 0024, 0025, 0027) in order, then redeploy the server.",
       );
     });
     api.get<{ rolling: RollingAverages }>("/admin/referrals/metrics/latest", token ?? undefined).then((res) => setRolling(res.rolling)).catch(() => {});

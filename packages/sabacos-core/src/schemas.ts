@@ -27,13 +27,19 @@ import {
   type ReferralSettings,
 } from "./types.js";
 
-export const uuidSchema = z.uuid();
+/**
+ * Postgres accepts any 8-4-4-4-12 hex UUID. Zod v4's built-in UUID check also
+ * enforces RFC version/variant nibbles, which rejects fixed sentinel ids used
+ * in migrations (e.g. referral_settings `00000000-0000-0000-0000-000000000001`).
+ */
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+export const uuidSchema = z.string().regex(UUID_RE, "Invalid UUID");
 
 // ---- DB row schemas (snake_case input -> camelCase domain output) ----
 
 export const profileRowSchema = z
   .object({
-    id: z.uuid(),
+    id: uuidSchema,
     telegram_id: z.number().int().nullable(),
     username: z.string().nullable(),
     first_name: z.string().nullable(),
@@ -73,7 +79,7 @@ export const profileRowSchema = z
 
 export const categoryRowSchema = z
   .object({
-    id: z.uuid(),
+    id: uuidSchema,
     slug: z.string().min(1),
     name_en: z.string().min(1),
     name_am: z.string().min(1),
@@ -93,8 +99,8 @@ export const categoryRowSchema = z
 
 export const productRowSchema = z
   .object({
-    id: z.uuid(),
-    category_id: z.uuid().nullable(),
+    id: uuidSchema,
+    category_id: uuidSchema.nullable(),
     sku: z.string().min(1),
     name_en: z.string().min(1),
     name_am: z.string().min(1),
@@ -137,9 +143,9 @@ export const productRowSchema = z
 
 export const orderRowSchema = z
   .object({
-    id: z.uuid(),
+    id: uuidSchema,
     order_no: z.string(),
-    profile_id: z.uuid(),
+    profile_id: uuidSchema,
     status: z.enum(ORDER_STATUSES),
     subtotal_halala: z.number().int().nonnegative(),
     discount_halala: z.number().int().nonnegative().default(0),
@@ -162,11 +168,11 @@ export const orderRowSchema = z
     payment_method: z.enum(["telegram", "wallet", "cod", "bank_split"]).default("telegram"),
     deposit_halala: z.number().int().nullable().default(null),
     balance_halala: z.number().int().nullable().default(null),
-    bank_account_id: z.string().uuid().nullable().default(null),
+    bank_account_id: uuidSchema.nullable().default(null),
     payment_proof_url: z.string().nullable().default(null),
     payment_proof_status: z.enum(["none", "pending", "approved", "rejected"]).default("none"),
     payment_proof_rejection_reason: z.string().nullable().default(null),
-    attributed_to_profile_id: z.uuid().nullable().default(null),
+    attributed_to_profile_id: uuidSchema.nullable().default(null),
     created_at: z.string(),
     updated_at: z.string(),
   })
@@ -209,9 +215,9 @@ export const orderRowSchema = z
 
 export const orderItemRowSchema = z
   .object({
-    id: z.uuid(),
-    order_id: z.uuid(),
-    product_id: z.uuid(),
+    id: uuidSchema,
+    order_id: uuidSchema,
+    product_id: uuidSchema,
     name_en: z.string(),
     name_am: z.string(),
     sku: z.string(),
@@ -235,8 +241,8 @@ export const orderItemRowSchema = z
 
 export const paymentRowSchema = z
   .object({
-    id: z.uuid(),
-    order_id: z.uuid(),
+    id: uuidSchema,
+    order_id: uuidSchema,
     amount_halala: z.number().int().nonnegative(),
     currency: z.string(),
     provider: z.string(),
@@ -289,9 +295,9 @@ export const settingsRowSchema = settingsFieldsSchema.transform(
 );
 
 export const cartItemRowSchema = z.object({
-  id: z.uuid(),
-  profile_id: z.uuid(),
-  product_id: z.uuid(),
+  id: uuidSchema,
+  profile_id: uuidSchema,
+  product_id: uuidSchema,
   qty: z.number().int().min(1).max(MAX_CART_QTY),
   created_at: z.string(),
   updated_at: z.string(),
@@ -311,7 +317,7 @@ export type CartItemRow = z.input<typeof cartItemRowSchema>;
 // ---- API request payloads (camelCase) ----
 
 export const addCartItemSchema = z.object({
-  productId: z.uuid(),
+  productId: uuidSchema,
   qty: z.number().int().min(1).max(MAX_CART_QTY),
 });
 
@@ -334,7 +340,7 @@ export const checkoutSchema = z.object({
   /** Payment method — "wallet" uses the customer's referral wallet balance, "bank_split" for half now half on delivery. */
   paymentMethod: z.enum(["telegram", "wallet", "bank_split"]).default("telegram").optional(),
   /** Bank account ID — required when paymentMethod is "bank_split" and splitPayVia is "bank". */
-  bankAccountId: z.string().uuid().optional(),
+  bankAccountId: uuidSchema.optional(),
   /** Sub-method for bank_split: "chapa" pays first half via Telegram invoice, "bank" via bank transfer. */
   splitPayVia: z.enum(["chapa", "bank"]).optional(),
   /** Product-share attribution (Track 2): sharer's Telegram ID from the packed startapp link. */
@@ -344,7 +350,7 @@ export const checkoutSchema = z.object({
 });
 
 export const createProductSchema = z.object({
-  categoryId: z.uuid().nullable().optional(),
+  categoryId: uuidSchema.nullable().optional(),
   sku: z.string().trim().min(1).max(64),
   nameEn: z.string().trim().min(1).max(200),
   nameAm: z.string().trim().min(1).max(200),
@@ -399,13 +405,13 @@ export type InitDataPayload = z.infer<typeof initDataPayloadSchema>;
 
 export const referralRowSchema = z
   .object({
-    id: z.uuid(),
-    referrer_id: z.uuid(),
-    referred_id: z.uuid(),
+    id: uuidSchema,
+    referrer_id: uuidSchema,
+    referred_id: uuidSchema,
     referral_code: z.string(),
     status: z.enum(REFERRAL_STATUSES as unknown as [string, ...string[]]),
     qualified_at: z.string().nullable(),
-    order_id: z.uuid().nullable(),
+    order_id: uuidSchema.nullable(),
     created_at: z.string(),
     updated_at: z.string(),
   })
@@ -426,9 +432,9 @@ export type ReferralRow = z.infer<typeof referralRowSchema>;
 
 export const referralRewardRowSchema = z
   .object({
-    id: z.uuid(),
-    referral_id: z.uuid().nullable().default(null),
-    referrer_id: z.uuid().nullable().default(null),
+    id: uuidSchema,
+    referral_id: uuidSchema.nullable().default(null),
+    referrer_id: uuidSchema.nullable().default(null),
     reward_type: z.enum(REFERRAL_REWARD_TYPES as unknown as [string, ...string[]]),
     amount_halala: z.number().int().nullable(),
     status: z.enum(["confirmed", "pending_review"]).default("confirmed"),
@@ -457,8 +463,8 @@ export type ReferralRewardRow = z.infer<typeof referralRewardRowSchema>;
 
 export const walletCreditRowSchema = z
   .object({
-    id: z.uuid(),
-    profile_id: z.uuid(),
+    id: uuidSchema,
+    profile_id: uuidSchema,
     balance_halala: z.number().int(),
     created_at: z.string(),
     updated_at: z.string(),
@@ -476,13 +482,13 @@ export type WalletCreditRow = z.infer<typeof walletCreditRowSchema>;
 
 export const walletTransactionRowSchema = z
   .object({
-    id: z.uuid(),
-    wallet_id: z.uuid(),
+    id: uuidSchema,
+    wallet_id: uuidSchema,
     type: z.enum(WALLET_TRANSACTION_TYPES as unknown as [string, ...string[]]),
     amount_halala: z.number().int(),
     description: z.string().nullable(),
     reference_type: z.string().nullable(),
-    reference_id: z.uuid().nullable(),
+    reference_id: uuidSchema.nullable(),
     created_at: z.string(),
   })
   .transform(
@@ -505,10 +511,10 @@ export type WalletTransactionRow = z.infer<typeof walletTransactionRowSchema>;
 
 export const spinnerSpinRowSchema = z
   .object({
-    id: z.uuid(),
-    profile_id: z.uuid(),
+    id: uuidSchema,
+    profile_id: uuidSchema,
     status: z.enum(SPINNER_SPIN_STATUSES as unknown as [string, ...string[]]),
-    won_prize_id: z.uuid().nullable(),
+    won_prize_id: uuidSchema.nullable(),
     won_at: z.string().nullable(),
     expires_at: z.string().nullable(),
     created_at: z.string(),
@@ -528,11 +534,11 @@ export type SpinnerSpinRow = z.infer<typeof spinnerSpinRowSchema>;
 
 export const spinnerPrizeRowSchema = z
   .object({
-    id: z.uuid(),
+    id: uuidSchema,
     name: z.string(),
     prize_type: z.enum(SPINNER_PRIZE_TYPES as unknown as [string, ...string[]]),
     value: z.number().int(),
-    product_id: z.uuid().nullable(),
+    product_id: uuidSchema.nullable(),
     weight: z.number(),
     max_pool: z.number().int().nullable(),
     current_pool: z.number().int(),
@@ -559,16 +565,16 @@ export type SpinnerPrizeRow = z.infer<typeof spinnerPrizeRowSchema>;
 
 export const spinnerCouponRowSchema = z
   .object({
-    id: z.uuid(),
-    profile_id: z.uuid(),
-    spin_id: z.uuid(),
+    id: uuidSchema,
+    profile_id: uuidSchema,
+    spin_id: uuidSchema,
     code: z.string(),
     discount_type: z.enum(SPINNER_COUPON_DISCOUNT_TYPES as unknown as [string, ...string[]]),
     discount_value: z.number().int(),
     min_order_halala: z.number().int(),
     is_used: z.boolean(),
     used_at: z.string().nullable(),
-    order_id: z.uuid().nullable(),
+    order_id: uuidSchema.nullable(),
     expires_at: z.string(),
     created_at: z.string(),
   })
@@ -592,7 +598,7 @@ export type SpinnerCouponRow = z.infer<typeof spinnerCouponRowSchema>;
 
 export const referralSettingsRowSchema = z
   .object({
-    id: z.uuid(),
+    id: uuidSchema,
     is_active: z.boolean(),
     first_purchase_percent: z.number().int(),
     repeat_purchase_percent: z.number().int(),

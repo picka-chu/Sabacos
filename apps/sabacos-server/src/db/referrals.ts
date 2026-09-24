@@ -1,4 +1,5 @@
 import type { Db } from "./client.js";
+import { ApiError } from "../errors.js";
 import {
   referralRowSchema,
   referralSettingsRowSchema,
@@ -12,6 +13,23 @@ import {
 // Referral Settings
 // ──────────────────────────────────────────────────────────────────────
 
+function parseSettingsRow(data: unknown): ReferralSettings {
+  const parsed = referralSettingsRowSchema.safeParse(data);
+  if (!parsed.success) {
+    // Surface which columns failed so admins aren't stuck on a bare
+    // "Invalid input" when the DB row and schema drift apart.
+    const detail = parsed.error.issues
+      .map((issue) => `${issue.path.join(".") || "(row)"}: ${issue.message}`)
+      .join("; ");
+    throw new ApiError(
+      500,
+      "settings_schema_mismatch",
+      `referral_settings row failed validation — ${detail}`,
+    );
+  }
+  return parsed.data;
+}
+
 export async function getReferralSettings(db: Db): Promise<ReferralSettings | null> {
   const { data, error } = await db
     .from("referral_settings")
@@ -20,7 +38,7 @@ export async function getReferralSettings(db: Db): Promise<ReferralSettings | nu
     .single();
 
   if (error || !data) return null;
-  return referralSettingsRowSchema.parse(data);
+  return parseSettingsRow(data);
 }
 
 const SETTINGS_COLUMN_MAP: Record<string, string> = {
@@ -74,7 +92,7 @@ export async function updateReferralSettings(
     .single();
 
   if (error) throw new Error(`updateReferralSettings: ${error.message}`);
-  return referralSettingsRowSchema.parse(data);
+  return parseSettingsRow(data);
 }
 
 // ──────────────────────────────────────────────────────────────────────

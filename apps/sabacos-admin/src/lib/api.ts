@@ -3,10 +3,12 @@ const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "/api/v1";
 export class ApiError extends Error {
   code: string;
   status: number;
-  constructor(code: string, message: string, status: number) {
+  fields?: Record<string, string>;
+  constructor(code: string, message: string, status: number, fields?: Record<string, string>) {
     super(message);
     this.code = code;
     this.status = status;
+    this.fields = fields;
   }
 }
 
@@ -48,9 +50,18 @@ async function request<T>(method: string, path: string, body?: unknown, token?: 
     let code = "unknown_error";
     let message = `Request failed (${res.status})`;
     try {
-      const data = (await res.json()) as { error?: { code?: string; message?: string } };
+      const data = (await res.json()) as {
+        error?: { code?: string; message?: string; fields?: Record<string, string> };
+      };
       code = data.error?.code ?? code;
       message = data.error?.message ?? message;
+      const fields = data.error?.fields;
+      if (fields && Object.keys(fields).length > 0) {
+        const detail = Object.entries(fields)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("; ");
+        message = `${message} (${detail})`;
+      }
     } catch {
       /* ignore */
     }
