@@ -21,6 +21,7 @@ import {
   type Product,
 } from "@sabacos/core";
 import { getAppEnv, type AppEnv } from "../env.js";
+import { buildBroadcastKeyboard } from "../services/broadcast.js";
 import type { AdminContext } from "../auth/admin.js";
 import { getDb } from "../db/client.js";
 import { listProducts, getProductById } from "../db/catalog.js";
@@ -808,10 +809,19 @@ const broadcastSchema = z
     imageUrl: z.string().trim().url().optional(),
     buttonText: z.string().trim().min(1).max(64).optional(),
     buttonUrl: z.string().trim().url().optional(),
+    buttonInline: z.boolean().optional(),
+    buttonTarget: z.string().trim().min(1).max(512).optional(),
     dryRun: z.boolean().optional(),
   })
-  .refine((v) => v.buttonUrl === undefined || v.buttonText !== undefined, {
-    message: "buttonText is required when buttonUrl is set",
+  .refine((v) => {
+    if (v.buttonInline) {
+      return Boolean(v.buttonText && v.buttonTarget);
+    }
+    if (v.buttonTarget) return false;
+    return v.buttonUrl === undefined || v.buttonText !== undefined;
+  }, {
+    message:
+      "Inline button requires buttonText and buttonTarget; external button requires buttonText when buttonUrl is set; buttonTarget is only valid with buttonInline",
   });
 
 adminRoutes.get("/broadcast/audience", async (c) => {
@@ -845,14 +855,15 @@ adminRoutes.post("/broadcast", async (c) => {
       audienceSize: audienceSize ?? 0,
       text: input.text,
       imageUrl: input.imageUrl ?? null,
+      buttonText: input.buttonText ?? null,
+      buttonInline: Boolean(input.buttonInline),
+      buttonTarget: input.buttonInline ? input.buttonTarget ?? null : null,
+      buttonUrl: input.buttonInline ? null : input.buttonUrl ?? null,
     });
   }
 
   const bot = createBot(env);
-  const replyMarkup =
-    input.buttonUrl && input.buttonText
-      ? { inline_keyboard: [[{ text: input.buttonText, url: input.buttonUrl }]] }
-      : undefined;
+  const replyMarkup = buildBroadcastKeyboard(env.WEBAPP_URL, input);
 
   let sent = 0;
   let failed = 0;
