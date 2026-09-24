@@ -27,6 +27,8 @@ export interface TelegramWebApp {
   expand: () => void;
   close: () => void;
   openLink: (url: string) => void;
+  openTelegramLink?: (url: string) => void;
+  shareMessage?: (msg_id: string, callback?: (sent: boolean) => void) => void;
   openInvoice?: (url: string) => void;
   setHeaderColor: (color: string) => void;
   setBackgroundColor: (color: string) => void;
@@ -445,6 +447,72 @@ export function openExternalLink(url: string): void {
   } else {
     window.open(url, "_blank", "noopener");
   }
+}
+
+/**
+ * Open a t.me link INSIDE Telegram (native chat picker / share sheet)
+ * instead of the external browser. Falls back to openLink when the client
+ * is too old to have openTelegramLink.
+ * See https://core.telegram.org/bots/webapps#initializing-mini-apps
+ */
+export function openTelegramLink(url: string): void {
+  const webApp = getTelegramWebApp();
+  if (webApp && typeof webApp.openTelegramLink === "function") {
+    webApp.openTelegramLink(url);
+  } else {
+    openExternalLink(url);
+  }
+}
+
+function webAppMajorVersion(): number {
+  const raw = getTelegramWebApp()?.version ?? "";
+  const major = Number(String(raw).split(".")[0]);
+  return Number.isFinite(major) ? major : 0;
+}
+
+/**
+ * True when the client supports Telegram.WebApp.shareMessage (Bot API 8.0+):
+ * the native forward sheet that posts a server-prepared message (photo +
+ * caption + button) into any chat the user picks — nothing is posted into
+ * the user's own bot chat.
+ * See https://core.telegram.org/bots/webapps#initializing-mini-apps
+ */
+export function canShareMessage(): boolean {
+  const webApp = getTelegramWebApp();
+  return (
+    Boolean(webApp) &&
+    typeof webApp?.shareMessage === "function" &&
+    webAppMajorVersion() >= 8
+  );
+}
+
+/**
+ * Open the native forward sheet for a prepared message id previously
+ * obtained via the Bot API method savePreparedInlineMessage. Resolves true
+ * when Telegram reports the message was sent, false when the user dismisses
+ * the sheet, the client lacks support, or the call times out.
+ */
+export function sharePreparedMessage(preparedId: string, timeoutMs = 60_000): Promise<boolean> {
+  const webApp = getTelegramWebApp();
+  const shareFn = typeof webApp?.shareMessage === "function" ? webApp.shareMessage : undefined;
+  if (!webApp || !shareFn) {
+    return Promise.resolve(false);
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (sent: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(sent);
+    };
+    try {
+      shareFn.call(webApp, preparedId, (sent: boolean) => settle(sent === true));
+    } catch {
+      settle(false);
+      return;
+    }
+    setTimeout(() => settle(false), timeoutMs);
+  });
 }
 
 export function requestPhoneNumber(): Promise<string | null> {

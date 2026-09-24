@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { loadEnv } from "./env.js";
+import { validateWebAppUrl, webAppPointsAtApi } from "./services/miniapp.js";
 import { getDb } from "./db/client.js";
 import { createBot, registerBotDefaults } from "./bot/bot.js";
 import { catalogRoutes } from "./routes/catalog.js";
@@ -26,6 +27,22 @@ import { startMarketingSweeper, stopMarketingSweeper } from "./services/notifier
 import { startAdaptiveCron, stopAdaptiveCron } from "./cron/adaptive.js";
 
 const env = loadEnv();
+
+// Fail-soft config diagnostics: a wrong WEBAPP_URL is the #1 reason every
+// Shop/menu/broadcast web_app button in Telegram silently does nothing, so
+// say so at boot instead of leaving a blank webview to debug.
+for (const problem of validateWebAppUrl("WEBAPP_URL", env.WEBAPP_URL)) {
+  log.error(`config: ${problem}`);
+}
+for (const problem of validateWebAppUrl("ADMIN_DASHBOARD_URL", env.ADMIN_DASHBOARD_URL)) {
+  log.error(`config: ${problem}`);
+}
+if (env.WEBHOOK_URL && webAppPointsAtApi(env.WEBAPP_URL, env.WEBHOOK_URL)) {
+  log.error(
+    "config: WEBAPP_URL points at the same host as WEBHOOK_URL (the API server, which serves JSON) — " +
+      "mini-app buttons will open a blank page. WEBAPP_URL must be the static mini-app site.",
+  );
+}
 const db = getDb(env);
 const bot = createBot(env);
 

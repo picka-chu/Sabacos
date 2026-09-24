@@ -14,6 +14,7 @@ import {
   type ProfileRole,
 } from "@sabacos/core";
 import type { AppEnv } from "../env.js";
+import { validateWebAppUrl, webAppUrl } from "../services/miniapp.js";
 import { getDb } from "../db/client.js";
 import { getSettings } from "../db/settings.js";
 import { getOrderById, getOrderItems, getOrderWithItems, getOrdersByProfile } from "../db/orders.js";
@@ -80,21 +81,21 @@ export function resolveChannelId(value: string | null | undefined): string {
 function mainMenuKeyboard(env: AppEnv, waitlistActive = false, role: ProfileRole = "customer") {
   if (waitlistActive) {
     const rows: Array<Array<{ text: string; web_app?: { url: string } }>> = [
-      [{ text: "📋  Join Waitlist", web_app: { url: env.WEBAPP_URL } }],
+      [{ text: "📋  Join Waitlist", web_app: { url: webAppUrl(env.WEBAPP_URL) } }],
       [{ text: "ℹ️  Help" }],
     ];
     if (isAdminRole(role)) {
-      rows.push([{ text: "📊  Admin Dashboard", web_app: { url: env.ADMIN_DASHBOARD_URL } }]);
+      rows.push([{ text: "📊  Admin Dashboard", web_app: { url: webAppUrl(env.ADMIN_DASHBOARD_URL) } }]);
     }
     return { keyboard: rows, resize_keyboard: true, is_persistent: true };
   }
   const rows: Array<Array<{ text: string; web_app?: { url: string } }>> = [
-    [{ text: "🛍  Shop", web_app: { url: env.WEBAPP_URL } }],
+    [{ text: "🛍  Shop", web_app: { url: webAppUrl(env.WEBAPP_URL) } }],
     [{ text: "📦  My Orders" }, { text: "🎁  Refer a Friend" }],
     [{ text: "ℹ️  Help" }],
   ];
   if (isAdminRole(role)) {
-    rows.push([{ text: "📊  Admin Dashboard", web_app: { url: env.ADMIN_DASHBOARD_URL } }]);
+    rows.push([{ text: "📊  Admin Dashboard", web_app: { url: webAppUrl(env.ADMIN_DASHBOARD_URL) } }]);
   }
   return { keyboard: rows, resize_keyboard: true, is_persistent: true };
 }
@@ -170,7 +171,7 @@ async function sendMyOrders(ctx: Context, env: AppEnv): Promise<void> {
     (o) => `${statusEmoji(o.status)} ${o.orderNo} — ${translateStatus("en", o.status)} · ${formatETB(o.totalHalala)}`,
   );
   await ctx.reply(["📦 Your recent orders:", "", ...lines].join("\n"), {
-    reply_markup: new InlineKeyboard().webApp("👀  View all orders", `${env.WEBAPP_URL}/orders`),
+    reply_markup: new InlineKeyboard().webApp("👀  View all orders", webAppUrl(env.WEBAPP_URL, "/orders")),
   });
 }
 
@@ -226,7 +227,7 @@ export async function sendShareRequest(
 }
 
 function backToCheckoutKeyboard(env: AppEnv) {
-  return new InlineKeyboard().webApp("✅  Back to the shop", `${env.WEBAPP_URL}/checkout`);
+  return new InlineKeyboard().webApp("✅  Back to the shop", webAppUrl(env.WEBAPP_URL, "/checkout"));
 }
 
 async function getShopSettings(env: AppEnv) {
@@ -313,7 +314,7 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
         ].join("\n"),
         {
           parse_mode: "HTML",
-          reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", env.WEBAPP_URL),
+          reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", webAppUrl(env.WEBAPP_URL)),
         },
       );
       // Also update the persistent keyboard
@@ -360,7 +361,7 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
           "",
           `We're launching soon — join the waitlist to get exclusive early-bird discounts.`,
         ].join("\n"),
-        { parse_mode: "HTML", reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", env.WEBAPP_URL) },
+        { parse_mode: "HTML", reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", webAppUrl(env.WEBAPP_URL)) },
       );
       return;
     }
@@ -375,12 +376,12 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     const waitlistConfig = await getWaitlistConfig(getDb(env)).catch(() => null);
     if (waitlistConfig?.isActive) {
       await ctx.reply("📋  Waitlist is open — tap below to join:", {
-        reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", env.WEBAPP_URL),
+        reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", webAppUrl(env.WEBAPP_URL)),
       });
       return;
     }
     await ctx.reply("🛍  Ready when you are:", {
-      reply_markup: new InlineKeyboard().webApp("🛍  Open the shop", env.WEBAPP_URL),
+      reply_markup: new InlineKeyboard().webApp("🛍  Open the shop", webAppUrl(env.WEBAPP_URL)),
     });
   });
 
@@ -448,7 +449,7 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
         reply_markup: new InlineKeyboard()
           .url("📤 Share Referral Link", `https://t.me/share/url?url=${encodeURIComponent(`Join Sabacos cosmetics using my link: ${deepLink}`)}`)
           .row()
-          .webApp("🎰  Spin the Wheel", env.WEBAPP_URL),
+          .webApp("🎰  Spin the Wheel", webAppUrl(env.WEBAPP_URL)),
       },
     );
   });
@@ -489,7 +490,7 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
         reply_markup: new InlineKeyboard()
           .url("📤 Share Link", `https://t.me/share/url?url=${encodeURIComponent(`Join Sabacos cosmetics using my link: ${deepLink}`)}`)
           .row()
-          .webApp("🎰  Spin the Wheel", env.WEBAPP_URL),
+          .webApp("🎰  Spin the Wheel", webAppUrl(env.WEBAPP_URL)),
       },
     );
   });
@@ -513,12 +514,12 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     if (!waitlistConfig?.isActive) {
       const profile = await getProfileByTelegramId(db, ctx.from.id).catch(() => null);
       await ctx.reply("🛍  The shop is open!", {
-        reply_markup: new InlineKeyboard().webApp("🛍  Open the shop", env.WEBAPP_URL),
+        reply_markup: new InlineKeyboard().webApp("🛍  Open the shop", webAppUrl(env.WEBAPP_URL)),
       });
       return;
     }
     await ctx.reply("📋  Opening the waitlist:", {
-      reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", env.WEBAPP_URL),
+      reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", webAppUrl(env.WEBAPP_URL)),
     });
   });
 
@@ -526,12 +527,12 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     const waitlistConfig = await getWaitlistConfig(getDb(env)).catch(() => null);
     if (waitlistConfig?.isActive) {
       await ctx.reply("📋  Waitlist is open — tap below to join:", {
-        reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", env.WEBAPP_URL),
+        reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", webAppUrl(env.WEBAPP_URL)),
       });
       return;
     }
     await ctx.reply("🛍  Ready when you are:", {
-      reply_markup: new InlineKeyboard().webApp("🛍  Open the shop", env.WEBAPP_URL),
+      reply_markup: new InlineKeyboard().webApp("🛍  Open the shop", webAppUrl(env.WEBAPP_URL)),
     });
   });
 
@@ -970,7 +971,15 @@ function buildHelpText(shopPhone: string | null): string {
 }
 
 export async function registerBotDefaults(bot: Bot, env: AppEnv): Promise<void> {
-  await Promise.allSettled([
+  // Fail loud, not silent: a bad web_app URL makes EVERY Shop/menu button in
+  // Telegram do nothing, so validate before registering and log the outcome.
+  const urlProblems = validateWebAppUrl("WEBAPP_URL", env.WEBAPP_URL);
+  for (const problem of urlProblems) {
+    console.error(`[bot] ${problem}`);
+  }
+  const menuUrl = webAppUrl(env.WEBAPP_URL);
+
+  const results = await Promise.allSettled([
     bot.api.setMyCommands([
       { command: "start", description: "Welcome & main menu 🌸" },
       { command: "shop", description: "Browse the catalog 🛍" },
@@ -978,14 +987,21 @@ export async function registerBotDefaults(bot: Bot, env: AppEnv): Promise<void> 
       { command: "refer", description: "Refer friends & earn rewards 🎁" },
       { command: "help", description: "How it works ℹ️" },
     ]),
-    bot.api.setChatMenuButton({
-      menu_button: {
-        type: "web_app",
-        text: "🛍  Shop",
-        web_app: { url: env.WEBAPP_URL },
-      },
-    }),
+    urlProblems.length > 0
+      ? Promise.reject(new Error(`skip menu button: ${urlProblems[0]}`))
+      : bot.api.setChatMenuButton({
+          menu_button: {
+            type: "web_app",
+            text: "🛍  Shop",
+            web_app: { url: menuUrl },
+          },
+        }),
   ]);
+  for (const result of results) {
+    if (result.status === "rejected") {
+      console.error("[bot] registerBotDefaults failed:", result.reason);
+    }
+  }
 }
 
 export async function sendReceipt(ctx: Context, env: AppEnv, order: OrderWithItems): Promise<void> {

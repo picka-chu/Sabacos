@@ -1,83 +1,50 @@
 import { Hono } from "hono";
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, type InputFile } from "grammy";
+import type { InlineQueryResult as InlineQueryResultType } from "@grammyjs/types";
 import { getAppEnv, type AppEnv } from "../env.js";
 import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
 import { getProductById } from "../db/catalog.js";
 import { packSharePayload } from "../db/referrals.js";
-import { formatETB } from "@sabacos/core";
+import { formatETB, type Product } from "@sabacos/core";
 import { escapeHtml } from "../bot/bot.js";
+import { webAppUrl } from "../services/miniapp.js";
 
 export const shareRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
 
 shareRoutes.use("*", requireUser);
 
-shareRoutes.post("/product/:id", async (c) => {
-  const env = getAppEnv();
-  const db = getDb(env);
-  const profile = c.get("profile");
-  const productId = c.req.param("id");
-  const body = (await c.req.json().catch(() => ({}))) as { deliver?: boolean };
+type ShareProduct = Pick<
+  Product,
+  "id" | "nameEn" | "nameAm" | "descriptionEn" | "descriptionAm" | "priceHalala" | "imageUrls"
+>;
 
-  const product = await getProductById(db, productId);
-  if (!product) {
-    return c.json({ error: "Product not found" }, 404);
-  }
+/** Telegram photo captions cap at 1024 chars (after entities parsing). */
+export const SHARE_PHOTO_CAPTION_LIMIT = 1024;
 
-  const chatId = profile.telegramId;
-  if (chatId == null) {
-    return c.json({ error: "User has no Telegram ID" }, 400);
-  }
-
-  // Attributed share link (Track 2): packs this user as the sharer so any
-  // resulting sale credits their commission. Falls back to the plain product
-  // link when the bot username isn't configured (still shareable, just
-  // unattributed).
-  const username = (env.BOT_USERNAME || "").replace(/^@/, "");
-  const webAppUrl = `${env.WEBAPP_URL.replace(/\/$/, "")}/product/${product.id}`;
-  const url = username
-    ? `https://t.me/${username}?startapp=${packSharePayload(chatId, product.id)}`
-    : webAppUrl;
-
-  const text = shareCaption(product);
-  const imageUrl = product.imageUrls[0] ?? null;
-
-  // Deliver mode: bot sends the photo card into this user's chat so the
-  // share carries the product image + a plain-text attributed link (survives
-  // forwards) and a Buy Now url button (not webApp — those strip on forward).
-  if (body.deliver) {
-    try {
-      const bot = new Bot(env.BOT_TOKEN);
-      const kb = new InlineKeyboard().url("🛍  Buy now", url);
-      const caption = `${escapeHtml(text)}\n\n${escapeHtml(url)}`;
-      if (imageUrl) {
-        await bot.api.sendPhoto(chatId, imageUrl, {
-          caption,
-          parse_mode: "HTML",
-          reply_markup: kb,
-        });
-      } else {
-        await bot.api.sendMessage(chatId, caption, {
-          parse_mode: "HTML",
-          reply_markup: kb,
-        });
-      }
-      return c.json({ url, text, imageUrl, delivered: true });
-    } catch {
-      // Bot send failed (privacy, flood, etc.) — client falls back to the sheet.
-      return c.json({ url, text, imageUrl, delivered: false });
-    }
-  }
-
-  return c.json({ url, text, imageUrl });
-});
+/**
+ * Attributed share link (Track 2): packs this user as the sharer so any
+ * resulting sale credits their commission. Falls back to the plain product
+ * link when the bot username isn't configured (still shareable, just
+ * unattributed).
+ */
+export function buildShareLink(
+  webappBase: string,
+  botUsername: string | undefined,
+  chatId: number,
+  productId: string,
+): string {
+  const username = (botUsername || "").replace(/^@/, "");
+  if (!username) return webAppUrl(webappBase, `/product/${productId}`);
+  return `https://t.me/${username}?startapp=${packSharePayload(chatId, productId)}`;
+}
 
 /**
  * Professional share-sheet text: name, one-line benefit, price with the
  * half-now option, and the original-only guarantee. Plain text (no HTML —
  * t.me/share/url takes raw text).
  */
-function shareCaption(product: {
+export function buildShareCaption(product: {
   nameEn: string;
   nameAm: string;
   descriptionEn: string;
@@ -97,3 +64,107 @@ function shareCaption(product: {
   ];
   return lines.filter((l) => l && l.trim().length > 0).join("\n");
 }
+
+/**
+ * Pure builder for the prepared inline result the mini app forwards natively
+ * via Telegram.WebApp.shareMessage (Bot API 8.0+). Photo products become a
+ * photo result with caption + Buy button; products without images become an
+ * article result with the same text. The attributed link rides in the caption
+ * as plain text so it survives forwards.
+ */
+export function buildShareInlineResult(product: ShareProduct, url: string): InlineQueryResultType<InputFile> {
+  const rawCaption = buildShareCaption(product);
+  const buyButton = { inline_keyboard: [[{ text: "🛍  Buy now", url }]] };
+  const resultId = `share-${Date.now().toString(36)}`;
+
+  const imageUrl = product.imageUrls[0];
+  if (imageUrl) {
+    const tail = `\n\n${url}`;
+    const head = rawCaption.slice(0, Math.max(0, SHARE_PHOTO_CAPTION_LIMIT - tail.length));
+    return {
+      type: "photo",
+      id: resultId,
+      photo_url: imageUrl,
+      thumbnail_url: imageUrl,
+      caption: escapeHtml(`${head}${tail}`),
+      parse_mode: "HTML",
+      reply_markup: buyButton,
+    };
+  }
+
+  const text = escapeHtml(`${rawCaption}\n\n${url}`);
+  return {
+    type: "article",
+    id: resultId,
+    title: product.nameEn,
+    description: `${formatETB(product.priceHalala)} — 100% original`,
+    input_message_content: {
+      message_text: text,
+      parse_mode: "HTML",
+    },
+    reply_markup: buyButton,
+  };
+}
+
+async function loadShareTarget(db: ReturnType<typeof getDb>, productId: string, telegramId: number | null) {
+  const product = await getProductById(db, productId);
+  if (!product) return { error: "Product not found" as const };
+  if (telegramId == null) return { error: "User has no Telegram ID" as const };
+  return { product };
+}
+
+shareRoutes.post("/product/:id", async (c) => {
+  const env = getAppEnv();
+  const db = getDb(env);
+  const profile = c.get("profile");
+  const productId = c.req.param("id");
+
+  const target = await loadShareTarget(db, productId, profile.telegramId);
+  if ("error" in target) {
+    const status = target.error === "Product not found" ? 404 : 400;
+    return c.json({ error: target.error }, status);
+  }
+  const { product } = target;
+
+  const url = buildShareLink(env.WEBAPP_URL, env.BOT_USERNAME, profile.telegramId as number, product.id);
+  return c.json({ url, text: buildShareCaption(product), imageUrl: product.imageUrls[0] ?? null });
+});
+
+/**
+ * Native forward flow: the server stores a prepared inline message
+ * (photo + caption + Buy button) and hands the id to the mini app, which
+ * opens Telegram's own chat picker via Telegram.WebApp.shareMessage —
+ * nothing is ever posted into the user's bot chat.
+ */
+shareRoutes.post("/product/:id/prepare", async (c) => {
+  const env = getAppEnv();
+  const db = getDb(env);
+  const profile = c.get("profile");
+  const productId = c.req.param("id");
+
+  const target = await loadShareTarget(db, productId, profile.telegramId);
+  if ("error" in target) {
+    const status = target.error === "Product not found" ? 404 : 400;
+    return c.json({ error: target.error }, status);
+  }
+  const { product } = target;
+
+  const url = buildShareLink(env.WEBAPP_URL, env.BOT_USERNAME, profile.telegramId as number, product.id);
+  const result = buildShareInlineResult(product, url);
+
+  try {
+    const bot = new Bot(env.BOT_TOKEN);
+    const prepared = await bot.api.savePreparedInlineMessage(profile.telegramId as number, result, {
+      allow_user_chats: true,
+      allow_group_chats: true,
+      allow_channel_chats: true,
+    });
+    return c.json({ preparedId: prepared.id });
+  } catch (err) {
+    console.error("[share] savePreparedInlineMessage failed:", err);
+    return c.json(
+      { error: { code: "share_prepare_failed", message: "Could not prepare the share message" } },
+      502,
+    );
+  }
+});

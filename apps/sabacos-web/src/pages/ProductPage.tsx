@@ -8,7 +8,7 @@ import { useProduct } from "../hooks.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
 import { api } from "../api.js";
 import { toast } from "../components/Toast.js";
-import { isTelegramSession, openExternalLink } from "../telegram.js";
+import { isTelegramSession, getTelegramWebApp, canShareMessage, sharePreparedMessage, openTelegramLink } from "../telegram.js";
 
 export function ProductPage() {
   const params = useParams<{ id: string }>();
@@ -84,16 +84,43 @@ export function ProductPage() {
 
   const handleShare = async () => {
     try {
-      // Attributed link + caption from the server; optional bot photo card.
+      // Attributed link + caption from the server. Forwarding is always
+      // native: Telegram's own chat picker, never a bot DM.
       const res = await api.post<{
         url: string;
         text: string;
         imageUrl?: string | null;
-        delivered?: boolean;
       }>(`/share/product/${product.id}`, {});
       const shareText = `${res.text}\n\n${res.url}`;
 
-      // 1) OS share sheet with the product photo when the platform supports files.
+      // 1) Inside Telegram: native forward sheet with the product photo,
+      // caption and Buy button (Bot API 8.0+ prepared message).
+      if (isTelegramSession() && getTelegramWebApp()) {
+        if (canShareMessage()) {
+          try {
+            const prep = await api.post<{ preparedId: string }>(
+              `/share/product/${product.id}/prepare`,
+              {},
+            );
+            if (prep.preparedId) {
+              const sent = await sharePreparedMessage(prep.preparedId);
+              if (sent) toast(t("shared"));
+              // Sent or dismissed — never fall through to another sheet.
+              return;
+            }
+          } catch {
+            // Prepare/share failed — fall through to the text sheet below.
+          }
+        }
+        // 2) Native Telegram text share sheet (attributed link still works).
+        openTelegramLink(
+          `https://t.me/share/url?url=${encodeURIComponent(res.url)}&text=${encodeURIComponent(res.text)}`,
+        );
+        return;
+      }
+
+      // 3) Outside Telegram: OS share sheet with the product photo when the
+      // platform supports files.
       if (typeof navigator !== "undefined" && navigator.share) {
         try {
           if (res.imageUrl) {
@@ -112,29 +139,14 @@ export function ProductPage() {
         } catch (err) {
           // User cancelled the sheet — do not fall through.
           if (err instanceof DOMException && err.name === "AbortError") return;
-          // Otherwise continue to Telegram delivery / text sheet.
         }
       }
 
-      // 2) Inside Telegram: bot delivers the photo card to this chat.
-      if (isTelegramSession()) {
-        try {
-          const delivered = await api.post<{ delivered?: boolean }>(
-            `/share/product/${product.id}`,
-            { deliver: true },
-          );
-          if (delivered.delivered !== false) {
-            toast(t("shared"));
-            return;
-          }
-        } catch {
-          // fall through to text sheet
-        }
-      }
-
-      // 3) Text-only Telegram share sheet (attributed link still works).
-      openExternalLink(
+      // 4) Last resort outside Telegram: plain share URL in a new tab.
+      window.open(
         `https://t.me/share/url?url=${encodeURIComponent(res.url)}&text=${encodeURIComponent(res.text)}`,
+        "_blank",
+        "noopener",
       );
     } catch (err) {
       toast(apiErrorMessage(err));
