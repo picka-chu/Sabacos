@@ -192,7 +192,7 @@ export function ReferralPage() {
             {[
               t("howItWorksStep1"),
               t("howItWorksStep2"),
-              t("howItWorksStep3"),
+              t("howItWorksStep3", { n: info?.settings?.firstPurchasePercent ?? 10 }),
               t("howItWorksStep4", { n: info?.settings?.referralsPerSpin?.toString() ?? "3" }),
             ].map((step, i) => (
               <div

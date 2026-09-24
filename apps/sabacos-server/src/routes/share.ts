@@ -1,10 +1,12 @@
 import { Hono } from "hono";
+import { Bot, InlineKeyboard } from "grammy";
 import { getAppEnv, type AppEnv } from "../env.js";
 import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
 import { getProductById } from "../db/catalog.js";
 import { packSharePayload } from "../db/referrals.js";
 import { formatETB } from "@sabacos/core";
+import { escapeHtml } from "../bot/bot.js";
 
 export const shareRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
 
@@ -15,6 +17,7 @@ shareRoutes.post("/product/:id", async (c) => {
   const db = getDb(env);
   const profile = c.get("profile");
   const productId = c.req.param("id");
+  const body = (await c.req.json().catch(() => ({}))) as { deliver?: boolean };
 
   const product = await getProductById(db, productId);
   if (!product) {
@@ -29,15 +32,44 @@ shareRoutes.post("/product/:id", async (c) => {
   // Attributed share link (Track 2): packs this user as the sharer so any
   // resulting sale credits their commission. Falls back to the plain product
   // link when the bot username isn't configured (still shareable, just
-  // unattributed). The client opens this in the native share sheet so the
-  // user picks the chat — bot-sent messages lose their buttons on forward.
+  // unattributed).
   const username = (env.BOT_USERNAME || "").replace(/^@/, "");
   const webAppUrl = `${env.WEBAPP_URL.replace(/\/$/, "")}/product/${product.id}`;
   const url = username
     ? `https://t.me/${username}?startapp=${packSharePayload(chatId, product.id)}`
     : webAppUrl;
 
-  return c.json({ url, text: shareCaption(product) });
+  const text = shareCaption(product);
+  const imageUrl = product.imageUrls[0] ?? null;
+
+  // Deliver mode: bot sends the photo card into this user's chat so the
+  // share carries the product image + a plain-text attributed link (survives
+  // forwards) and a Buy Now url button (not webApp — those strip on forward).
+  if (body.deliver) {
+    try {
+      const bot = new Bot(env.BOT_TOKEN);
+      const kb = new InlineKeyboard().url("🛍  Buy now", url);
+      const caption = `${escapeHtml(text)}\n\n${escapeHtml(url)}`;
+      if (imageUrl) {
+        await bot.api.sendPhoto(chatId, imageUrl, {
+          caption,
+          parse_mode: "HTML",
+          reply_markup: kb,
+        });
+      } else {
+        await bot.api.sendMessage(chatId, caption, {
+          parse_mode: "HTML",
+          reply_markup: kb,
+        });
+      }
+      return c.json({ url, text, imageUrl, delivered: true });
+    } catch {
+      // Bot send failed (privacy, flood, etc.) — client falls back to the sheet.
+      return c.json({ url, text, imageUrl, delivered: false });
+    }
+  }
+
+  return c.json({ url, text, imageUrl });
 });
 
 /**

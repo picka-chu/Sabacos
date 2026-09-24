@@ -115,7 +115,7 @@ function welcomeMessage(lang: "en" | "am", shopName: string, firstName: string):
       "",
       "✨ የተመረጡ የቆዳ እንክብካቤ፣ ሜካፕ እና ሽቶ",
       "💰 ግማሽ አሁን ይክፈሉ፣ ግማሽ ሲደርስ — ያለ ወለድ",
-      "🎁 ጓደኞችዎን ይጋብዙ እና በየሽያጭ 5% ያግኙ",
+      "🎁 ጓደኞችዎን ይጋብዙ እና በየሽያጭ 10% ያግኙ",
       "🚚 አዲስ አበባ ውስጥ በ1–3 ቀን ማድረስ",
     ].join("\n");
   }
@@ -126,7 +126,7 @@ function welcomeMessage(lang: "en" | "am", shopName: string, firstName: string):
     "",
     "✨ Curated skincare, makeup & fragrance",
     "💰 Pay half now, half on delivery — no interest, no stories",
-    "🎁 Invite friends and earn 5% on every sale they bring",
+    "🎁 Invite friends and earn 10% on every sale they bring",
     "🚚 1–3 day delivery across Addis Ababa",
   ].join("\n");
 }
@@ -142,7 +142,7 @@ function bilingualWelcome(shopName: string, firstName: string): string {
     "",
     "✨ Curated skincare, makeup & fragrance",
     "💰 Pay half now, half on delivery / ግማሽ አሁን፣ ግማሽ ሲደርስ",
-    "🎁 Earn 5% sharing products / በማጋራት 5% ያግኙ",
+    "🎁 Earn 10% sharing products / በማጋራት 10% ያግኙ",
     "",
     "Choose your language / ቋንቋዎን ይምረጡ 👇",
   ].join("\n");

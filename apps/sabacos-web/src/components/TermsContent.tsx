@@ -72,7 +72,7 @@ const SECTIONS: TermsSection[] = [
   {
     title: "8. Referral Program",
     body: [
-      "Share your personal referral link. When a referred friend places their first qualifying order (minimum 300 ETB): you earn 5% of the order total as wallet credit, and your friend gets 5% off that first order automatically.",
+      "Share your personal referral link. When a referred friend places their first qualifying order (minimum 300 ETB): you earn 10% of the order total as wallet credit, and your friend gets 5% off that first order automatically.",
       "Commission is subject to a rolling 30-day earning cap; amounts approaching the cap may be flagged for manual review before becoming spendable.",
       "Self-referrals, fake accounts, and coordinated abuse (shared devices, duplicate payment details, clustered fake orders) lead to forfeiture of rewards and permanent account suspension.",
       "Every 3 qualified referrals earns you 1 prize spin (max 5 per week); spins and coupons expire as shown in the app.",

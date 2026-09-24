@@ -71,7 +71,7 @@ export interface Profile {
 }
 
 /** Current Terms & Policies version. Bump when the legal text changes so users are re-asked. */
-export const TERMS_VERSION = "2.0";
+export const TERMS_VERSION = "2.1";
 
 export interface Category {
   id: string;

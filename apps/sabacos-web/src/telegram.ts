@@ -190,16 +190,78 @@ export function isTelegramClient(): boolean {
   }
 }
 
-function hasLaunchParams(): boolean {
+/**
+ * Snapshot of the URL at module load. Telegram's SDK may later strip the
+ * tgWebApp* params via history.replaceState — keep the originals so auth
+ * still works after reloads and on clients that clean the address bar.
+ */
+const LAUNCH_URL = (() => {
   try {
-    const hash = window.location.hash;
-    const search = window.location.search;
-    return (
-      /tgWebApp(Data|Platform|Version)=/.test(hash) || /tgWebApp(Data|Platform|Version)=/.test(search)
-    );
+    return { search: window.location.search, hash: window.location.hash };
   } catch {
-    return false;
+    return { search: "", hash: "" };
   }
+})();
+
+/** Session initData cache — valid well within the server's 24h window;
+ *  lets reloads authenticate even when the launch params were stripped. */
+const INIT_DATA_CACHE_KEY = "sabacos:initData";
+const INIT_DATA_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+function readInitDataFrom(search: string, hash: string): string {
+  const fromHash = /tgWebAppData=([^&]*)/.exec(hash);
+  if (fromHash?.[1]) {
+    try {
+      return decodeURIComponent(fromHash[1]);
+    } catch {
+      /* fall through */
+    }
+  }
+  try {
+    const fromSearch = new URLSearchParams(search).get("tgWebAppData");
+    if (fromSearch) return fromSearch;
+  } catch {
+    /* noop */
+  }
+  return "";
+}
+
+function cacheInitData(data: string): void {
+  try {
+    sessionStorage.setItem(INIT_DATA_CACHE_KEY, JSON.stringify({ d: data, t: Date.now() }));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+function readCachedInitData(): string {
+  try {
+    const raw = sessionStorage.getItem(INIT_DATA_CACHE_KEY);
+    if (!raw) return "";
+    const parsed = JSON.parse(raw) as { d?: unknown; t?: unknown };
+    if (
+      typeof parsed.d === "string" &&
+      parsed.d.length > 0 &&
+      typeof parsed.t === "number" &&
+      Date.now() - parsed.t < INIT_DATA_CACHE_MAX_AGE_MS
+    ) {
+      return parsed.d;
+    }
+  } catch {
+    /* corrupt cache */
+  }
+  return "";
+}
+
+export function hasLaunchParams(): boolean {
+  const sources = [
+    [window.location.search, window.location.hash],
+    [LAUNCH_URL.search, LAUNCH_URL.hash],
+  ] as const;
+  return sources.some(
+    ([search, hash]) =>
+      Boolean(readInitDataFrom(search, hash)) || /tgWebApp(Platform|Version)=/.test(search + hash),
+  );
 }
 
 export function isTelegramSession(): boolean {
@@ -208,22 +270,61 @@ export function isTelegramSession(): boolean {
 
 export function getInitData(): string {
   const webApp = getTelegramWebApp();
-  if (webApp?.initData) return webApp.initData;
-  const hashMatch = window.location.hash.match(/tgWebAppData=([^&]*)/);
-  if (hashMatch?.[1]) {
-    try {
-      return decodeURIComponent(hashMatch[1]);
-    } catch {
-      /* fall through */
+  if (webApp?.initData) {
+    cacheInitData(webApp.initData);
+    return webApp.initData;
+  }
+  const fromUrl =
+    readInitDataFrom(window.location.search, window.location.hash) ||
+    readInitDataFrom(LAUNCH_URL.search, LAUNCH_URL.hash);
+  if (fromUrl) {
+    cacheInitData(fromUrl);
+    return fromUrl;
+  }
+  return readCachedInitData();
+}
+
+/** Resolves with initData as soon as it appears, or "" after timeoutMs. */
+export function waitForInitData(timeoutMs: number): Promise<string> {
+  return new Promise((resolve) => {
+    const existing = getInitData();
+    if (existing) {
+      resolve(existing);
+      return;
     }
-  }
+    const start = Date.now();
+    const tick = () => {
+      const data = getInitData();
+      if (data) {
+        resolve(data);
+        return;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        resolve("");
+        return;
+      }
+      setTimeout(tick, 120);
+    };
+    tick();
+  });
+}
+
+/**
+ * startapp deep-link param: SDK first, then the launch-URL snapshot
+ * (covers launches where telegram-web-app.js failed to load).
+ */
+export function getStartParam(): string {
+  const fromSdk = getTelegramWebApp()?.startParam;
+  if (fromSdk) return fromSdk;
   try {
-    const fromSearch = new URLSearchParams(window.location.search).get("tgWebAppData");
-    if (fromSearch) return fromSearch;
+    return (
+      new URLSearchParams(window.location.search).get("startapp") ||
+      new URLSearchParams(LAUNCH_URL.search).get("startapp") ||
+      ""
+    );
   } catch {
-    /* noop */
+    return "";
   }
-  return "";
 }
 
 export function canRequestLocation(): boolean {

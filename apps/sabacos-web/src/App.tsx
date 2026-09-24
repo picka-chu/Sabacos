@@ -1,15 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { Info } from "lucide-react";
 import { api } from "./api.js";
 import { parseSharePayload, stampShareClick, consumeShareClick } from "./shareAttribution.js";
 import { TERMS_VERSION } from "@sabacos/core";
 import { I18nProvider, useI18n, hasUserChosenLang } from "./i18n.js";
-import { applyTelegramTheme, getTelegramWebApp, haptic, isTelegramSession } from "./telegram.js";
+import {
+  applyTelegramTheme,
+  getInitData,
+  getStartParam,
+  getTelegramWebApp,
+  haptic,
+  isTelegramSession,
+  waitForInitData,
+} from "./telegram.js";
 import { BottomNav } from "./components/BottomNav.js";
 import { ErrorBoundary } from "./components/ErrorBoundary.js";
 import { ToastHost } from "./components/Toast.js";
-import { useShopStore } from "./store.js";
+import { useShopStore, apiErrorMessage } from "./store.js";
 import { HomePage } from "./pages/HomePage.js";
 import { ShopPage } from "./pages/ShopPage.js";
 import { CategoryPage } from "./pages/CategoryPage.js";
@@ -37,6 +45,9 @@ function Shell() {
   const [location, navigate] = useLocation();
   const { t, setLang } = useI18n();
   const [inTelegram, setInTelegram] = useState(isTelegramSession);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authNonce, setAuthNonce] = useState(0);
+  const startParamHandled = useRef(false);
 
   // Waitlist phase state
   const [waitlistActive, setWaitlistActive] = useState<boolean | null>(null);
@@ -54,25 +65,58 @@ function Shell() {
     const webApp = getTelegramWebApp();
     webApp?.onEvent("themeChanged", applyTelegramTheme);
 
-    api
-      .post<{ profile: import("@sabacos/core").Profile }>("/auth/telegram", {})
-      .then((res) => {
-        setProfile(res.profile);
-        // Definitive signal: the server validated our initData, so we are
-        // inside Telegram regardless of what client-side detection said
-        // (fixes keyboard-button launches sticking in preview mode).
-        setInTelegram(true);
-        // Only set language from server if the user hasn't explicitly chosen
-        // one in this session (prevents overwriting localStorage on reload).
-        if (
-          !hasUserChosenLang() &&
-          (res.profile.language === "en" || res.profile.language === "am")
-        ) {
-          setLang(res.profile.language);
+    let cancelled = false;
+    setAuthError(null);
+    setProfileStatus("loading");
+
+    const runAuth = async () => {
+      // initData can lag first paint (SDK handshake / params stripped by the
+      // client). Wait briefly before the first request so keyboard-button and
+      // shared-link launches don't send an empty session header.
+      await waitForInitData(isTelegramSession() ? 4000 : 800);
+      if (cancelled) return;
+
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const res = await api.post<{ profile: import("@sabacos/core").Profile }>(
+            "/auth/telegram",
+            {},
+          );
+          if (cancelled) return;
+          setProfile(res.profile);
+          // Definitive signal: the server validated our initData, so we are
+          // inside Telegram regardless of what client-side detection said.
+          setInTelegram(true);
+          setAuthError(null);
+          // Only set language from server if the user hasn't explicitly chosen
+          // one in this session (prevents overwriting localStorage on reload).
+          if (
+            !hasUserChosenLang() &&
+            (res.profile.language === "en" || res.profile.language === "am")
+          ) {
+            setLang(res.profile.language);
+          }
+          refreshCart().catch(() => {});
+          return;
+        } catch (err) {
+          lastErr = err;
+          if (cancelled) return;
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+          }
         }
-      })
-      .catch(() => setProfileStatus("error"));
-    refreshCart().catch(() => {});
+      }
+      if (cancelled) return;
+      // Surface the real server message only for Telegram launches so plain
+      // browser preview keeps the softer preview banner instead.
+      if (isTelegramSession() || getInitData()) {
+        setInTelegram(true);
+        setAuthError(apiErrorMessage(lastErr));
+      }
+      setProfileStatus("error");
+    };
+    void runAuth();
 
     // Check if waitlist phase is active — public endpoint, no auth needed.
     api
@@ -83,12 +127,19 @@ function Shell() {
       .catch(() => {
         setWaitlistActive(false);
       });
-  }, [setProfile, setProfileStatus, refreshCart]);
 
+    return () => {
+      cancelled = true;
+    };
+  }, [setProfile, setProfileStatus, refreshCart, setLang, authNonce]);
+
+  // startapp deep-link: SDK first, launch-URL fallback. Re-checked once the
+  // profile is ready (SDK guaranteed loaded) but only handled a single time.
   useEffect(() => {
-    const webApp = getTelegramWebApp();
-    const startParam = webApp?.startParam;
+    if (startParamHandled.current) return;
+    const startParam = getStartParam();
     if (!startParam) return;
+    startParamHandled.current = true;
     // Attributed product share: `s<telegramId>_<uuid>` — land on the
     // product and stamp the click (last-click wins) for Track 2.
     if (!startParam.startsWith("product_")) {
@@ -105,7 +156,7 @@ function Shell() {
     }
     const productId = startParam.replace("product_", "");
     navigate(`/product/${productId}`);
-  }, [navigate]);
+  }, [navigate, inTelegram, profileStatus]);
 
   // After auth, register an attributed arrival once per click: genuinely new
   // buyers get their pending referral row (unlocks the automatic 5% friend
@@ -176,6 +227,47 @@ function Shell() {
   // Normal mode (shop open)
   return (
     <>
+      {profileStatus === "error" && authError && (
+        <div
+          style={{
+            margin: "0 16px",
+            marginTop: "calc(var(--safe-top) + 12px)",
+            padding: "10px 14px",
+            borderRadius: 14,
+            background: "rgba(220, 38, 38, 0.12)",
+            color: "#b91c1c",
+            fontSize: 13,
+            fontWeight: 500,
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <Info size={16} style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: 140 }}>{authError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setAuthError(null);
+              setProfileStatus("loading");
+              setAuthNonce((n) => n + 1);
+            }}
+            style={{
+              border: "none",
+              borderRadius: 10,
+              padding: "6px 12px",
+              background: "var(--accent-strong, #b91c1c)",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {t("retry")}
+          </button>
+        </div>
+      )}
       {!inTelegram && (
         <div
           style={{

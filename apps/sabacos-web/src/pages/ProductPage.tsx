@@ -8,7 +8,7 @@ import { useProduct } from "../hooks.js";
 import { useShopStore, apiErrorMessage } from "../store.js";
 import { api } from "../api.js";
 import { toast } from "../components/Toast.js";
-import { openExternalLink } from "../telegram.js";
+import { isTelegramSession, openExternalLink } from "../telegram.js";
 
 export function ProductPage() {
   const params = useParams<{ id: string }>();
@@ -84,11 +84,55 @@ export function ProductPage() {
 
   const handleShare = async () => {
     try {
-      // Attributed share link + professional caption from the server, opened
-      // in Telegram's native share sheet so the user picks the chat. (Bot-sent
-      // messages lose their buttons when forwarded — this keeps the Buy link
-      // intact and credits the sharer for resulting sales.)
-      const res = await api.post<{ url: string; text: string }>(`/share/product/${product.id}`, {});
+      // Attributed link + caption from the server; optional bot photo card.
+      const res = await api.post<{
+        url: string;
+        text: string;
+        imageUrl?: string | null;
+        delivered?: boolean;
+      }>(`/share/product/${product.id}`, {});
+      const shareText = `${res.text}\n\n${res.url}`;
+
+      // 1) OS share sheet with the product photo when the platform supports files.
+      if (typeof navigator !== "undefined" && navigator.share) {
+        try {
+          if (res.imageUrl) {
+            const blob = await fetch(res.imageUrl).then((r) => r.blob());
+            const file = new File([blob], "sabacos-product.jpg", {
+              type: blob.type || "image/jpeg",
+            });
+            if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+              await navigator.share({ files: [file], text: shareText });
+              return;
+            }
+          } else {
+            await navigator.share({ text: res.text, url: res.url });
+            return;
+          }
+        } catch (err) {
+          // User cancelled the sheet — do not fall through.
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          // Otherwise continue to Telegram delivery / text sheet.
+        }
+      }
+
+      // 2) Inside Telegram: bot delivers the photo card to this chat.
+      if (isTelegramSession()) {
+        try {
+          const delivered = await api.post<{ delivered?: boolean }>(
+            `/share/product/${product.id}`,
+            { deliver: true },
+          );
+          if (delivered.delivered !== false) {
+            toast(t("shared"));
+            return;
+          }
+        } catch {
+          // fall through to text sheet
+        }
+      }
+
+      // 3) Text-only Telegram share sheet (attributed link still works).
       openExternalLink(
         `https://t.me/share/url?url=${encodeURIComponent(res.url)}&text=${encodeURIComponent(res.text)}`,
       );
