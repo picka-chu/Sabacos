@@ -44,7 +44,7 @@ import { notifyAdminChannel, createBot, postProductToChannel, testAdminChannel }
 import { aiEnabled, llamaVisionProduct } from "../services/ai.js";
 import { r2Config, r2Put, r2Delete } from "../services/r2.js";
 import { promoForProduct, getActiveDiscounts } from "../db/discounts.js";
-import { BANK_NAMES, type BankName } from "@sabacos/core";
+import { BANK_NAMES, type BankName, uuidSchema } from "@sabacos/core";
 
 const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -725,7 +725,7 @@ adminRoutes.get("/orders", async (c) => {
 adminRoutes.get("/orders/:id", async (c) => {
   const db = getDb(getAppEnv());
   const id = c.req.param("id");
-  if (!z.string().uuid().safeParse(id).success) throw badRequest("Invalid order ID");
+  if (!uuidSchema.safeParse(id).success) throw badRequest("Invalid order ID");
   const order = await getOrderWithItems(db, id);
   if (!order) throw notFound();
   return c.json({ order });
@@ -734,7 +734,7 @@ adminRoutes.get("/orders/:id", async (c) => {
 adminRoutes.patch("/orders/:id/status", async (c) => {
   const db = getDb(getAppEnv());
   const id = c.req.param("id");
-  if (!z.string().uuid().safeParse(id).success) throw badRequest("Invalid order ID");
+  if (!uuidSchema.safeParse(id).success) throw badRequest("Invalid order ID");
   const order = await getOrderById(db, id);
   if (!order) throw notFound();
 

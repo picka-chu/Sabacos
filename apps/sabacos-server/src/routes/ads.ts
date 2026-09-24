@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { badRequest, safeParse } from "../errors.js";
 import type { Language } from "@sabacos/core";
+import { uuidSchema } from "@sabacos/core";
 import { getAppEnv, type AppEnv } from "../env.js";
 import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
@@ -14,7 +15,7 @@ export const adRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
 
 adRoutes.use("*", requireUser);
 
-const viewSchema = z.object({ productId: z.string().uuid() });
+const viewSchema = z.object({ productId: uuidSchema });
 
 adRoutes.post("/track/view", async (c) => {
   const env = getAppEnv();

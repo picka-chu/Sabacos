@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { safeParse } from "../errors.js";
 import { z } from "zod";
+import { uuidSchema } from "@sabacos/core";
 import { getAppEnv, type AppEnv } from "../env.js";
 import { getDb } from "../db/client.js";
 import { listActiveCategories, listProducts, getProductById } from "../db/catalog.js";
@@ -31,7 +32,7 @@ const productListQuerySchema = z.object({
 catalogRoutes.get("/products", async (c) => {
   const db = getDb(getAppEnv());
   const query = safeParse(productListQuerySchema, c.req.query());
-  const isUuid = z.uuid().safeParse(query.category).success;
+  const isUuid = uuidSchema.safeParse(query.category).success;
   const page = await listProducts(db, {
     categoryId: isUuid ? query.category ?? null : null,
     categorySlug: isUuid ? null : query.category ?? null,
