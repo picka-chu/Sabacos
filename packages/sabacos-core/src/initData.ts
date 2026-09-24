@@ -100,13 +100,16 @@ export function parseInitData(initData: string): InitDataPayload | null {
   const authDateRaw = searchParams.get("auth_date");
   const hash = searchParams.get("hash");
 
-  if (!queryId || !authDateRaw || !hash || userId === null) return null;
+  // NOTE: query_id is optional per Telegram docs — only inline-button
+  // launches include it. Requiring it rejects every keyboard-button, menu
+  // button and direct-link launch with "Malformed Telegram session".
+  if (!authDateRaw || !hash || userId === null) return null;
 
   const authDate = Number(authDateRaw);
   if (!Number.isInteger(authDate) || authDate <= 0) return null;
 
   return initDataPayloadSchema.parse({
-    queryId,
+    queryId: queryId ?? undefined,
     userId,
     authDate,
     firstName,

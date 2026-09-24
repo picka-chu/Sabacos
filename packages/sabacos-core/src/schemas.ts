@@ -386,7 +386,10 @@ export const updateOrderStatusSchema = z.object({
 export const updateSettingsSchema = settingsFieldsSchema.partial();
 
 export const initDataPayloadSchema = z.object({
-  queryId: z.string(),
+  // query_id is only present for inline-button launches (needed for
+  // answerWebAppQuery). Keyboard-button, menu-button and direct-link
+  // launches carry user/auth_date/hash but NO query_id — it must be optional.
+  queryId: z.string().optional(),
   userId: z.number().int().positive(),
   authDate: z.number().int().positive(),
   firstName: z.string().nullable().optional(),
