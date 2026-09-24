@@ -194,6 +194,21 @@ export async function countQualifiedReferrals(
   return count ?? 0;
 }
 
+/** Count still-pending referees (joined via the link, no first purchase yet). */
+export async function countPendingReferrals(
+  db: Db,
+  referrerId: string,
+): Promise<number> {
+  const { count, error } = await db
+    .from("referrals")
+    .select("*", { count: "exact", head: true })
+    .eq("referrer_id", referrerId)
+    .eq("status", "pending");
+
+  if (error) throw new Error(`countPendingReferrals: ${error.message}`);
+  return count ?? 0;
+}
+
 /** Mark a referral as qualified after the referred user's first purchase. */
 export async function qualifyReferral(
   db: Db,

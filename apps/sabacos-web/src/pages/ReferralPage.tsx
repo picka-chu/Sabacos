@@ -14,6 +14,7 @@ interface ReferralInfo {
   code: string | null;
   deepLink: string | null;
   qualifiedCount: number;
+  pendingCount: number;
   availableSpins: number;
   referralProgress: string | null;
   walletBalance: number;
@@ -140,7 +141,7 @@ export function ReferralPage() {
           <div className="skeleton" style={{ width: 150, height: 16, margin: "0 auto" }} />
         </div>
       ) : tab === "overview" ? (
-        <OverviewTab info={info} copyCode={copyCode} copyLink={copyLink} shareLink={shareLink} navigate={navigate} onWalletTap={() => setTab("wallet")} />
+        <OverviewTab info={info} copyCode={copyCode} copyLink={copyLink} shareLink={shareLink} navigate={navigate} onWalletTap={() => setTab("wallet")} onHistoryTap={() => setTab("history")} />
       ) : tab === "wallet" ? (
         <>
           <WalletTab balance={info?.walletBalance ?? 0} transactions={transactions} />
@@ -232,13 +233,14 @@ export function ReferralPage() {
   );
 }
 
-function OverviewTab({ info, copyCode, copyLink, shareLink, navigate, onWalletTap }: {
+function OverviewTab({ info, copyCode, copyLink, shareLink, navigate, onWalletTap, onHistoryTap }: {
   info: ReferralInfo | null;
   copyCode: () => void;
   copyLink: () => void;
   shareLink: () => void;
   navigate: (path: string) => void;
   onWalletTap: () => void;
+  onHistoryTap: () => void;
 }) {
   const { t } = useI18n();
   if (!info) return null;
@@ -321,6 +323,24 @@ function OverviewTab({ info, copyCode, copyLink, shareLink, navigate, onWalletTa
           <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{t("spinsAvailable")}</div>
         </div>
       </div>
+
+      {/* Pending referees — joined via the link, no purchase yet */}
+      {(info.pendingCount ?? 0) > 0 && (
+        <button
+          className="card profile-menu-row"
+          style={{ width: "100%", textAlign: "left", marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}
+          onClick={onHistoryTap}
+        >
+          <Hourglass size={20} strokeWidth={1.75} style={{ color: "var(--warning, #f57c00)" }} />
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontWeight: 700, display: "block", fontSize: 14 }}>
+              {info.pendingCount} {t("pendingReferees")}
+            </span>
+            <span className="muted" style={{ fontSize: 12 }}>{t("pendingRefereesHint")}</span>
+          </span>
+          <ChevronRight size={18} className="muted" />
+        </button>
+      )}
 
       {/* Spin Progress */}
       {info.settings && (

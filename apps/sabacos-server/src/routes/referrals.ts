@@ -7,6 +7,7 @@ import {
   getReferralByReferredId,
   getReferralsByReferrerId,
   countQualifiedReferrals,
+  countPendingReferrals,
   createReferral,
   makeReferralCode,
 } from "../db/referrals.js";
@@ -50,6 +51,7 @@ referralRoutes.get("/", async (c) => {
   const settings = await getReferralSettings(db);
   const referral = await getReferralByReferredId(db, profile.id);
   const qualifiedCount = await countQualifiedReferrals(db, profile.id);
+  const pendingCount = await countPendingReferrals(db, profile.id);
   const availableSpins = await countAvailableSpins(db, profile.id);
   const wallet = await getWalletByProfileId(db, profile.id);
   const validCoupons = await getValidCoupons(db, profile.id);
@@ -63,6 +65,7 @@ referralRoutes.get("/", async (c) => {
     code,
     deepLink,
     qualifiedCount,
+    pendingCount,
     availableSpins,
     referralProgress: settings
       ? `${qualifiedCount % settings.referralsPerSpin}/${settings.referralsPerSpin} referrals to your next spin`
@@ -87,7 +90,31 @@ referralRoutes.get("/history", async (c) => {
   const db = getDb(c.env);
   const referrals = await getReferralsByReferrerId(db, profile.id);
 
-  return c.json({ referrals });
+  // Attach the referred friend's display name so pending referees are
+  // recognizable (not just a code). One batched lookup, never fatal.
+  const ids = [...new Set(referrals.map((r) => r.referredId))];
+  let nameById = new Map<string, { firstName?: string; username?: string }>();
+  if (ids.length > 0) {
+    const { data } = await db
+      .from("profiles")
+      .select("id, first_name, username")
+      .in("id", ids);
+    nameById = new Map(
+      ((data ?? []) as Array<{ id: string; first_name?: string | null; username?: string | null }>).map(
+        (p) => [
+          p.id,
+          {
+            ...(p.first_name ? { firstName: p.first_name } : {}),
+            ...(p.username ? { username: p.username } : {}),
+          },
+        ],
+      ),
+    );
+  }
+
+  return c.json({
+    referrals: referrals.map((r) => ({ ...r, referred: nameById.get(r.referredId) ?? null })),
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────────
