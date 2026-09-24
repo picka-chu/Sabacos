@@ -23,6 +23,7 @@ interface ReferralInfo {
     firstPurchasePercent: number;
     referralsPerSpin: number;
     monthlyCapHalala: number;
+    isActive: boolean;
   } | null;
 }
 
@@ -141,7 +142,7 @@ export function ReferralPage() {
           <div className="skeleton" style={{ width: 150, height: 16, margin: "0 auto" }} />
         </div>
       ) : tab === "overview" ? (
-        <OverviewTab info={info} copyCode={copyCode} copyLink={copyLink} shareLink={shareLink} navigate={navigate} onWalletTap={() => setTab("wallet")} onHistoryTap={() => setTab("history")} />
+        <OverviewTab info={info} copyCode={copyCode} copyLink={copyLink} shareLink={shareLink} navigate={navigate} onWalletTap={() => setTab("wallet")} onHistoryTap={() => setTab("history")} onLinked={load} />
       ) : tab === "wallet" ? (
         <>
           <WalletTab balance={info?.walletBalance ?? 0} transactions={transactions} />
@@ -233,7 +234,7 @@ export function ReferralPage() {
   );
 }
 
-function OverviewTab({ info, copyCode, copyLink, shareLink, navigate, onWalletTap, onHistoryTap }: {
+function OverviewTab({ info, copyCode, copyLink, shareLink, navigate, onWalletTap, onHistoryTap, onLinked }: {
   info: ReferralInfo | null;
   copyCode: () => void;
   copyLink: () => void;
@@ -241,6 +242,7 @@ function OverviewTab({ info, copyCode, copyLink, shareLink, navigate, onWalletTa
   navigate: (path: string) => void;
   onWalletTap: () => void;
   onHistoryTap: () => void;
+  onLinked: () => void;
 }) {
   const { t } = useI18n();
   if (!info) return null;
@@ -342,6 +344,17 @@ function OverviewTab({ info, copyCode, copyLink, shareLink, navigate, onWalletTa
         </button>
       )}
 
+      {/* Program paused notice */}
+      {info.settings && !info.settings.isActive && (
+        <div className="card" style={{ padding: "12px 16px", marginTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
+          <Clock size={18} className="muted" />
+          <span className="muted" style={{ fontSize: 13 }}>{t("referralPaused")}</span>
+        </div>
+      )}
+
+      {/* Link a friend's invite code (repair path when the link attribution was missed) */}
+      <InviteCodeCard onLinked={onLinked} />
+
       {/* Spin Progress */}
       {info.settings && (
         <div className="card" style={{ padding: 16, marginTop: 12 }}>
@@ -389,6 +402,51 @@ function OverviewTab({ info, copyCode, copyLink, shareLink, navigate, onWalletTa
         <ChevronRight size={18} className="muted" />
       </button>
     </>
+  );
+}
+
+function InviteCodeCard({ onLinked }: { onLinked: () => void }) {
+  const { t } = useI18n();
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const apply = async () => {
+    const trimmed = code.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post("/referral/validate", { code: trimmed });
+      setCode("");
+      toast(t("inviteCodeSuccess"));
+      onLinked();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ padding: 16, marginTop: 12 }}>
+      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{t("inviteCodeTitle")}</div>
+      <div className="flex" style={{ gap: 8, marginTop: 8 }}>
+        <input
+          className="input"
+          value={code}
+          onChange={(e) => { setCode(e.target.value); setError(null); }}
+          placeholder={t("inviteCodePlaceholder")}
+          autoCapitalize="none"
+          autoCorrect="off"
+          style={{ flex: 1 }}
+        />
+        <button className="btn btn-primary" disabled={busy || !code.trim()} onClick={apply}>
+          {t("inviteCodeApply")}
+        </button>
+      </div>
+      {error && <div style={{ color: "var(--danger, #ef4444)", fontSize: 13, marginTop: 8 }}>{error}</div>}
+    </div>
   );
 }
 

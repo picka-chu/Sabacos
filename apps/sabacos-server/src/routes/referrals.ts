@@ -77,6 +77,7 @@ referralRoutes.get("/", async (c) => {
           firstPurchasePercent: settings.firstPurchasePercent,
           referralsPerSpin: settings.referralsPerSpin,
           monthlyCapHalala: settings.monthlyCapHalala,
+          isActive: settings.isActive,
         }
       : null,
   });
@@ -216,7 +217,7 @@ referralRoutes.post("/validate", async (c) => {
   if (!profile) return c.json({ error: { code: "unauthorized", message: "Not authenticated" } }, 401);
 
   const body = await c.req.json().catch(() => null);
-  const code = body?.code;
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
   if (!code) {
     return c.json({ error: { code: "missing_code", message: "Referral code required" } }, 400);
   }
@@ -229,20 +230,32 @@ referralRoutes.post("/validate", async (c) => {
     return c.json({ error: { code: "already_referred", message: "You were already referred" } }, 400);
   }
 
-  // Find the referral code
-  const referral = await getReferralByCode(db, code);
-  if (!referral) {
+  // Resolve the referrer. Invite codes are `ref<telegramId>` (see
+  // makeReferralCode), so a first-time sharer with no referral rows yet
+  // still resolves — the old lookup below only worked after they had
+  // already referred someone once.
+  let referrerId: string | null = null;
+  const codeMatch = /^ref(\d{5,12})$/.exec(code);
+  if (codeMatch) {
+    const sharer = await getProfileByTelegramId(db, Number(codeMatch[1])).catch(() => null);
+    if (sharer) referrerId = sharer.id;
+  }
+  if (!referrerId) {
+    const referral = await getReferralByCode(db, code);
+    if (referral) referrerId = referral.referrerId;
+  }
+  if (!referrerId) {
     return c.json({ error: { code: "invalid_code", message: "Invalid referral code" } }, 400);
   }
 
   // Can't refer yourself
-  if (referral.referrerId === profile.id) {
+  if (referrerId === profile.id) {
     return c.json({ error: { code: "self_referral", message: "Cannot refer yourself" } }, 400);
   }
 
   // Create the referral
   const newReferral = await createReferral(db, {
-    referrerId: referral.referrerId,
+    referrerId,
     referredId: profile.id,
     referralCode: code,
   });
