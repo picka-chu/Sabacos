@@ -288,6 +288,63 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
       }
     }
 
+    // Product-share arrival: `s<sharerTelegramId>_<productUuid>` (the Buy
+    // button on forwarded product cards). Record the pending referral right
+    // here — the mini app may later open via the Shop keyboard with NO
+    // start_param, so /start is the only reliable attribution point. This
+    // row is what unlocks the friend's automatic 5% first-order discount and
+    // the sharer's 10% commission when they buy.
+    const { parseSharePayload, ensureShareReferral, getReferralByReferredId } =
+      await import("../db/referrals.js");
+    const share = parseSharePayload(payload ?? "");
+    let sharedProductId: string | null = null;
+    if (share && currentProfile && share.sharerTelegramId !== ctx.from?.id) {
+      sharedProductId = share.productId;
+      const before = await getReferralByReferredId(db, currentProfile.id).catch(() => null);
+      const referralId = await ensureShareReferral(
+        db,
+        currentProfile.id,
+        share.sharerTelegramId,
+      ).catch((err) => {
+        console.error("start: share attribution failed", err);
+        return null;
+      });
+      if (referralId && !before) {
+        referralMsg +=
+          "\n\n🔗 You arrived through a friend's share! Your first order gets 5% off automatically.";
+      }
+    }
+
+    // Show the shared product immediately with a one-tap Shop button, so the
+    // arrival converts even if the user never opens the mini app directly
+    // from the link. Card failures must never break /start.
+    if (sharedProductId) {
+      try {
+        const { getProductById } = await import("../db/catalog.js");
+        const product = await getProductById(db, sharedProductId).catch(() => null);
+        if (product) {
+          const kb = new InlineKeyboard().webApp(
+            "🛍  View product",
+            webAppUrl(env.WEBAPP_URL, `/product/${product.id}`),
+          );
+          const caption =
+            `✨ <b>${escapeHtml(product.nameEn)}</b>\n` +
+            `💰 ${formatETB(product.priceHalala)} — or pay half now, rest on delivery`;
+          if (product.imageUrls[0]) {
+            await ctx.replyWithPhoto(product.imageUrls[0], {
+              caption,
+              parse_mode: "HTML",
+              reply_markup: kb,
+            });
+          } else {
+            await ctx.reply(caption, { parse_mode: "HTML", reply_markup: kb });
+          }
+        }
+      } catch (err) {
+        console.error("start: shared product card failed", err);
+      }
+    }
+
     // First run: bilingual welcome, then the user picks a language. They get
     // the shop (and the rest of the menu) only after that choice.
     if (currentProfile && !currentProfile.language) {
