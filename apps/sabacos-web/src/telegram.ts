@@ -26,6 +26,7 @@ export interface TelegramWebApp {
   ready: () => void;
   expand: () => void;
   close: () => void;
+  sendData?: (data: string) => void;
   openLink: (url: string) => void;
   openTelegramLink?: (url: string) => void;
   shareMessage?: (msg_id: string, callback?: (sent: boolean) => void) => void;
@@ -449,12 +450,6 @@ export function openExternalLink(url: string): void {
   }
 }
 
-/**
- * Open a t.me link INSIDE Telegram (native chat picker / share sheet)
- * instead of the external browser. Falls back to openLink when the client
- * is too old to have openTelegramLink.
- * See https://core.telegram.org/bots/webapps#initializing-mini-apps
- */
 export function openTelegramLink(url: string): void {
   const webApp = getTelegramWebApp();
   if (webApp && typeof webApp.openTelegramLink === "function") {
@@ -513,6 +508,60 @@ export function sharePreparedMessage(preparedId: string, timeoutMs = 60_000): Pr
     }
     setTimeout(() => settle(false), timeoutMs);
   });
+}
+
+/**
+ * True when the app can prove the user to the bot via sendData. Per the
+ * docs this method exists exactly for keyboard-button launches — the one
+ * entry that may carry no session data at all.
+ */
+export function canSendData(): boolean {
+  const webApp = getTelegramWebApp();
+  return Boolean(webApp) && typeof webApp?.sendData === "function";
+}
+
+/**
+ * Verify-login fallback: sends a login ping to the bot as a service
+ * message (proves the Telegram user identity server-side) and closes the
+ * mini app. The bot replies in the chat with a one-tap Shop button, which
+ * re-opens the app as an inline launch WITH full session data.
+ * Returns false when sendData is unavailable (caller should show guidance).
+ */
+export function sendLoginRequest(): boolean {
+  const webApp = getTelegramWebApp();
+  const send = typeof webApp?.sendData === "function" ? webApp.sendData : undefined;
+  if (!webApp || !send) return false;
+  try {
+    send.call(webApp, "sabacos:login");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Compact launch diagnostics for the auth error banner, so a failure
+ * report tells us exactly what Telegram provided:
+ * sdk (object present), v (client version), data (initData bytes),
+ * params (launch params in URL).
+ */
+export function getLaunchDiagnostics(): string {
+  const webApp = getTelegramWebApp();
+  const sdk = webApp ? 1 : 0;
+  const version = typeof webApp?.version === "string" && webApp.version ? webApp.version : "none";
+  let dataBytes = 0;
+  try {
+    dataBytes = (webApp?.initData ?? "").length;
+  } catch {
+    /* noop */
+  }
+  let params = 0;
+  try {
+    params = hasLaunchParams() ? 1 : 0;
+  } catch {
+    /* noop */
+  }
+  return `tg sdk=${sdk} v=${version} data=${dataBytes}b params=${params}`;
 }
 
 export function requestPhoneNumber(): Promise<string | null> {

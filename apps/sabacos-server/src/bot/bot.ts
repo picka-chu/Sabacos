@@ -640,6 +640,24 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     });
   });
 
+  // Verify-login from the mini app: keyboard-button launches may carry no
+  // session data, so the app proves the user via sendData (service message
+  // carries the real sender identity). Reply with a one-tap Shop button —
+  // tapping it re-opens the app as an inline launch WITH full session data.
+  bot.on("message:web_app_data", async (ctx) => {
+    const data = ctx.message.web_app_data?.data ?? "";
+    if (data !== "sabacos:login" || !ctx.from) return;
+    await ctx.reply(
+      "Verified — tap below to open the shop.\nከታች ይንኩ — ተረጋግጠዋል።",
+      {
+        reply_markup: new InlineKeyboard().webApp(
+          "Open the shop",
+          webAppUrl(env.WEBAPP_URL),
+        ),
+      },
+    );
+  });
+
   // User shared their number via the bot's request keyboard → save it and
   // send them straight back to the mini app.
   bot.on("message:contact", async (ctx) => {

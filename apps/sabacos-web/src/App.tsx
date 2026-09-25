@@ -12,11 +12,15 @@ import {
   getTelegramWebApp,
   haptic,
   isTelegramSession,
+  isTelegramClient,
+  canSendData,
+  sendLoginRequest,
+  getLaunchDiagnostics,
   waitForInitData,
 } from "./telegram.js";
 import { BottomNav } from "./components/BottomNav.js";
 import { ErrorBoundary } from "./components/ErrorBoundary.js";
-import { ToastHost } from "./components/Toast.js";
+import { ToastHost, toast } from "./components/Toast.js";
 import { useShopStore, apiErrorMessage } from "./store.js";
 import { HomePage } from "./pages/HomePage.js";
 import { ShopPage } from "./pages/ShopPage.js";
@@ -245,7 +249,37 @@ function Shell() {
           }}
         >
           <Info size={16} style={{ flexShrink: 0 }} />
-          <span style={{ flex: 1, minWidth: 140 }}>{authError}</span>
+          <span style={{ flex: 1, minWidth: 140 }}>
+            <span style={{ display: "block" }}>{authError}</span>
+            <span style={{ display: "block", fontSize: 11, opacity: 0.75, marginTop: 2 }}>
+              {getLaunchDiagnostics()}
+            </span>
+          </span>
+          {isTelegramClient() && !getInitData() && canSendData() && (
+            <button
+              type="button"
+              onClick={() => {
+                haptic("medium");
+                // Success closes the app; the bot replies in the chat with a
+                // one-tap Shop button that re-opens with a full session.
+                if (!sendLoginRequest()) {
+                  toast(t("verifyFailed"));
+                }
+              }}
+              style={{
+                border: "1px solid #b91c1c",
+                borderRadius: 10,
+                padding: "6px 12px",
+                background: "#fff",
+                color: "#b91c1c",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {t("verifyViaBot")}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
