@@ -133,7 +133,7 @@ function bilingualWelcome(shopName: string, firstName: string): string {
   ].join("\n");
 }
 
-const MENU_BUTTON_TEXTS = ["🛍  Shop", "📋  Join Waitlist", "📦  My Orders", "ℹ️  Help"] as const;
+const MENU_BUTTON_TEXTS = ["🛍  Shop", "📋  Join Waitlist", "📦  My Orders", "ℹ️  Help", "🎁  Refer a Friend"] as const;
 
 async function sendMyOrders(ctx: Context, env: AppEnv): Promise<void> {
   const from = ctx.from;
@@ -248,8 +248,12 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     const firstName = ctx.from?.first_name ? escapeHtml(ctx.from.first_name) : "";
     const payload = ctx.match as string | undefined;
     let referralMsg = "";
-    if (payload?.startsWith("ref_") && currentProfile) {
-      const referrerTelegramId = Number(payload.slice(4));
+    // Referral arrivals: `ref<telegramId>` (mini-app deep links) and legacy
+    // `ref_<telegramId>`. Waitlist invite codes (`ref_<alphanumeric>`) do NOT
+    // match the numeric pattern and are handled in the branch below.
+    const refMatch = /^ref_?(\d{5,12})$/.exec(payload ?? "");
+    if (refMatch && currentProfile) {
+      const referrerTelegramId = Number(refMatch[1]);
       if (referrerTelegramId && referrerTelegramId !== ctx.from?.id) {
         // Find referrer's profile
         const referrerProfile = await getProfileByTelegramId(db, referrerTelegramId).catch(() => null);
@@ -267,6 +271,31 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
             referralMsg = "\n\n🔗 You were invited by a friend! Complete a purchase to unlock rewards for both of you.";
           }
         }
+      }
+    }
+
+    // Waitlist invite arrival: `ref_<alphanumericCode>` (see
+    // GET /waitlist/referral). The join form takes the code, so confirm the
+    // inviter here and show the code to paste — the mini app opened later
+    // carries no start_param to do it automatically.
+    const waitlistCodeMatch = /^ref_([A-Za-z0-9]{4,32})$/.exec(payload ?? "");
+    if (waitlistCodeMatch && currentProfile && !refMatch) {
+      try {
+        const { getWaitlistEntryByCode } = await import("../db/waitlist.js");
+        const inviterEntry = await getWaitlistEntryByCode(db, waitlistCodeMatch[1]!).catch(
+          () => null,
+        );
+        if (inviterEntry) {
+          const { getProfileById } = await import("../db/profiles.js");
+          const inviter = await getProfileById(db, inviterEntry.profileId).catch(() => null);
+          const inviterName =
+            inviter?.firstName ?? (inviter?.username ? `@${inviter.username}` : null);
+          referralMsg +=
+            `\n\n🎟 You were invited to the waitlist${inviterName ? ` by ${escapeHtml(inviterName)}` : ""}!` +
+            `\nEnter this code when you join: <code>${escapeHtml(waitlistCodeMatch[1]!)}</code>`;
+        }
+      } catch (err) {
+        console.error("start: waitlist invite lookup failed", err);
       }
     }
 
@@ -295,6 +324,13 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
         referralMsg +=
           "\n\n🔗 You arrived through a friend's share! Your first order gets 5% off automatically.";
       }
+    }
+
+    // Channel/forwarded product arrival: `product_<uuid>` (emitted by
+    // postProductToChannel). Reuses the shared-product card below.
+    if (!sharedProductId && currentProfile) {
+      const productMatch = /^product_([0-9a-fA-F-]{36})$/.exec(payload ?? "");
+      if (productMatch?.[1]) sharedProductId = productMatch[1];
     }
 
     // Show the shared product immediately with a one-tap Shop button, so the
@@ -479,9 +515,9 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
       {
         parse_mode: "HTML",
         reply_markup: new InlineKeyboard()
-          .url("📤 Share Referral Link", `https://t.me/share/url?url=${encodeURIComponent(`Join Sabacos cosmetics using my link: ${deepLink}`)}`)
+          .url("📤 Share Referral Link", `https://t.me/share/url?url=${encodeURIComponent(deepLink)}&text=${encodeURIComponent("Join Sabacos cosmetics using my link!")}`)
           .row()
-          .webApp("🎰  Spin the Wheel", webAppUrl(env.WEBAPP_URL)),
+          .webApp("🎰  Spin the Wheel", webAppUrl(env.WEBAPP_URL, "/spinner")),
       },
     );
   });
@@ -520,9 +556,9 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
       {
         parse_mode: "HTML",
         reply_markup: new InlineKeyboard()
-          .url("📤 Share Link", `https://t.me/share/url?url=${encodeURIComponent(`Join Sabacos cosmetics using my link: ${deepLink}`)}`)
+          .url("📤 Share Link", `https://t.me/share/url?url=${encodeURIComponent(deepLink)}&text=${encodeURIComponent("Join Sabacos cosmetics using my link!")}`)
           .row()
-          .webApp("🎰  Spin the Wheel", webAppUrl(env.WEBAPP_URL)),
+          .webApp("🎰  Spin the Wheel", webAppUrl(env.WEBAPP_URL, "/spinner")),
       },
     );
   });
@@ -898,13 +934,27 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
       return;
     }
 
-    const { verifyPaymentProof, finalizeBankSplitDeposit } = await import("../db/bank-accounts.js");
+    const { verifyPaymentProof } = await import("../db/bank-accounts.js");
     await verifyPaymentProof(db, orderId, action as "approved" | "rejected");
 
     if (action === "approved" && order.bankAccountId) {
-      const result = await finalizeBankSplitDeposit(db, orderId, order.bankAccountId);
-      if (result !== "ok") {
-        console.error(`[proof callback] finalize failed for order ${orderId}: ${result}`);
+      // Deposit already recorded (and stock reserved) at checkout — approving
+      // only advances the order to paid. Never re-run the deposit RPC here
+      // (it would decrement stock a second time and reset the proof).
+      const { data: paid, error: paidError } = await db
+        .from("orders")
+        .update({ status: "paid", updated_at: new Date().toISOString() })
+        .eq("id", orderId)
+        .eq("status", "pending_payment")
+        .select("id")
+        .maybeSingle();
+      if (paidError || !paid) {
+        console.error(`[proof callback] finalize failed for order ${orderId}:`, paidError);
+        await ctx.answerCallbackQuery({
+          text: "Approved, but the order could not be finalized — please retry.",
+          show_alert: true,
+        });
+        return;
       }
     }
 
@@ -1154,7 +1204,9 @@ export async function postProductToChannel(
   let deepLink: string;
   try {
     const username = env.BOT_USERNAME || "sabacosbot";
-    deepLink = `https://t.me/${username}?startapp=${product.id}`;
+    // product_ prefix: handled by the bot (/start card) AND the mini app
+    // (direct navigation). A raw UUID is handled by NEITHER — never emit it.
+    deepLink = `https://t.me/${username}?startapp=product_${product.id}`;
   } catch (err) {
     console.error("postProductToChannel skipped (no BOT_USERNAME):", err);
     return;

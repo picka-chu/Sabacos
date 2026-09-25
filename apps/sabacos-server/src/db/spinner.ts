@@ -179,13 +179,16 @@ export async function getAllSpins(
 /** Use a spin and return the prize won (weighted random selection). */
 export async function useSpin(
   db: Db,
+  profileId: string,
   spinId: string,
 ): Promise<{ spin: SpinnerSpin; prize: SpinnerPrize }> {
-  // Get the spin
+  // Get the spin — scoped to the caller's profile (a spin id alone must
+  // never let one user spend another user's spin) and still available.
   const { data: spinData, error: spinErr } = await db
     .from("spinner_spins")
     .select("*")
     .eq("id", spinId)
+    .eq("profile_id", profileId)
     .eq("status", "available")
     .single();
 
@@ -229,7 +232,8 @@ export async function useSpin(
     if (poolErr) throw new Error(`Failed to update prize pool: ${poolErr.message}`);
   }
 
-  // Mark spin as used
+  // Mark spin as used — conditional so a concurrent claim on the same spin
+  // fails closed instead of minting two prizes.
   const { data: updatedSpin, error: updateErr } = await db
     .from("spinner_spins")
     .update({
@@ -238,10 +242,12 @@ export async function useSpin(
       won_at: new Date().toISOString(),
     })
     .eq("id", spinId)
+    .eq("profile_id", profileId)
+    .eq("status", "available")
     .select()
     .single();
 
-  if (updateErr) throw new Error(`Failed to mark spin as used: ${updateErr.message}`);
+  if (updateErr || !updatedSpin) throw new Error("Spin was already used");
 
   return {
     spin: spinnerSpinRowSchema.parse(updatedSpin),

@@ -236,6 +236,10 @@ export interface CartSummary {
   /** Spinner coupon discount preview when a coupon code is attached to the cart. */
   couponDiscountHalala?: number;
   couponDiscountLabel?: string | null;
+  /** Automatic profile-percent discount preview (referred-friend or waitlist).
+   * Same rule as checkout: applies only when no promotion discounts the cart. */
+  profileDiscountHalala?: number;
+  profileDiscountLabel?: string | null;
   /** Non-null when the attached coupon code is invalid / expired / below min order. */
   couponError?: string | null;
 }

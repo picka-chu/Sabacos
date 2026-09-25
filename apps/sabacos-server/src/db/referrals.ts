@@ -209,7 +209,7 @@ export async function countPendingReferrals(
   return count ?? 0;
 }
 
-/** Mark a referral as qualified after the referred user's first purchase. */
+/** Mark a referral as qualified after the referred user's first purchase. Conditional on still-pending so concurrent triggers converge. */
 export async function qualifyReferral(
   db: Db,
   referralId: string,
@@ -223,7 +223,8 @@ export async function qualifyReferral(
       order_id: orderId,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", referralId);
+    .eq("id", referralId)
+    .eq("status", "pending");
 
   if (error) throw new Error(`qualifyReferral: ${error.message}`);
 }

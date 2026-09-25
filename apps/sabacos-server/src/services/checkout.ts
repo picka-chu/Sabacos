@@ -463,7 +463,9 @@ async function finalizeBankSplitCheckout(
     } catch {}
     throw new CartValidationError(`Bank split finalization failed: ${error.message}`, "insufficient_stock");
   }
-  if (status !== "ok") {
+  // 'already_processed' = idempotent retry (deposit recorded + stock
+  // reserved by the first call) — safe to proceed, not a failure.
+  if (status !== "ok" && status !== "already_processed") {
     try {
       await db
         .from("orders")
@@ -498,7 +500,8 @@ async function finalizeBankSplitChapa(
     } catch {}
     throw new CartValidationError(`Bank split (Chapa) finalization failed: ${error.message}`, "insufficient_stock");
   }
-  if (status !== "ok") {
+  // 'already_processed' = idempotent retry — safe to proceed.
+  if (status !== "ok" && status !== "already_processed") {
     try {
       await db
         .from("orders")

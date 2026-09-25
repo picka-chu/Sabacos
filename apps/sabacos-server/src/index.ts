@@ -20,6 +20,7 @@ import { adminReferralRoutes } from "./routes/admin-referrals.js";
 import { shareRoutes } from "./routes/share.js";
 import { requireUser } from "./auth/telegram.js";
 import { requireAdmin, requireFullAdmin, adminMeHandler } from "./auth/admin.js";
+import { requirePermission } from "./auth/admin.js";
 import { sendError, notFound } from "./errors.js";
 import { log } from "./log.js";
 import { rateLimit } from "./rate-limit.js";
@@ -209,6 +210,21 @@ app.get("/api/v1/bank-accounts", async (c) => {
 app.get("/api/v1/admin/me", adminMeHandler);
 
 app.use("/api/v1/admin/*", rateLimit(db, { windowMs: 60_000, limit: 60, keyGenerator: ipKey }), requireAdmin);
+// Server-side page-permission enforcement (the admin UI gates are cosmetic;
+// every area below re-checks the permission matrix from store settings).
+// Slash-star patterns match both the bare path and nested paths in Hono.
+app.use("/api/v1/admin/products/*", requirePermission("/products"));
+app.use("/api/v1/admin/categories/*", requirePermission("/categories"));
+app.use("/api/v1/admin/discounts/*", requirePermission("/discounts"));
+app.use("/api/v1/admin/orders/*", requirePermission("/orders"));
+app.use("/api/v1/admin/bank-accounts/*", requirePermission("/banks"));
+app.use("/api/v1/admin/broadcast/*", requirePermission("/broadcast"));
+app.use("/api/v1/admin/referrals/*", requirePermission("/referrals"));
+app.use("/api/v1/admin/waitlist/*", requirePermission("/waitlist"));
+app.use("/api/v1/admin/settings/*", requirePermission("/settings"));
+app.use("/api/v1/admin/ai/*", requirePermission("/products"));
+app.use("/api/v1/admin/stats", requirePermission("/analytics"));
+app.use("/api/v1/admin/analytics", requirePermission("/analytics"));
 app.route("/api/v1/admin", adminRoutes);
 app.route("/api/v1/admin/waitlist", waitlistAdminRoutes);
 app.route("/api/v1/admin/discounts", discountAdminRoutes);

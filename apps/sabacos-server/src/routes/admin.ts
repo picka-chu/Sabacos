@@ -38,7 +38,6 @@ import {
   updateBankAccount,
   deleteBankAccount,
   verifyPaymentProof,
-  finalizeBankSplitDeposit,
 } from "../db/bank-accounts.js";
 import { getSettings, updateSettings } from "../db/settings.js";
 import { notifyAdminChannel, createBot, postProductToChannel, testAdminChannel } from "../bot/bot.js";
@@ -965,6 +964,10 @@ adminRoutes.get("/bank-accounts", async (c) => {
 });
 
 adminRoutes.post("/bank-accounts", async (c) => {
+  const caller = c.get("profile");
+  if (caller.role !== "admin") {
+    return c.json({ error: { code: "forbidden", message: "Only admins can manage bank accounts" } }, 403);
+  }
   const env = getAppEnv();
   const db = getDb(env);
   const body = safeParse(createBankAccountSchema, await c.req.json());
@@ -978,6 +981,10 @@ adminRoutes.post("/bank-accounts", async (c) => {
 });
 
 adminRoutes.patch("/bank-accounts/:id", async (c) => {
+  const caller = c.get("profile");
+  if (caller.role !== "admin") {
+    return c.json({ error: { code: "forbidden", message: "Only admins can manage bank accounts" } }, 403);
+  }
   const env = getAppEnv();
   const db = getDb(env);
   const id = c.req.param("id");
@@ -993,6 +1000,10 @@ adminRoutes.patch("/bank-accounts/:id", async (c) => {
 });
 
 adminRoutes.delete("/bank-accounts/:id", async (c) => {
+  const caller = c.get("profile");
+  if (caller.role !== "admin") {
+    return c.json({ error: { code: "forbidden", message: "Only admins can manage bank accounts" } }, 403);
+  }
   const env = getAppEnv();
   const db = getDb(env);
   const id = c.req.param("id");
@@ -1008,6 +1019,10 @@ const verifyPaymentSchema = z.object({
 });
 
 adminRoutes.patch("/orders/:id/verify-payment", async (c) => {
+  const caller = c.get("profile");
+  if (caller.role !== "admin" && caller.role !== "staff") {
+    return c.json({ error: { code: "forbidden", message: "Insufficient permissions" } }, 403);
+  }
   const env = getAppEnv();
   const db = getDb(env);
   const orderId = c.req.param("id");
@@ -1023,10 +1038,27 @@ adminRoutes.patch("/orders/:id/verify-payment", async (c) => {
   await verifyPaymentProof(db, orderId, body.action, body.rejectionReason);
 
   if (body.action === "approved" && order.bankAccountId) {
-    // Finalize the deposit — decrements stock, records payment
-    const result = await finalizeBankSplitDeposit(db, orderId, order.bankAccountId);
-    if (result !== "ok") {
-      console.error(`[admin/verify-payment] finalize failed for order ${orderId}: ${result}`);
+    // Deposit already recorded (and stock reserved) at checkout — approving
+    // only advances the order to paid. Never re-run the deposit RPC here
+    // (it would decrement stock a second time and reset the proof).
+    const { data: paid, error: paidError } = await db
+      .from("orders")
+      .update({ status: "paid", updated_at: new Date().toISOString() })
+      .eq("id", orderId)
+      .eq("status", "pending_payment")
+      .select("id")
+      .maybeSingle();
+    if (paidError || !paid) {
+      console.error(`[admin/verify-payment] finalize failed for order ${orderId}:`, paidError);
+      return c.json(
+        {
+          error: {
+            code: "finalize_failed",
+            message: "Proof recorded, but the order could not be advanced to paid — please retry.",
+          },
+        },
+        409,
+      );
     }
   }
 

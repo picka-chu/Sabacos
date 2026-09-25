@@ -121,6 +121,12 @@ export function CartPage() {
                 <span style={{ fontSize: 14, fontWeight: 600 }}>-{formatETB(cart.discountHalala)}</span>
               </div>
             )}
+            {cart.profileDiscountHalala != null && cart.profileDiscountHalala > 0 && (
+              <div className="row" style={{ justifyContent: "space-between", marginTop: 8, color: "var(--success)" }}>
+                <span style={{ fontSize: 14 }}>{cart.profileDiscountLabel || "Discount"}</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>-{formatETB(cart.profileDiscountHalala)}</span>
+              </div>
+            )}
             <div className="row" style={{ justifyContent: "space-between", marginTop: 8 }}>
               <span className="muted">{t("deliveryFee")}</span>
               <span className={totals.deliveryFeeHalala === 0 ? "badge badge-success" : "muted"}>
@@ -130,13 +136,13 @@ export function CartPage() {
             <hr className="divider" />
             <div className="row" style={{ justifyContent: "space-between", fontSize: 18 }}>
               <span style={{ fontWeight: 600 }}>{t("total")}</span>
-              <span className="price" style={{ fontSize: 20 }}>{formatETB(totals.totalHalala)}</span>
+              <span className="price" style={{ fontSize: 20 }}>{formatETB(Math.max(0, totals.totalHalala - (cart.discountHalala ?? 0) - (cart.couponDiscountHalala ?? 0) - (cart.profileDiscountHalala ?? 0)))}</span>
             </div>
           </div>
 
           <div className="checkout-btn">
             <button className="btn btn-primary btn-block" style={{ fontSize: 16 }} onClick={() => navigate("/checkout")}>
-              {t("checkout")} · {formatETB(totals.totalHalala)}
+              {t("checkout")} · {formatETB(Math.max(0, totals.totalHalala - (cart.discountHalala ?? 0) - (cart.couponDiscountHalala ?? 0) - (cart.profileDiscountHalala ?? 0)))}
             </button>
           </div>
         </>

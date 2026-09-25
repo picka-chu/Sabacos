@@ -3,7 +3,7 @@ import { Route, Switch, useLocation } from "wouter";
 import { Info } from "lucide-react";
 import { api } from "./api.js";
 import { parseSharePayload, stampShareClick, consumeShareClick } from "./shareAttribution.js";
-import { TERMS_VERSION } from "@sabacos/core";
+import { TERMS_VERSION, uuidSchema } from "@sabacos/core";
 import { I18nProvider, useI18n, hasUserChosenLang } from "./i18n.js";
 import {
   applyTelegramTheme,
@@ -155,6 +155,11 @@ function Shell() {
           ts: Date.now(),
         });
         navigate(`/product/${share.productId}`);
+        return;
+      }
+      // Legacy channel links carried a raw product UUID — still land on it.
+      if (uuidSchema.safeParse(startParam).success) {
+        navigate(`/product/${startParam}`);
       }
       return;
     }

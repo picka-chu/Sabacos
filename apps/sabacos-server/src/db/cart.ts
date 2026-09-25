@@ -4,6 +4,8 @@ import type { Db } from "./client.js";
 import { getSettings } from "./settings.js";
 import { attachPromos, computePromotionOrderDiscount, getActiveDiscounts } from "./discounts.js";
 import { checkSpinnerCouponForCheckout } from "./spinner.js";
+import { getReferredDiscountPercent } from "./referrals.js";
+import { getTotalDiscountForProfile } from "./waitlist.js";
 
 interface CartRow {
   id: string;
@@ -96,6 +98,31 @@ export async function getCartSummary(db: Db, profileId: string, couponCode?: str
   );
   const promo = computePromotionOrderDiscount(enriched, discounts, originalSubtotal);
 
+  // Automatic profile-percent discount preview — the exact rule checkout
+  // charges by (services/checkout.ts): at most one of referred / waitlist,
+  // only when no promotion discounts the cart. Best-effort: never break
+  // the cart summary if these lookups fail.
+  let profileDiscountHalala = 0;
+  let profileDiscountLabel: string | null = null;
+  if (promo.totalDiscountHalala === 0) {
+    const referredPercent = await getReferredDiscountPercent(db, profileId, originalSubtotal).catch(
+      () => 0,
+    );
+    if (referredPercent > 0) {
+      profileDiscountHalala = Math.round((originalSubtotal * referredPercent) / 100);
+      profileDiscountLabel = `Referral discount (${referredPercent}%)`;
+    } else {
+      const waitlistPercent = Math.min(
+        await getTotalDiscountForProfile(db, profileId).catch(() => 0),
+        100,
+      );
+      if (waitlistPercent > 0) {
+        profileDiscountHalala = Math.round((originalSubtotal * waitlistPercent) / 100);
+        profileDiscountLabel = `Waitlist discount (${waitlistPercent}%)`;
+      }
+    }
+  }
+
   const totals = computeTotals(
     enriched.map((i) => ({
       priceHalala: i.product.promo?.salePriceHalala ?? i.product.priceHalala,
@@ -134,6 +161,8 @@ export async function getCartSummary(db: Db, profileId: string, couponCode?: str
     couponDiscountHalala,
     couponDiscountLabel,
     couponError,
+    profileDiscountHalala,
+    profileDiscountLabel,
   };
 }
 

@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env.js";
 import { getDb } from "../db/client.js";
+import type { AdminContext } from "../auth/admin.js";
+import { forbidden } from "../errors.js";
 import {
   getReferralSettings,
   updateReferralSettings,
@@ -17,17 +19,56 @@ import {
 import { referralRewardRowSchema } from "@sabacos/core";
 import { getAllSpinnerPrizes, createSpinnerPrize, updateSpinnerPrize, deleteSpinnerPrize, getPrizeWinCounts } from "../db/spinner.js";
 
-export const adminReferralRoutes = new Hono<{ Bindings: AppEnv }>();
+export const adminReferralRoutes = new Hono<{ Bindings: AppEnv } & AdminContext>();
+
+/**
+ * Cash-moving endpoints are admin-only, even if the permission matrix ever
+ * grants a lesser role the /referrals page (defense in depth — a staff
+ * account must never trigger Chapa transfers or mint wallet balance).
+ */
+function requireCashAdmin(c: { get: (key: "profile") => { role: string } }): void {
+  if (c.get("profile").role !== "admin") {
+    throw forbidden("Full admin access required");
+  }
+}
 
 const walletSchema = z.object({ amountHalala: z.number().int().positive().max(10_000_000) });
 
-const referralSettingsSchema = z.object({
+const referralSettingsSchema = z.strictObject({
+  // Full updatable surface (mirrors SETTINGS_COLUMN_MAP in db/referrals.ts).
+  // id/createdAt/updatedAt are accepted-and-ignored (the admin UI round-trips
+  // the whole object); anything else 400s instead of silently dropping.
+  id: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+  isActive: z.boolean().optional(),
   firstPurchasePercent: z.number().min(0).max(100).optional(),
+  repeatPurchasePercent: z.number().min(0).max(100).optional(),
+  referredDiscountPercent: z.number().min(0).max(100).optional(),
+  affiliatePercent: z.number().min(0).max(100).optional(),
   monthlyCapHalala: z.number().int().nonnegative().optional(),
+  referralsPerSpin: z.number().int().positive().optional(),
+  maxSpinsPerWeek: z.number().int().positive().optional(),
+  spinExpiryDays: z.number().int().positive().optional(),
+  couponExpiryDays: z.number().int().positive().optional(),
+  maxCouponsPerOrder: z.number().int().positive().optional(),
+  minAccountAgeDays: z.number().int().nonnegative().optional(),
+  minOrderValueHalala: z.number().int().nonnegative().optional(),
   rewardBudgetPct: z.number().min(0).max(100).optional(),
-  commissionPct: z.number().min(0).max(100).optional(),
+  topPrizeCostHalala: z.number().int().nonnegative().optional(),
   adaptiveEnabled: z.boolean().optional(),
-}).passthrough(); // allow other fields through
+  lastAdjustmentDate: z.string().nullable().optional(),
+  adjustmentDayOfWeek: z.number().int().min(0).max(6).optional(),
+  dailySpendCapHalala: z.number().int().nonnegative().optional(),
+  dailySpendCapEnabled: z.boolean().optional(),
+  guardrailCommissionMin: z.number().min(0).max(100).optional(),
+  guardrailCommissionMax: z.number().min(0).max(100).optional(),
+  guardrailSpinCapMin: z.number().int().nonnegative().optional(),
+  guardrailSpinCapMax: z.number().int().nonnegative().optional(),
+  guardrailPrizeCostMin: z.number().int().nonnegative().optional(),
+  guardrailPrizeCostMax: z.number().int().nonnegative().optional(),
+  guardrailMaxBudgetPct: z.number().min(0).max(100).optional(),
+});
 
 // ──────────────────────────────────────────────────────────────────────
 // Referral Settings
@@ -290,6 +331,7 @@ adminReferralRoutes.get("/payouts", async (c) => {
 
 /** POST /admin/referrals/payouts/:id/retry — re-attempt a failed payout (same reference) */
 adminReferralRoutes.post("/payouts/:id/retry", async (c) => {
+  requireCashAdmin(c);
   const db = getDb(c.env);
   const id = c.req.param("id");
   try {
@@ -371,7 +413,14 @@ adminReferralRoutes.get("/payout-eligibility", async (c) => {
   }
 
   entries.sort((a, b) => b.eligibleHalala - a.eligibleHalala);
-  return c.json({ referrers: entries, sharedAccountNumbers: [...sharedNumbers] });
+  // Bank account numbers are sensitive: non-admin roles (if ever granted this
+  // page) see only fraud-relevant masking, never full numbers.
+  const caller = c.get("profile");
+  const mask = (n: string) => (caller.role === "admin" ? n : `••••${n.slice(-4)}`);
+  return c.json({
+    referrers: entries,
+    sharedAccountNumbers: [...sharedNumbers].map(mask),
+  });
 });
 
 /** PATCH /admin/referrals/payout-accounts/:id — verify/unverify a payout account */
@@ -389,6 +438,7 @@ adminReferralRoutes.patch("/payout-accounts/:id", async (c) => {
 
 /** POST /admin/referrals/payouts/run — manually trigger the daily payout pass */
 adminReferralRoutes.post("/payouts/run", async (c) => {
+  requireCashAdmin(c);
   const db = getDb(c.env);
   const { runWeeklyPayouts } = await import("../db/referral-rewards.js");
   const result = await runWeeklyPayouts(db, c.env);
@@ -397,6 +447,7 @@ adminReferralRoutes.post("/payouts/run", async (c) => {
 
 /** POST /admin/referrals/payouts/reconcile — manually trigger the reconcile pass */
 adminReferralRoutes.post("/payouts/reconcile", async (c) => {
+  requireCashAdmin(c);
   const db = getDb(c.env);
   const { reconcileProcessingPayouts } = await import("../db/referral-rewards.js");
   const result = await reconcileProcessingPayouts(db, c.env);
@@ -474,6 +525,7 @@ adminReferralRoutes.delete("/prizes/:id", async (c) => {
 
 /** POST /admin/referrals/wallet/credit — Manually credit a user's wallet */
 adminReferralRoutes.post("/wallet/credit", async (c) => {
+  requireCashAdmin(c);
   const db = getDb(c.env);
   const body = await c.req.json().catch(() => null);
 
@@ -498,6 +550,7 @@ adminReferralRoutes.post("/wallet/credit", async (c) => {
 
 /** POST /admin/referrals/wallet/debit — Manually debit a user's wallet */
 adminReferralRoutes.post("/wallet/debit", async (c) => {
+  requireCashAdmin(c);
   const db = getDb(c.env);
   const body = await c.req.json().catch(() => null);
 
@@ -599,6 +652,7 @@ adminReferralRoutes.get("/adjust/log", async (c) => {
 
 /** POST /admin/referrals/adjust/manual — Manual adjustment */
 adminReferralRoutes.post("/adjust/manual", async (c) => {
+  requireCashAdmin(c);
   const db = getDb(c.env);
   const body = await c.req.json().catch(() => null);
 

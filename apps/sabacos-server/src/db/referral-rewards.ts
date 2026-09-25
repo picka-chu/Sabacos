@@ -37,11 +37,12 @@ export async function getCommissionableTotalHalala(db: Db, orderId: string): Pro
  * Process referral reward after a successful purchase.
  * This is called from the order finalization flow.
  *
- * Steps:
+ * Ordering is load-bearing (audit C2/C3):
  * 1. Find pending referral where this user is the referred
  * 2. Validate referral eligibility (min order, account age, etc.)
- * 3. Mark referral as qualified
- * 4. Credit commission to referrer's wallet
+ * 3. Credit commission FIRST via credit_referral_commission(). The RPC
+ *    dedupes replays ('duplicate'), so a crash here is recoverable.
+ * 4. THEN mark the referral qualified (conditional on still-pending).
  * 5. Grant spin(s) if referral threshold met
  */
 export async function processReferralReward(
@@ -56,6 +57,7 @@ export async function processReferralReward(
   commissionHalala?: number;
   flaggedForReview?: boolean;
   spinsEarned?: number;
+  duplicate?: boolean;
   error?: string;
 }> {
   const { referredProfileId, orderId, orderTotalHalala } = params;
@@ -96,13 +98,12 @@ export async function processReferralReward(
     return { success: false, error: "referral_already_qualified" };
   }
 
-  // Mark referral as qualified
-  await qualifyReferral(db, referral.id, orderId);
-
   // Commission base = eligible items only. Products with commission_eligible
   // = false (thin-margin SKUs, opt-out in the admin product form) earn no
   // commission. The friend discount and referral qualification are order-level
   // and unaffected — only the sharer's cut is filtered.
+  // Computed BEFORE the credit call (it is the RPC input); the row is still
+  // pending at this point.
   const commissionBaseHalala = await getCommissionableTotalHalala(db, orderId);
 
   // Calculate the raw commission (first purchase only), then credit it
@@ -131,8 +132,25 @@ export async function processReferralReward(
     credited_halala?: number;
     flagged?: boolean;
   };
+  if (
+    credit.status !== "credited" &&
+    credit.status !== "cap_reached" &&
+    credit.status !== "duplicate"
+  ) {
+    // program_inactive / referral_not_found: do NOT qualify — the row stays
+    // pending so a later trigger can still pay it. (The old code qualified
+    // first and burned the referral with zero commission.)
+    return { success: false, error: `credit_${credit.status ?? "failed"}` };
+  }
   const actualCommission = Number(credit.credited_halala ?? 0);
   const flaggedForReview = credit.flagged === true;
+  const isDuplicate = credit.status === "duplicate";
+
+  // Mark referral as qualified — conditional on still-pending so concurrent
+  // or duplicate runs converge. Always qualifies (even cap_reached with 0
+  // commission) to preserve single-use: the friend discount must not repeat
+  // on later orders.
+  await qualifyReferral(db, referral.id, orderId);
 
   // Count qualified referrals and grant spins if threshold met
   const { count: qualifiedCount } = await db
@@ -174,6 +192,7 @@ export async function processReferralReward(
     commissionHalala: actualCommission,
     flaggedForReview,
     spinsEarned: newSpinsToGrant,
+    ...(isDuplicate ? { duplicate: true as const } : {}),
   };
 }
 
@@ -357,7 +376,7 @@ export async function processSpin(
   }
 
   // Use the spin
-  const { spin, prize } = await useSpin(db, spinId);
+  const { spin, prize } = await useSpin(db, profileId, spinId);
 
   // Handle different prize types
   switch (prize.prizeType) {

@@ -66,6 +66,17 @@ export function CheckoutPage() {
   const submittingRef = useRef(false);
 
   const totals = cart.totals;
+
+  // Discounted subtotal mirrors what the server charges (services/checkout):
+  // original subtotal minus promo, coupon AND profile (referred/waitlist)
+  // discounts. Delivery is quoted on this base, exactly like the server.
+  const discountedSubtotal = Math.max(
+    0,
+    totals.subtotalHalala -
+      (cart.discountHalala ?? 0) -
+      (cart.couponDiscountHalala ?? 0) -
+      (cart.profileDiscountHalala ?? 0),
+  );
   const fragile = cart.items.some((i) => i.product.isFragile);
 
   // When no zone is selected (no GPS, no manual pick), use the flat delivery
@@ -75,11 +86,12 @@ export function CheckoutPage() {
   const flatFee = cart.deliveryFeeHalala ?? 0;
   const flatThreshold = cart.freeDeliveryThresholdHalala ?? 0;
 
-  // Live delivery estimate mirrors the server exactly (same core engine).
+  // Live delivery estimate mirrors the server exactly (same core engine,
+  // quoted on the discounted subtotal just like checkout does).
   const estimate = useMemo(() => {
     if (!hasZone) {
       // No zone yet — use the simple flat-fee logic (matches cart page).
-      const fee = computeDeliveryFee(totals.subtotalHalala, flatFee, flatThreshold);
+      const fee = computeDeliveryFee(discountedSubtotal, flatFee, flatThreshold);
       return {
         zone: null,
         baseFeeHalala: fee,
@@ -92,14 +104,14 @@ export function CheckoutPage() {
       };
     }
     return quoteDelivery(deliveryConfig, {
-      subtotalHalala: totals.subtotalHalala,
+      subtotalHalala: discountedSubtotal,
       latitude: coords?.lat ?? null,
       longitude: coords?.lng ?? null,
       zone: coords ? null : manualZone,
       express: deliveryType === "express",
       fragile,
     });
-  }, [hasZone, deliveryConfig, totals.subtotalHalala, coords, manualZone, deliveryType, fragile, flatFee, flatThreshold]);
+  }, [hasZone, deliveryConfig, discountedSubtotal, coords, manualZone, deliveryType, fragile, flatFee, flatThreshold]);
 
   useEffect(() => {
     api.get<{ config: DeliveryConfig }>("/delivery/config")
@@ -153,16 +165,16 @@ export function CheckoutPage() {
     }
   };
 
-  const grandTotal = totals.subtotalHalala + estimate.totalDeliveryFeeHalala;
+  const grandTotal = discountedSubtotal + estimate.totalDeliveryFeeHalala;
 
   const priceFor = (express: boolean) => {
     if (!hasZone) {
-      const fee = computeDeliveryFee(totals.subtotalHalala, flatFee, flatThreshold);
+      const fee = computeDeliveryFee(discountedSubtotal, flatFee, flatThreshold);
       if (express) return fee + Math.round(fee * 0.5);
       return fee;
     }
     return quoteDelivery(deliveryConfig, {
-      subtotalHalala: totals.subtotalHalala,
+      subtotalHalala: discountedSubtotal,
       latitude: coords?.lat ?? null,
       longitude: coords?.lng ?? null,
       zone: coords ? null : manualZone,
@@ -172,7 +184,7 @@ export function CheckoutPage() {
   };
 
   const freeGap =
-    (hasZone ? deliveryConfig.freeThresholdHalala : flatThreshold) - totals.subtotalHalala;
+    (hasZone ? deliveryConfig.freeThresholdHalala : flatThreshold) - discountedSubtotal;
   const showFreeNudge =
     freeGap > 0 && freeGap <= 20000 && !estimate.freeDeliveryApplied && deliveryType === "standard";
 
@@ -689,6 +701,12 @@ export function CheckoutPage() {
               <div className="row" style={{ justifyContent: "space-between", marginTop: 6, color: "var(--success)" }}>
                 <span style={{ fontSize: 13 }}>{cart.couponDiscountLabel ?? "Coupon"}</span>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>-{formatETB(cart.couponDiscountHalala)}</span>
+              </div>
+            )}
+            {cart.profileDiscountHalala != null && cart.profileDiscountHalala > 0 && (
+              <div className="row" style={{ justifyContent: "space-between", marginTop: 6, color: "var(--success)" }}>
+                <span style={{ fontSize: 13 }}>{cart.profileDiscountLabel ?? "Discount"}</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>-{formatETB(cart.profileDiscountHalala)}</span>
               </div>
             )}
             <div className="row" style={{ justifyContent: "space-between", marginTop: 6 }}>
