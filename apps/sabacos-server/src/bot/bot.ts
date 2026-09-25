@@ -76,28 +76,12 @@ export function resolveChannelId(value: string | null | undefined): string {
   return trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;
 }
 
-// Persistent bottom-of-chat keyboard (DurgerKing style). "Shop" is a native
-// web_app button — it launches the mini app straight from the keyboard.
-function mainMenuKeyboard(env: AppEnv, waitlistActive = false, role: ProfileRole = "customer") {
-  if (waitlistActive) {
-    const rows: Array<Array<{ text: string; web_app?: { url: string } }>> = [
-      [{ text: "📋  Join Waitlist", web_app: { url: webAppUrl(env.WEBAPP_URL) } }],
-      [{ text: "ℹ️  Help" }],
-    ];
-    if (isAdminRole(role)) {
-      rows.push([{ text: "📊  Admin Dashboard", web_app: { url: webAppUrl(env.ADMIN_DASHBOARD_URL) } }]);
-    }
-    return { keyboard: rows, resize_keyboard: true, is_persistent: true };
-  }
-  const rows: Array<Array<{ text: string; web_app?: { url: string } }>> = [
-    [{ text: "🛍  Shop", web_app: { url: webAppUrl(env.WEBAPP_URL) } }],
-    [{ text: "📦  My Orders" }, { text: "🎁  Refer a Friend" }],
-    [{ text: "ℹ️  Help" }],
-  ];
-  if (isAdminRole(role)) {
-    rows.push([{ text: "📊  Admin Dashboard", web_app: { url: webAppUrl(env.ADMIN_DASHBOARD_URL) } }]);
-  }
-  return { keyboard: rows, resize_keyboard: true, is_persistent: true };
+// The persistent reply keyboard ("Shop" etc.) was removed: the bot menu
+// button already opens the shop, and keyboard-button launches are the one
+// entry that can arrive with no session data. This helper clears the stale
+// keyboard for users who still have it cached.
+function clearReplyKeyboard() {
+  return { remove_keyboard: true } as const;
 }
 
 /** Inline keyboard shown on the very first /start so users pick their language. */
@@ -161,9 +145,7 @@ async function sendMyOrders(ctx: Context, env: AppEnv): Promise<void> {
     : [];
 
   if (orders.length === 0) {
-    await ctx.reply("📦 No orders yet — tap 🛍 Shop to place your first one!", {
-      reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer"),
-    });
+    await ctx.reply("📦 No orders yet — open the shop from the menu button to place your first one!");
     return;
   }
 
@@ -240,7 +222,6 @@ export function createBot(env: AppEnv): Bot {
   bot.command("start", async (ctx) => {
     const db = getDb(env);
     const adminIds = parseAdminTelegramIds(env.ADMIN_TELEGRAM_IDS);
-    let role: ProfileRole = "customer";
     let currentProfile = null;
 
     if (ctx.from) {
@@ -255,7 +236,8 @@ export function createBot(env: AppEnv): Bot {
       });
 
       if (currentProfile) {
-        role = await ensureAdminRole(db, adminIds, currentProfile);
+        // Promotion side effect only — no reply keyboard anymore.
+        await ensureAdminRole(db, adminIds, currentProfile);
       }
     }
 
@@ -374,19 +356,15 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
           reply_markup: new InlineKeyboard().webApp("📋  Join Waitlist", webAppUrl(env.WEBAPP_URL)),
         },
       );
-      // Also update the persistent keyboard
-      await ctx.reply("Tap below anytime to open the waitlist:", {
-        reply_markup: mainMenuKeyboard(env, true, role),
-      });
+      // No persistent keyboard anymore — the menu button opens the waitlist.
       return;
     }
 
-    // Returning user: localized welcome with the persistent menu below it.
-    // The first keyboard row is the Shop web_app button, so the shop is one
-    // tap away.
+    // Returning user: localized welcome. The menu button opens the shop, and
+    // any stale reply keyboard cached on the client is cleared here.
     await ctx.reply(`${welcomeMessage(lang, shopName, firstName)}${referralMsg}`, {
       parse_mode: "HTML",
-      reply_markup: mainMenuKeyboard(env, false, role),
+      reply_markup: clearReplyKeyboard(),
     });
   });
 
@@ -404,7 +382,7 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
       (await upsertTelegramProfile(db, { telegramId: from.id }).catch(() => null));
     if (!profile) return;
     await setProfileLanguage(db, profile.id, lang).catch(() => null);
-    const role = await ensureAdminRole(db, adminIds, profile);
+    await ensureAdminRole(db, adminIds, profile);
 
     const settings = await getShopSettings(env);
     const shopName = settings?.shopNameEn ?? "Sabacos";
@@ -425,7 +403,7 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
 
     await ctx.reply(welcomeMessage(lang, shopName, firstName), {
       parse_mode: "HTML",
-      reply_markup: mainMenuKeyboard(env, false, role),
+      reply_markup: clearReplyKeyboard(),
     });
   });
 
@@ -448,11 +426,8 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
 
   bot.command("help", async (ctx) => {
     const settings = await getShopSettings(env);
-    const profile = ctx.from
-      ? await getProfileByTelegramId(getDb(env), ctx.from.id).catch(() => null)
-      : null;
     await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
-      reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer"),
+      reply_markup: clearReplyKeyboard(),
     });
   });
 
@@ -552,16 +527,17 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     );
   });
 
-  // Reply-keyboard buttons (persistent menu at the bottom of the chat).
+  // Legacy typed-text commands (kept working after the reply keyboard was
+  // removed — users can still type these, and old clients may still send
+  // the cached button labels as text).
   bot.on("message:text").filter((ctx) => ctx.message.text.trim() === "📦  My Orders", async (ctx) => {
     await sendMyOrders(ctx, env);
   });
 
   bot.on("message:text").filter((ctx) => ctx.message.text.trim() === "ℹ️  Help", async (ctx) => {
     const settings = await getShopSettings(env);
-    const profile = await getProfileByTelegramId(getDb(env), ctx.from.id).catch(() => null);
     await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
-      reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer"),
+      reply_markup: clearReplyKeyboard(),
     });
   });
 
@@ -595,12 +571,9 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
 
   bot.callbackQuery("show_help", async (ctx) => {
     const settings = await getShopSettings(env);
-    const profile = ctx.from
-      ? await getProfileByTelegramId(getDb(env), ctx.from.id).catch(() => null)
-      : null;
     await ctx.answerCallbackQuery();
     await ctx.reply(buildHelpText(settings?.shopPhone ?? null), {
-      reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer"),
+      reply_markup: clearReplyKeyboard(),
     });
   });
 
@@ -615,10 +588,9 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     async (ctx) => {
     const settings = await getShopSettings(env);
     const shopName = settings?.shopNameEn ?? "Sabacos";
-    const profile = await getProfileByTelegramId(getDb(env), ctx.from.id).catch(() => null);
     await ctx.reply(
-      `I'm the ${escapeHtml(shopName)} assistant 🌸 — I take orders, payments, and questions about deliveries.\n\nTap a button below to get started:`,
-      { reply_markup: mainMenuKeyboard(env, false, profile?.role ?? "customer") },
+      `I'm the ${escapeHtml(shopName)} assistant 🌸 — I take orders, payments, and questions about deliveries.\n\nOpen the shop from the menu button to get started. You can also type /shop, /orders or /help.`,
+      { reply_markup: clearReplyKeyboard() },
     );
   });
 
@@ -636,7 +608,7 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
       return;
     }
     await ctx.reply(`Admin Dashboard: ${env.ADMIN_DASHBOARD_URL}`, {
-      reply_markup: mainMenuKeyboard(env, false, role),
+      reply_markup: clearReplyKeyboard(),
     });
   });
 
