@@ -63,6 +63,20 @@ export function WaitlistPage() {
   useEffect(loadAll, [loadAll]);
 
   const saveConfig = async () => {
+    const nums = {
+      discountPercent: formDiscount, earlyBirdLimit: formLimit,
+      referralBonusPercent: formReferralBonus, maxReferralDiscount: formMaxReferral,
+      discountGracePeriodDays: formGraceDays,
+    };
+    for (const [k, v] of Object.entries(nums)) {
+      if (!Number.isFinite(v) || v < 0) { setError(`${k} must be a non-negative number`); return; }
+    }
+    if (nums.discountPercent > 100 || nums.referralBonusPercent > 100) {
+      setError("Discount percents must be between 0 and 100"); return;
+    }
+    if (!Number.isInteger(nums.earlyBirdLimit) || !Number.isInteger(nums.discountGracePeriodDays)) {
+      setError("Early-bird limit and grace days must be whole numbers"); return;
+    }
     setSaving(true); setError(null);
     try {
       const res = await api.put<{ config: WaitlistConfig }>("/admin/waitlist/config", {

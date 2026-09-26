@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Users, Gift, Wallet, TrendingUp, Settings, Save, Activity, AlertTriangle, Play, Pause } from "lucide-react";
 import { api, apiErrorMessage } from "../lib/api.js";
+import { etbToHalala, formatHalala } from "../lib/money.js";
 import { useAuth } from "../auth.js";
 import { useToast } from "../components/toast.js";
 import { SkeletonCard } from "../components/ui.js";
@@ -157,18 +158,34 @@ export function ReferralsPage() {
     } catch (err) { setError(apiErrorMessage(err)); }
   };
 
+  const [walletBusy, setWalletBusy] = useState(false);
   const walletAdjust = async (action: "credit" | "debit") => {
-    if (!walletProfileId.trim() || walletAmount <= 0) return;
+    if (!walletProfileId.trim() || walletBusy) return;
+    const amountHalala = etbToHalala(walletAmount);
+    if (amountHalala === null || amountHalala <= 0) {
+      setWalletMsg("Enter a valid amount greater than 0");
+      return;
+    }
+    const amountLabel = formatHalala(amountHalala);
+    if (
+      !window.confirm(
+        `${action === "credit" ? "Credit" : "Debit"} ${amountLabel} ${action === "credit" ? "to" : "from"} this wallet? This moves real balance.`,
+      )
+    ) {
+      return;
+    }
     setWalletMsg(null);
+    setWalletBusy(true);
     try {
       await api.post(`/admin/referrals/wallet/${action}`, {
-        profileId: walletProfileId.trim(), amountHalala: Math.round(walletAmount * 100),
+        profileId: walletProfileId.trim(), amountHalala,
         description: walletNote.trim() || `Admin ${action}`,
       }, token ?? undefined);
-      const msg = `${action === "credit" ? "Credited" : "Debited"} ${walletAmount.toFixed(2)} ETB`;
+      const msg = `${action === "credit" ? "Credited" : "Debited"} ${amountLabel}`;
       setWalletMsg(msg); toast("success", msg);
       setWalletAmount(0); setWalletNote(""); load();
     } catch (err) { setWalletMsg(apiErrorMessage(err)); }
+    finally { setWalletBusy(false); }
   };
 
   const formatETB = (halala: number) => `${(halala / 100).toFixed(2)} ETB`;
@@ -197,6 +214,10 @@ export function ReferralsPage() {
     finally { setPayoutBusy(false); }
   };
   const runPayoutsNow = async () => {
+    if (payoutBusy) return;
+    if (!window.confirm("Run the payout pass now? This sends REAL money via Chapa to all eligible referrers.")) {
+      return;
+    }
     setPayoutBusy(true);
     try {
       const res = await api.post<{ paid: number; paidHalala: number; failed: number }>("/admin/referrals/payouts/run", {}, token ?? undefined);

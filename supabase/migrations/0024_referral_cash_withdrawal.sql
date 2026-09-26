@@ -37,7 +37,11 @@ update public.referral_settings
       monthly_cap_halala = 500000,
       referred_discount_percent = 5,
       updated_at = now()
-  where id = '00000000-0000-0000-0000-000000000001';
+  where id = '00000000-0000-0000-0000-000000000001'
+    -- Repair-safe: only touch rows still holding the previous terms.
+    and first_purchase_percent = 5
+    and monthly_cap_halala = 500000
+    and referred_discount_percent = 5;
 
 -- ──────────────────────────────────────────────────────────────────────
 -- 2. Withdrawal aging column on referral_rewards (+ backfill)

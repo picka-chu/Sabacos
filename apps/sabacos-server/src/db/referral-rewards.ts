@@ -152,24 +152,26 @@ export async function processReferralReward(
   // on later orders.
   await qualifyReferral(db, referral.id, orderId);
 
-  // Count qualified referrals and grant spins if threshold met
+  // Count qualified referrals and grant spins from LIFETIME accounting:
+  // entitlement (floor of total/perSpin) minus spins ever granted. The row
+  // was just qualified above so the count already includes it — no +1. The
+  // old baseline (available-only spins) re-granted every used spin.
   const { count: qualifiedCount } = await db
     .from("referrals")
     .select("*", { count: "exact", head: true })
     .eq("referrer_id", referral.referrerId)
     .eq("status", "qualified");
 
-  const totalQualified = (qualifiedCount ?? 0) + 1; // +1 for this referral
-  const spinsEarned = Math.floor(totalQualified / settings.referralsPerSpin);
+  const totalQualified = qualifiedCount ?? 0;
+  const spinsEntitled = Math.floor(totalQualified / settings.referralsPerSpin);
 
-  // Count existing available spins
-  const { count: existingSpins } = await db
-    .from("spinner_spins")
+  const { count: lifetimeGranted } = await db
+    .from("referral_rewards")
     .select("*", { count: "exact", head: true })
-    .eq("profile_id", referral.referrerId)
-    .eq("status", "available");
+    .eq("referrer_id", referral.referrerId)
+    .eq("reward_type", "spin_granted");
 
-  const newSpinsToGrant = Math.max(0, spinsEarned - (existingSpins ?? 0));
+  const newSpinsToGrant = Math.max(0, spinsEntitled - (lifetimeGranted ?? 0));
 
   // Grant new spins
   for (let i = 0; i < newSpinsToGrant; i++) {
@@ -481,23 +483,35 @@ async function reverseRewardRow(
     .limit(1);
   if ((existing ?? []).length > 0) return { reversed: false };
 
-  // Debit from referrer's wallet
-  const { debitWallet } = await import("./wallet.js");
-  await debitWallet(
-    db,
-    referrerId,
-    amountHalala,
-    `Commission reversed: ${reason}`,
-    "commission_reversal",
-    referralId ?? undefined,
-  );
+  // Clamp to what the wallet actually holds: a referrer who already spent
+  // the commission can't go negative. The full amount is still recorded
+  // below so eligibility stays correct.
+  const { debitWallet, getWalletBalance } = await import("./wallet.js");
+  const balance = await getWalletBalance(db, referrerId).catch(() => 0);
+  const debitable = Math.max(0, Math.min(balance, amountHalala));
 
-  // Log the reversal
+  // Debit from referrer's wallet
+  if (debitable > 0) {
+    await debitWallet(
+      db,
+      referrerId,
+      debitable,
+      `Commission reversed: ${reason}`,
+      "commission_reversal",
+      referralId ?? undefined,
+    );
+  }
+
+  // Log the reversal — ALWAYS, even when nothing could be debited, so
+  // withdrawal eligibility (which excludes reversed rewards) stays correct.
   await db.from("commission_reversals").insert({
     referral_id: referralId,
     order_id: orderId,
     amount_halala: amountHalala,
-    reason,
+    reason:
+      debitable < amountHalala
+        ? `${reason} (partial: ${debitable} of ${amountHalala} recovered)`
+        : reason,
   });
 
   // Cash already sent out cannot be clawed back — flag any payout that
@@ -691,7 +705,7 @@ export async function getEligibleWithdrawalAmount(db: Db, referrerId: string): P
 export async function getEligibleCommissionRewards(
   db: Db,
   referrerId: string,
-): Promise<Array<{ id: string; amountHalala: number; orderId: string | null }>> {
+): Promise<Array<{ id: string; amountHalala: number; orderId: string | null; createdAt: string }>> {
   const now = new Date().toISOString();
   const { data, error } = await db
     .from("referral_rewards")
@@ -707,6 +721,7 @@ export async function getEligibleCommissionRewards(
       id: r.id as string,
       amountHalala: (r.amount_halala as number) ?? 0,
       orderId: ((r.metadata as Record<string, unknown> | null)?.order_id as string) ?? null,
+      createdAt: (r.created_at as string) ?? "",
     }))
     .filter((r) => r.amountHalala > 0);
 
@@ -858,6 +873,60 @@ export interface PayoutRunResult {
 }
 
 /**
+ * Split one commission row into a payable part (keeps the id, goes into the
+ * current payout) and a remainder row (new id, stays payable later). The
+ * shrink is conditional on the expected amount so concurrent runs fail
+ * closed; on insert failure the shrink rolls back so nothing is lost.
+ */
+async function splitCommissionReward(
+  db: Db,
+  rewardId: string,
+  paidHalala: number,
+  restHalala: number,
+): Promise<boolean> {
+  const { data: orig } = await db
+    .from("referral_rewards")
+    .select("referral_id, referrer_id, status, available_for_withdrawal_at, metadata, amount_halala")
+    .eq("id", rewardId)
+    .maybeSingle();
+  const o = orig as {
+    referral_id?: string | null;
+    referrer_id?: string;
+    status?: string;
+    available_for_withdrawal_at?: string;
+    metadata?: Record<string, unknown> | null;
+    amount_halala?: number;
+  } | null;
+  if (!o || o.amount_halala !== paidHalala + restHalala) return false;
+
+  const { data: shrunk, error: shrinkErr } = await db
+    .from("referral_rewards")
+    .update({ amount_halala: paidHalala })
+    .eq("id", rewardId)
+    .eq("amount_halala", paidHalala + restHalala)
+    .select("id");
+  if (shrinkErr || !shrunk || (shrunk as unknown[]).length === 0) return false;
+
+  const { error: insertErr } = await db.from("referral_rewards").insert({
+    referral_id: o.referral_id ?? null,
+    referrer_id: o.referrer_id,
+    reward_type: "commission",
+    amount_halala: restHalala,
+    status: o.status ?? "confirmed",
+    available_for_withdrawal_at: o.available_for_withdrawal_at,
+    metadata: { ...(o.metadata ?? {}), split_from: rewardId },
+  });
+  if (insertErr) {
+    await db
+      .from("referral_rewards")
+      .update({ amount_halala: paidHalala + restHalala })
+      .eq("id", rewardId);
+    return false;
+  }
+  return true;
+}
+
+/**
  * Daily payout pass. For every referrer whose payout weekday is today and who
  * has no payout already created this week: pay the eligible amount via Chapa
  * when it meets the 500 ETB threshold and a verified account exists.
@@ -952,7 +1021,7 @@ export async function runWeeklyPayouts(
       continue;
     }
 
-    let rewards: Array<{ id: string; amountHalala: number; orderId: string | null }> = [];
+    let rewards: Array<{ id: string; amountHalala: number; orderId: string | null; createdAt: string }> = [];
     try {
       rewards = await getEligibleCommissionRewards(db, p.id);
     } catch (err) {
@@ -960,9 +1029,33 @@ export async function runWeeklyPayouts(
       result.failed += 1;
       continue;
     }
-    const rewardIds = rewards.map((r) => r.id);
-    if (rewardIds.length === 0) {
-      result.skippedBelowThreshold += 1;
+    // Exact-subset payment (F8): oldest rewards first, stopping at exactly
+    // `eligible`. The boundary reward is SPLIT so the remainder stays payable
+    // next week — recording every row id while paying less destroys money.
+    const sorted = [...rewards].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+    const payIds: string[] = [];
+    let payAmount = 0;
+    for (const r of sorted) {
+      if (payAmount + r.amountHalala <= eligible) {
+        payIds.push(r.id);
+        payAmount += r.amountHalala;
+        continue;
+      }
+      if (payAmount < eligible) {
+        const paidPart = eligible - payAmount;
+        const restPart = r.amountHalala - paidPart;
+        if (paidPart > 0 && restPart > 0 && (await splitCommissionReward(db, r.id, paidPart, restPart))) {
+          payIds.push(r.id);
+          payAmount = eligible;
+        }
+      }
+      break;
+    }
+    if (payIds.length === 0 || payAmount <= 0) {
+      console.error(
+        `[payouts] nothing payable for ${p.id} (eligible ${eligible}, ${rewards.length} rows) — carrying over`,
+      );
+      result.failed += 1;
       continue;
     }
 
@@ -971,11 +1064,11 @@ export async function runWeeklyPayouts(
       const { randomUUID: uuid } = await import("node:crypto");
       await db.from("referral_payouts").insert({
         referrer_id: p.id,
-        amount_halala: eligible,
+        amount_halala: payAmount,
         status: "failed",
         chapa_reference: uuid(),
         payout_account_id: account.id,
-        commission_reward_ids: rewardIds,
+        commission_reward_ids: payIds,
         failed_reason: "CHAPA_SECRET_KEY not configured",
       });
       await notifyAdminChannel(
@@ -1013,15 +1106,23 @@ export async function runWeeklyPayouts(
       .from("referral_payouts")
       .insert({
         referrer_id: p.id,
-        amount_halala: eligible,
+        amount_halala: payAmount,
         status: "pending",
         chapa_reference: chapaReference,
         payout_account_id: account.id,
-        commission_reward_ids: rewardIds,
+        commission_reward_ids: payIds,
       })
       .select("*")
       .single();
-    if (insertErr || !payoutRow) {
+    if (insertErr) {
+      // Unique-violation = a concurrent run already created this week's
+      // payout (F18 index) — skip quietly, it owns the referrer this week.
+      const code = (insertErr as { code?: string }).code;
+      if (code === "23505") continue;
+      result.failed += 1;
+      continue;
+    }
+    if (!payoutRow) {
       result.failed += 1;
       continue;
     }
@@ -1033,7 +1134,7 @@ export async function runWeeklyPayouts(
     // Any definitive Chapa failure credits it straight back below.
     const { debitWallet, creditWallet } = await import("./wallet.js");
     try {
-      await debitWallet(db, p.id, eligible, "Referral cash payout via Chapa", "payout", payout.id);
+      await debitWallet(db, p.id, payAmount, "Referral cash payout via Chapa", "payout", payout.id);
     } catch (err) {
       const reason = `Wallet debit failed: ${err instanceof Error ? err.message : String(err)}`;
       await db
@@ -1043,7 +1144,7 @@ export async function runWeeklyPayouts(
       result.failed += 1;
       await notifyAdminChannel(
         env as never,
-        `💸 <b>Payout failed</b>\n\nReferrer ${who} (${(eligible / 100).toFixed(2)} ETB): ${reason}. Retry from Admin → Referrals → Payouts.`,
+        `💸 <b>Payout failed</b>\n\nReferrer ${who} (${(payAmount / 100).toFixed(2)} ETB): ${reason}. Retry from Admin → Referrals → Payouts.`,
       ).catch(() => undefined);
       continue;
     }
@@ -1052,7 +1153,7 @@ export async function runWeeklyPayouts(
       await creditWallet(
         db,
         p.id,
-        eligible,
+        payAmount,
         "Payout refund: Chapa transfer failed",
         "payout_refund",
         payout.id,
@@ -1067,7 +1168,7 @@ export async function runWeeklyPayouts(
     const transfer = await createChapaTransfer(env.CHAPA_SECRET_KEY, {
       accountName: account.accountName,
       accountNumber: account.accountNumber,
-      amountHalala: eligible,
+      amountHalala: payAmount,
       bankCode: liveBankCode,
       reference: payout.chapaReference,
     });
@@ -1085,7 +1186,7 @@ export async function runWeeklyPayouts(
         await setPayoutAccountVerified(db, account.id, true).catch(() => undefined);
       }
       result.paid += 1;
-      result.paidHalala += eligible;
+      result.paidHalala += payAmount;
     } else if (transfer.referenceUsedBefore) {
       // Response was likely lost on a previous attempt — verify instead.
       // Only refund when verification definitively says the money didn't move.
@@ -1096,7 +1197,7 @@ export async function runWeeklyPayouts(
           .update({ status: "sent", sent_at: new Date().toISOString() })
           .eq("id", payout.id);
         result.paid += 1;
-        result.paidHalala += eligible;
+        result.paidHalala += payAmount;
       } else if (verified.status === "failed") {
         await refundLockedFunds(transfer.message);
       } else {
@@ -1107,7 +1208,7 @@ export async function runWeeklyPayouts(
           .update({ status: "processing" })
           .eq("id", payout.id);
         result.paid += 1;
-        result.paidHalala += eligible;
+        result.paidHalala += payAmount;
       }
     } else {
       await refundLockedFunds(transfer.message);

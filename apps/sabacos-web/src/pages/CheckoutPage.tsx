@@ -220,9 +220,26 @@ export function CheckoutPage() {
     if (pollRef.current) clearInterval(pollRef.current);
   }, []);
 
+  // Best-effort cart clear for success paths: the money already moved, so a
+  // flaky DELETE must never flip the screen to "failed". One delayed retry
+  // heals most cases; the next refreshCart reconciles the rest.
+  const clearCartBestEffort = () => {
+    clearCart().catch(() => {
+      setTimeout(() => clearCart().catch(() => undefined), 5000);
+    });
+  };
+
   const startPolling = (id: string) => {
     setPhase("pending");
+    const startedAt = Date.now();
     pollRef.current = setInterval(async () => {
+      // Give up after 5 minutes — the invoice is gone or unpaid; the user
+      // can go back instead of staring at a spinner forever.
+      if (Date.now() - startedAt > 5 * 60 * 1000) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        setErrorMsg(t("paymentFailed"));
+        return;
+      }
       try {
         const order = await getOrderStatus(id);
         if (order.status === "paid" || order.status === "processing" || order.status === "shipped" || order.status === "delivered") {
@@ -230,7 +247,7 @@ export function CheckoutPage() {
           setOrderNo(order.orderNo);
           setOrderTotal(order.totalHalala);
           setPhase("success");
-          await clearCart();
+          clearCartBestEffort();
         } else if (order.status === "cancelled" || order.paymentStatus === "failed") {
           if (pollRef.current) clearInterval(pollRef.current);
           setErrorMsg(order.status === "cancelled" ? t("orderPendingHint") : t("error"));
@@ -279,7 +296,7 @@ export function CheckoutPage() {
 
       // Wallet and bank_split payments are finalized server-side — no invoice to open.
       if (!invoiceUrl) {
-        await clearCart();
+        clearCartBestEffort();
         setOrderTotal(order.totalHalala);
         haptic("heavy");
         setPhase("success");
@@ -293,7 +310,7 @@ export function CheckoutPage() {
         if (pollRef.current) clearInterval(pollRef.current);
         setOrderTotal(order.totalHalala);
         haptic("heavy");
-        await clearCart();
+        clearCartBestEffort();
         setPhase("success");
       } else if (status === "failed") {
         if (pollRef.current) clearInterval(pollRef.current);
@@ -362,7 +379,7 @@ export function CheckoutPage() {
       setOrderNo(order.orderNo);
       setOrderPaymentMethod("bank_split");
       setOrderTotal(order.totalHalala);
-      await clearCart();
+      clearCartBestEffort();
       setPhase("receipt_upload");
     } catch (err) {
       setErrorMsg(apiErrorMessage(err));
@@ -409,7 +426,7 @@ export function CheckoutPage() {
           <h1 className="serif" style={{ fontSize: 24, margin: "0 0 8px" }}>{t("payWithBankHalf")}</h1>
           <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
             {lang === "am"
-              ? `${formatETB(deposit)} ግማሽ አሁን ይ躍ልጉ፣ ቀሪው ${formatETB(grandTotal - deposit)} ሲደርስ ይከፈላል`
+              ? `${formatETB(deposit)} ግማሽ አሁን ይክፈሉ፣ ቀሪው ${formatETB(grandTotal - deposit)} ሲደርስ ይከፈላል`
               : `Pay ${formatETB(deposit)} deposit now, ${formatETB(grandTotal - deposit)} on delivery`}
           </p>
 
@@ -426,7 +443,7 @@ export function CheckoutPage() {
                 </span>
                 <span className="muted" style={{ fontSize: 12 }}>
                   {lang === "am"
-                    ? `${formatETB(deposit)} በቴሌግራም ክፍያ ይ躍ልጉ`
+                    ? `${formatETB(deposit)} በቴሌግራም ክፍያ ይክፈሉ`
                     : `Pay ${formatETB(deposit)} via Telegram payment`}
                 </span>
               </button>
@@ -443,7 +460,7 @@ export function CheckoutPage() {
                 </span>
                 <span className="muted" style={{ fontSize: 12 }}>
                   {lang === "am"
-                    ? `${formatETB(deposit)} በባንክ ይ躍ልጉ እና ደብит ይላኩ`
+                    ? `${formatETB(deposit)} በባንክ ይክፈሉ እና ደረሰኝ ይላኩ`
                     : `Transfer ${formatETB(deposit)} and upload receipt`}
                 </span>
               </button>
@@ -479,7 +496,7 @@ export function CheckoutPage() {
           <h1 className="serif" style={{ fontSize: 24, margin: "0 0 8px" }}>{t("selectBank")}</h1>
           <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
             {lang === "am"
-              ? `${formatETB(deposit)} ግማሽ አሁን ይ躍ልጉ፣ ቀሪው ${formatETB(grandTotal - deposit)} ሲደርስ ይከፈላል`
+              ? `${formatETB(deposit)} ግማሽ አሁን ይክፈሉ፣ ቀሪው ${formatETB(grandTotal - deposit)} ሲደርስ ይከፈላል`
               : `Pay ${formatETB(deposit)} deposit now, ${formatETB(grandTotal - deposit)} on delivery`}
           </p>
 
@@ -657,6 +674,16 @@ export function CheckoutPage() {
           <h1 className="serif" style={{ fontSize: 24, margin: "18px 0 6px" }}>{t("paymentSent")}</h1>
           <p className="muted" style={{ maxWidth: 320, margin: "0 auto" }}>{t("paymentPendingHint")}</p>
           <p className="muted" style={{ marginTop: 16, fontSize: 13 }}>Order: {orderNo ?? "…"}</p>
+          <button
+            className="btn btn-secondary"
+            style={{ marginTop: 20 }}
+            onClick={() => {
+              if (pollRef.current) clearInterval(pollRef.current);
+              setPhase("form");
+            }}
+          >
+            {t("cancel")} · {t("back")}
+          </button>
         </div>
       </div>
     );

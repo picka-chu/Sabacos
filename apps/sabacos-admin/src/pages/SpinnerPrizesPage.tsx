@@ -91,7 +91,8 @@ export function SpinnerPrizesPage() {
     setForm({
       name: p.name,
       prizeType: p.prizeType,
-      value: p.value,
+      // DB stores coupon_fixed value in halala; the form edits ETB.
+      value: p.prizeType === "coupon_fixed" ? p.value / 100 : p.value,
       weight: p.weight,
       maxPool: p.maxPool != null ? String(p.maxPool) : "",
       isActive: p.isActive,
@@ -102,17 +103,25 @@ export function SpinnerPrizesPage() {
 
   const saveForm = async () => {
     if (!form.name.trim()) { setError("Name is required"); return; }
+    if (!Number.isFinite(form.value) || !Number.isFinite(form.weight)) {
+      setError("Value and weight must be numbers"); return;
+    }
     if (form.prizeType !== "spin_again" && form.prizeType !== "free_product" && form.value <= 0) {
       setError("Value must be greater than 0"); return;
     }
     if (form.weight <= 0) { setError("Weight must be greater than 0"); return; }
+    const maxPool = form.maxPool.trim() === "" ? null : Number(form.maxPool);
+    if (maxPool !== null && (!Number.isInteger(maxPool) || maxPool < 0)) {
+      setError("Max pool must be a whole number of 0 or more"); return;
+    }
 
     const payload: Record<string, unknown> = {
       name: form.name.trim(),
       prizeType: form.prizeType,
-      value: form.prizeType === "spin_again" ? 0 : Number(form.value),
+      // Canonical unit is halala (matches redemption math + DB comment).
+      value: form.prizeType === "spin_again" ? 0 : form.prizeType === "coupon_fixed" ? Math.round(form.value * 100) : Number(form.value),
       weight: Number(form.weight),
-      maxPool: form.maxPool ? Number(form.maxPool) : null,
+      maxPool,
       isActive: form.isActive,
     };
 
@@ -317,7 +326,7 @@ export function SpinnerPrizesPage() {
                       </td>
                       <td>
                         {p.prizeType === "coupon_percent" && <strong>{p.value}%</strong>}
-                        {p.prizeType === "coupon_fixed" && <strong>{formatETB(Math.round(p.value * 100))}</strong>}
+                        {p.prizeType === "coupon_fixed" && <strong>{formatETB(p.value)}</strong>}
                         {p.prizeType === "spin_again" && <span className="muted">—</span>}
                         {p.prizeType === "free_product" && <span className="muted">Free item</span>}
                       </td>

@@ -3,11 +3,13 @@ import {
   CURRENCY,
   formatETB,
   formatOrderNo,
+  halfHalala,
   isAdminRole,
   isFullAdmin,
   translateStatus,
   generateReferralCode,
   referralDeepLink,
+  uuidSchema,
   type Order,
   type OrderWithItems,
   type Profile,
@@ -140,20 +142,41 @@ async function sendMyOrders(ctx: Context, env: AppEnv): Promise<void> {
   if (!from) return;
   const db = getDb(env);
   const profile = await getProfileByTelegramId(db, from.id).catch(() => null);
-  const orders = profile
-    ? await getOrdersByProfile(db, profile.id).catch(() => [])
-    : [];
+  const lang: "en" | "am" = profile?.language === "am" ? "am" : "en";
+  let orders = null;
+  try {
+    orders = profile ? await getOrdersByProfile(db, profile.id) : [];
+  } catch (err) {
+    console.error("sendMyOrders: load failed", err);
+    await ctx.reply(
+      lang === "am"
+        ? "📦 ትዕዛዞችሽን ማግኘት አልተቻለም — እባክሽ ቆይተሽ /orders ብዪ።"
+        : "📦 Couldn't load your orders right now — try /orders again in a bit.",
+    ).catch(() => {});
+    return;
+  }
 
   if (orders.length === 0) {
-    await ctx.reply("📦 No orders yet — open the shop from the menu button to place your first one!");
+    await ctx.reply(
+      lang === "am"
+        ? "📦 ገና ምንም ትዕዛዝ የለም — የመጀመሪያ ትዕዛዝሽን ለመፈጸም ሱቁን ከምናሌው ቁልፍ ክፈት።"
+        : "📦 No orders yet — open the shop from the menu button to place your first one!",
+    );
     return;
   }
 
   const lines = orders.slice(0, 5).map(
-    (o) => `${statusEmoji(o.status)} ${o.orderNo} — ${translateStatus("en", o.status)} · ${formatETB(o.totalHalala)}`,
+    (o) => `${statusEmoji(o.status)} ${o.orderNo} — ${translateStatus(lang, o.status)} · ${formatETB(o.totalHalala)}`,
   );
-  await ctx.reply(["📦 Your recent orders:", "", ...lines].join("\n"), {
-    reply_markup: new InlineKeyboard().webApp("👀  View all orders", webAppUrl(env.WEBAPP_URL, "/orders")),
+  await ctx.reply([
+    lang === "am" ? "📦 የቅርብ ጊዜ ትዕዛዞችሽ:" : "📦 Your recent orders:",
+    "",
+    ...lines,
+  ].join("\n"), {
+    reply_markup: new InlineKeyboard().webApp(
+      lang === "am" ? "👀  ሁሉንም ትዕዛዞች ተመልከት" : "👀  View all orders",
+      webAppUrl(env.WEBAPP_URL, "/orders"),
+    ),
   });
 }
 
@@ -238,6 +261,11 @@ export function createBot(env: AppEnv): Bot {
       if (currentProfile) {
         // Promotion side effect only — no reply keyboard anymore.
         await ensureAdminRole(db, adminIds, currentProfile);
+      } else {
+        // DB failure: nothing downstream (language gate, attribution) can
+        // work — say so instead of sending a broken welcome.
+        await ctx.reply("Something went wrong on our side — please tap /start to retry.").catch(() => {});
+        return;
       }
     }
 
@@ -670,38 +698,53 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
   // send them straight back to the mini app.
   bot.on("message:contact", async (ctx) => {
     const from = ctx.from;
-    if (!from || ctx.message.contact.user_id !== from.id) return; // only accept own contact
-    const db = getDb(env);
-    const profile =
-      (await getProfileByTelegramId(db, from.id).catch(() => null)) ??
-      (await upsertTelegramProfile(db, { telegramId: from.id }));
-    await saveProfileContact(db, profile.id, {
-      phone: ctx.message.contact.phone_number,
-    });
-    await ctx.reply("✅ Phone saved! Tap below to continue where you left off.", {
-      reply_markup: backToCheckoutKeyboard(env),
-    });
+    if (!from) return;
+    if (ctx.message.contact.user_id !== from.id) {
+      // Only accept your own contact — but say so instead of silence.
+      await ctx.reply("Please share your own number using the button below.").catch(() => {});
+      return;
+    }
+    try {
+      const db = getDb(env);
+      const profile =
+        (await getProfileByTelegramId(db, from.id).catch(() => null)) ??
+        (await upsertTelegramProfile(db, { telegramId: from.id }));
+      await saveProfileContact(db, profile.id, {
+        phone: ctx.message.contact.phone_number,
+      });
+      await ctx.reply("✅ Phone saved! Tap below to continue where you left off.", {
+        reply_markup: backToCheckoutKeyboard(env),
+      });
+    } catch (err) {
+      console.error("contact save failed", err);
+      await ctx.reply("Couldn't save that — tap the button again or type your number manually.").catch(() => {});
+    }
   });
 
   bot.on("message:location", async (ctx) => {
     const from = ctx.from;
     if (!from) return;
-    const db = getDb(env);
-    const profile =
-      (await getProfileByTelegramId(db, from.id).catch(() => null)) ??
-      (await upsertTelegramProfile(db, { telegramId: from.id }));
-    await saveProfileContact(db, profile.id, {
-      lastLatitude: ctx.message.location.latitude,
-      lastLongitude: ctx.message.location.longitude,
-    });
-    await ctx.reply([
-      "📍 Location saved!",
-      "",
-      "Tap below to continue checkout — your delivery price updates automatically.",
-      "Tip: for a precise door delivery, also describe nearby landmarks in the address field.",
-    ].join("\n"), {
-      reply_markup: backToCheckoutKeyboard(env),
-    });
+    try {
+      const db = getDb(env);
+      const profile =
+        (await getProfileByTelegramId(db, from.id).catch(() => null)) ??
+        (await upsertTelegramProfile(db, { telegramId: from.id }));
+      await saveProfileContact(db, profile.id, {
+        lastLatitude: ctx.message.location.latitude,
+        lastLongitude: ctx.message.location.longitude,
+      });
+      await ctx.reply([
+        "📍 Location saved!",
+        "",
+        "Tap below to continue checkout — your delivery price updates automatically.",
+        "Tip: for a precise door delivery, also describe nearby landmarks in the address field.",
+      ].join("\n"), {
+        reply_markup: backToCheckoutKeyboard(env),
+      });
+    } catch (err) {
+      console.error("location save failed", err);
+      await ctx.reply("Couldn't save that location — please try again.").catch(() => {});
+    }
   });
 
   bot.on("pre_checkout_query", async (ctx) => {
@@ -724,8 +767,18 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
         return;
       }
 
+      // The invoice payload (order UUID) alone is not authorization — the
+      // payer must own the order.
+      const payer = await getProfileByTelegramId(db, q.from.id).catch(() => null);
+      if (!payer || payer.id !== order.profileId) {
+        await ctx.answerPreCheckoutQuery(false, {
+          error_message: "This order belongs to another account.",
+        });
+        return;
+      }
+
       // For split Chapa: amount is 50% of total; for full payment: full total
-      const expectedAmount = isSplitChapa ? Math.round(order.totalHalala / 2) : order.totalHalala;
+      const expectedAmount = isSplitChapa ? halfHalala(order.totalHalala) : order.totalHalala;
       if (q.total_amount !== expectedAmount || q.currency !== CURRENCY) {
         await ctx.answerPreCheckoutQuery(false, { error_message: "Order details changed. Please retry." });
         return;
@@ -771,13 +824,16 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
         if (rpcStatus === "already_processed") return;
 
         if (rpcStatus !== "ok") {
+          // Money already moved (Telegram charged the customer) but the order
+          // can't finalize. Mark cancelled + payment success (= refund due),
+          // never payment failed — support refunds from this state.
           await db
             .from("orders")
-            .update({ status: "cancelled", payment_status: "failed" })
+            .update({ status: "cancelled", payment_status: "success" })
             .eq("id", orderId);
-          await notifyAdminChannel(env, `⚠️ Split payment received but order could not be finalized (${rpcStatus}). Order: ${orderId}`);
+          await notifyAdminChannel(env, `⚠️ Split payment received but order could not be finalized (${rpcStatus}) — REFUND DUE. Order: ${orderId}. Charge: ${payment.telegram_payment_charge_id} / ${payment.provider_payment_charge_id} ${payment.total_amount}.`);
           await ctx.reply(
-            "We received your deposit, but could not complete the order due to a stock issue. Our team will contact you shortly.",
+            "We received your deposit, but hit a problem finalizing the order. Our team will contact you shortly about a refund or retry — your money is safe.",
           ).catch(() => {});
           return;
         }
@@ -787,11 +843,24 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
           await notifyAdminChannel(env, `⚠️ Split payment finalized for missing order ${orderId}`);
           return;
         }
+        // Invoice payload alone is not authorization — the payer must own it.
+        if (ctx.from) {
+          const payerSplit = await getProfileByTelegramId(db, ctx.from.id).catch(() => null);
+          if (!payerSplit || payerSplit.id !== order.profileId) {
+            await notifyAdminChannel(env, `⚠️ Split deposit paid by non-owner ${ctx.from.id} for order ${orderId} — REFUND DUE.`);
+            await ctx.reply("This payment doesn't match your account — our team will refund it shortly.").catch(() => {});
+            return;
+          }
+        }
+
+        // Deposit money is in — consume the order's coupon now (never before).
+        const { consumeOrderCoupon } = await import("../db/spinner.js");
+        await consumeOrderCoupon(db, order.id, order.profileId);
 
         await notifyAdminChannelWithButtons(env, formatAdminOrderAlert(order), order.id);
         await ctx.reply(
           `✅ Deposit paid! Your order ${order.orderNo} is confirmed.\n` +
-          `Remaining balance: ${formatETB(order.totalHalala - Math.round(order.totalHalala / 2))} ETB — pay on delivery.`,
+          `Remaining balance: ${formatETB(order.totalHalala - halfHalala(order.totalHalala))} ETB — pay on delivery.`,
         ).catch(() => {});
         return;
       }
@@ -808,13 +877,15 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
       if (rpcStatus === "already_processed") return;
 
       if (rpcStatus !== "ok") {
+        // Money already moved but the order can't finalize. Mark cancelled +
+        // payment success (= refund due), never payment failed.
         await db
           .from("orders")
-          .update({ status: "cancelled", payment_status: "failed" })
+          .update({ status: "cancelled", payment_status: "success" })
           .eq("id", payment.invoice_payload);
-        await notifyAdminChannel(env, `⚠️ Payment received but order could not be finalized (${rpcStatus}). Order: ${payment.invoice_payload}`);
+        await notifyAdminChannel(env, `⚠️ Payment received but order could not be finalized (${rpcStatus}) — REFUND DUE. Order: ${payment.invoice_payload}. Charge: ${payment.telegram_payment_charge_id} / ${payment.provider_payment_charge_id} ${payment.total_amount}.`);
         await ctx.reply(
-          "We received your payment, but could not complete the order due to a stock issue. Our team will contact you shortly to resolve this.",
+          "We received your payment, but hit a problem finalizing the order. Our team will contact you shortly about a refund or retry — your money is safe.",
         ).catch(() => {});
         return;
       }
@@ -824,6 +895,23 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
         await notifyAdminChannel(env, `⚠️ Payment finalized for missing order ${payment.invoice_payload}`);
         return;
       }
+      // Invoice payload alone is not authorization — the payer must own it.
+      if (ctx.from) {
+        const payerFull = await getProfileByTelegramId(db, ctx.from.id).catch(() => null);
+        if (!payerFull || payerFull.id !== order.profileId) {
+          await db
+            .from("orders")
+            .update({ status: "cancelled", payment_status: "success" })
+            .eq("id", order.id);
+          await notifyAdminChannel(env, `⚠️ Payment from non-owner ${ctx.from.id} for order ${order.id} — REFUND DUE.`);
+          await ctx.reply("This payment doesn't match your account — our team will refund it shortly.").catch(() => {});
+          return;
+        }
+      }
+
+      // Money moved — consume the order's coupon now (never before payment).
+      const { consumeOrderCoupon: consumeCoupon } = await import("../db/spinner.js");
+      await consumeCoupon(db, order.id, order.profileId);
 
       // Process referral reward (Track 1: commission + spins) — fire-and-forget
       const { processReferralReward, processAttributedCommission } = await import(
@@ -850,17 +938,25 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
       await sendReceipt(ctx, env, order);
     } catch (err) {
       console.error("successful_payment error", err);
+      // The money may already have moved — never leave the buyer in silence.
+      await ctx.reply(
+        "Payment received — we're confirming your order now. Check /orders in a minute; contact support if it doesn't appear.",
+      ).catch(() => {});
       await notifyAdminChannel(env, `⚠️ Error finalizing payment: ${String(err)}`);
     }
   });
 
   // ---- Order status callback buttons (admin/staff quick actions) ----
-  bot.callbackQuery(/^order:(.+):(.+)$/, async (ctx) => {
+  bot.callbackQuery(/^order:([^:]+):(.+)$/, async (ctx) => {
     const match = ctx.match;
     if (!match) return;
     const orderId = match[1];
     const newStatus = match[2];
     if (!orderId || !newStatus) return;
+    if (!uuidSchema.safeParse(orderId).success) {
+      await ctx.answerCallbackQuery({ text: "Invalid order reference", show_alert: true });
+      return;
+    }
     const from = ctx.from;
     if (!from) return;
 
@@ -906,12 +1002,18 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
   });
 
   // ---- Payment proof approve/reject callback buttons ----
-  bot.callbackQuery(/^proof:(.+):(.+)$/, async (ctx) => {
+  // Callback payloads carry raw order UUIDs: validate shape first so malformed
+  // buttons fail closed before any DB or role work.
+  bot.callbackQuery(/^proof:([^:]+):(.+)$/, async (ctx) => {
     const match = ctx.match;
     if (!match) return;
     const orderId = match[1];
     const action = match[2];
     if (!orderId || !action || !["approved", "rejected"].includes(action)) return;
+    if (!uuidSchema.safeParse(orderId).success) {
+      await ctx.answerCallbackQuery({ text: "Invalid order reference", show_alert: true });
+      return;
+    }
     const from = ctx.from;
     if (!from) return;
 
@@ -937,6 +1039,14 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     const { verifyPaymentProof } = await import("../db/bank-accounts.js");
     await verifyPaymentProof(db, orderId, action as "approved" | "rejected");
 
+    if (action === "rejected") {
+      // The reservation dies with the rejection — free the stock so it can sell again.
+      const { releaseOrderStock } = await import("../db/orders.js");
+      await releaseOrderStock(db, orderId).catch((err) =>
+        console.error(`[proof callback] stock release failed for order ${orderId}:`, err),
+      );
+    }
+
     if (action === "approved" && order.bankAccountId) {
       // Deposit already recorded (and stock reserved) at checkout — approving
       // only advances the order to paid. Never re-run the deposit RPC here
@@ -956,6 +1066,9 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
         });
         return;
       }
+      // Receipt money confirmed — consume the order's coupon now.
+      const { consumeOrderCoupon } = await import("../db/spinner.js");
+      await consumeOrderCoupon(db, orderId, order.profileId);
     }
 
     // Fetch order owner profile for user notification
@@ -1024,7 +1137,7 @@ export function makeCreateInvoiceLink(env: AppEnv, bot: Bot) {
 
 function formatOrderLines(order: OrderWithItems): string {
   const lines = order.items
-    .map((i) => `• ${i.nameEn} × ${i.qty} — ${formatETB(i.subtotalHalala)}`)
+    .map((i) => `• ${escapeHtml(i.nameEn)} × ${i.qty} — ${formatETB(i.subtotalHalala)}`)
     .join("\n");
   return lines || "—";
 }
@@ -1034,18 +1147,18 @@ export function formatAdminOrderAlert(order: OrderWithItems): string {
     ? `Discount (${order.discountPercent}%): -${formatETB(order.discountHalala)}`
     : null;
   return [
-    `🛍 *New paid order*`,
+    `🛍 <b>New paid order</b>`,
     ``,
-    `Order: ${order.orderNo}`,
-    `Customer: ${order.customerName} (${order.phone})`,
-    `Address: ${order.address}`,
+    `Order: ${escapeHtml(order.orderNo)}`,
+    `Customer: ${escapeHtml(order.customerName)} (${escapeHtml(order.phone)})`,
+    `Address: ${escapeHtml(order.address)}`,
     `Items:`,
     formatOrderLines(order),
     ``,
     `Subtotal: ${formatETB(order.subtotalHalala)}`,
     discountLine,
     `Delivery: ${order.deliveryFeeHalala > 0 ? formatETB(order.deliveryFeeHalala) : "Free"}`,
-    `*Total: ${formatETB(order.totalHalala)}*`,
+    `<b>Total: ${formatETB(order.totalHalala)}</b>`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -1106,9 +1219,9 @@ export async function sendReceipt(ctx: Context, env: AppEnv, order: OrderWithIte
     ? `Discount (${order.discountPercent}%): -${formatETB(order.discountHalala)}`
     : null;
   const lines = [
-    `✅ *Payment received! Thank you for your order.*`,
+    `✅ <b>Payment received! Thank you for your order.</b>`,
     ``,
-    `Order: ${order.orderNo}`,
+    `Order: ${escapeHtml(order.orderNo)}`,
     `Items:`,
     formatOrderLines(order),
     ``,
@@ -1117,11 +1230,11 @@ export async function sendReceipt(ctx: Context, env: AppEnv, order: OrderWithIte
     `Delivery: ${order.deliveryFeeHalala > 0 ? formatETB(order.deliveryFeeHalala) : "Free"}`,
     `Total: ${formatETB(order.totalHalala)}`,
     ``,
-    `Deliver to: ${order.address}`,
-    `Phone: ${order.phone}`,
+    `Deliver to: ${escapeHtml(order.address)}`,
+    `Phone: ${escapeHtml(order.phone)}`,
   ]
     .filter(Boolean);
-  await ctx.reply(lines.join("\n"), { parse_mode: "Markdown" });
+  await ctx.reply(lines.join("\n"), { parse_mode: "HTML" });
 }
 
 export async function notifyAdminChannel(env: AppEnv, text: string): Promise<void> {
@@ -1177,10 +1290,12 @@ export async function postProductToChannel(
 
   const price = (product.priceHalala / 100).toFixed(2);
 
-  // Build caption: AI-generated post is the primary content
+  // Build caption: AI-generated post is the primary content. AI output is
+  // escaped — it echoes product text that may contain <, & or model-emitted
+  // tags, which would otherwise break parsing or inject channel formatting.
   let caption: string;
   if (aiPost?.en) {
-    caption = aiPost.en;
+    caption = escapeHtml(aiPost.en);
   } else {
     // Fallback: build from product data
     const lines = [

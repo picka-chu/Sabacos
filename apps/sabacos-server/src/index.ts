@@ -1,5 +1,6 @@
 import { getRequestListener, type HttpBindings, type ServerType } from "@hono/node-server";
 import { createServer } from "node:http";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { loadEnv } from "./env.js";
@@ -157,14 +158,11 @@ app.on("HEAD", "/health", (c) => c.body(null, 200));
 app.post("/webhook", async (c) => {
   const provided = c.req.header("x-telegram-bot-api-secret-token") ?? "";
   if (env.WEBHOOK_SECRET) {
-    const a = new TextEncoder().encode(provided);
-    const b = new TextEncoder().encode(env.WEBHOOK_SECRET);
-    if (a.length !== b.length) {
-      return c.json({ error: { code: "unauthorized", message: "Bad webhook secret" } }, 401);
-    }
-    let diff = 0;
-    for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
-    if (diff !== 0) {
+    // Constant-time compare over fixed-size digests: no length oracle, no
+    // early exit. Any mismatch (including length) lands here identically.
+    const a = createHash("sha256").update(provided).digest();
+    const b = createHash("sha256").update(env.WEBHOOK_SECRET).digest();
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
       return c.json({ error: { code: "unauthorized", message: "Bad webhook secret" } }, 401);
     }
   }
@@ -210,6 +208,13 @@ app.get("/api/v1/bank-accounts", async (c) => {
 app.get("/api/v1/admin/me", adminMeHandler);
 
 app.use("/api/v1/admin/*", rateLimit(db, { windowMs: 60_000, limit: 60, keyGenerator: ipKey }), requireAdmin);
+// Tight per-endpoint limits on the most abusable surfaces (abuse of these
+// burns Bot API quota, spams users, or hammers Chapa — all behind admin auth
+// but one compromised low-priv account is enough).
+const adminTightLimit = (limit: number, windowMs = 60_000) =>
+  rateLimit(db, { windowMs, limit, keyGenerator: ipKey });
+app.use("/api/v1/admin/broadcast", adminTightLimit(3, 60 * 60 * 1000)); // 3/hour: mass-DM primitive
+app.use("/api/v1/admin/referrals/payouts/*", adminTightLimit(6)); // 6/min: real money movement
 // Server-side page-permission enforcement (the admin UI gates are cosmetic;
 // every area below re-checks the permission matrix from store settings).
 // Slash-star patterns match both the bare path and nested paths in Hono.
@@ -236,6 +241,14 @@ app.route("/api/v1/admin/referrals", adminReferralRoutes);
 // Authenticated user routes — generous limit for normal app usage
 // ---------------------------------------------------------------------------
 app.use("/api/v1/checkout", rateLimit(db, { windowMs: 60_000, limit: 20, keyGenerator: ipKey }), requireUser);
+// Abuse-prone user endpoints (Bot API quota burn, spin farming, attribution
+// spam). IP-scoped: generous for humans, binding for scripts.
+const userTightLimit = (limit: number) =>
+  rateLimit(db, { windowMs: 60_000, limit, keyGenerator: ipKey });
+app.use("/api/v1/share/*", userTightLimit(30));
+app.use("/api/v1/referral/spinner/*", userTightLimit(20));
+app.use("/api/v1/referral/validate", userTightLimit(20));
+app.use("/api/v1/referral/attribute", userTightLimit(20));
 app.route("/api/v1", adRoutes);
 app.route("/api/v1/cart", cartRoutes);
 app.route("/api/v1", orderRoutes);

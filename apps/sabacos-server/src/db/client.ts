@@ -33,10 +33,3 @@ export function resetDb(): void {
   client = null;
   authClient = null;
 }
-
-export function adminClientForToken(env: AppEnv, token: string): Db {
-  return createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-}

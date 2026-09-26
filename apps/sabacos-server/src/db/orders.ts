@@ -29,6 +29,8 @@ export interface CreateOrderInput {
   paymentMethod?: PaymentMethod;
   /** Resolved + validated share attribution (referrer profile id) or null. */
   attributedToProfileId?: string | null;
+  /** Spinner coupon code applied (consumed at payment-finalize, never before). */
+  couponCode?: string | null;
   items: Array<{
     productId: string;
     nameEn: string;
@@ -60,6 +62,7 @@ export async function createOrder(db: Db, input: CreateOrderInput): Promise<Orde
       fragile: input.fragile ?? false,
       payment_method: input.paymentMethod ?? "telegram",
       attributed_to_profile_id: input.attributedToProfileId ?? null,
+      coupon_code: input.couponCode ?? null,
       items: input.items.map((item) => ({
         product_id: item.productId,
         name_en: item.nameEn,
@@ -106,6 +109,7 @@ const ORDER_COLUMNS = [
   "payment_proof_status",
   "payment_proof_rejection_reason",
   "attributed_to_profile_id",
+  "coupon_code",
   "created_at",
   "updated_at",
 ].join(", ");
@@ -198,6 +202,29 @@ export async function updateOrderStatus(
   }
 
   return orderRowSchema.parse(data);
+}
+
+/** Release stock reserved at checkout (bank receipt rejected / reserved
+ * order abandoned). Best-effort per item, never throws. */
+export async function releaseOrderStock(db: Db, orderId: string): Promise<void> {
+  const { data: items } = await db
+    .from("order_items")
+    .select("product_id, qty")
+    .eq("order_id", orderId);
+  for (const row of ((items ?? []) as Array<{ product_id: string; qty: number }>)) {
+    if (!row.product_id || !row.qty) continue;
+    const { data: product } = await db
+      .from("products")
+      .select("stock")
+      .eq("id", row.product_id)
+      .single();
+    const stock = (product as { stock?: unknown } | null)?.stock;
+    if (typeof stock !== "number") continue;
+    await db
+      .from("products")
+      .update({ stock: stock + row.qty })
+      .eq("id", row.product_id);
+  }
 }
 
 export async function updatePaymentStatus(

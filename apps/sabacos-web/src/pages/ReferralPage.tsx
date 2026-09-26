@@ -63,11 +63,13 @@ export function ReferralPage() {
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<"overview" | "wallet" | "history">("overview");
 
   const load = useCallback(async () => {
     if (!profile) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const [infoRes, historyRes, walletRes, couponsRes] = await Promise.all([
         api.get<ReferralInfo>("/referral"),
@@ -79,8 +81,8 @@ export function ReferralPage() {
       setHistory(historyRes.referrals);
       setTransactions(walletRes.transactions);
       setCoupons(couponsRes.coupons);
-    } catch {
-      // Ignore
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load");
     } finally {
       setLoading(false);
     }
@@ -135,6 +137,15 @@ export function ReferralPage() {
           </button>
         ))}
       </div>
+
+      {loadError && (
+        <div className="card" style={{ padding: 16, textAlign: "center", marginBottom: 12 }}>
+          <p className="muted" style={{ margin: "0 0 12px", fontSize: 14 }}>{loadError}</p>
+          <button className="btn btn-secondary" onClick={() => load()}>
+            {t("retry")}
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div style={{ padding: "40px 0", textAlign: "center" }}>

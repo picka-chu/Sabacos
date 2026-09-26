@@ -26,7 +26,7 @@ export const requireUser: MiddlewareHandler<{ Bindings: AppEnv } & UserContext> 
     const reason = !initData
       ? "Open Sabacos from inside Telegram to continue"
       : result.error === "Invalid signature"
-        ? "Telegram session rejected (signature mismatch — check BOT_TOKEN on the server)"
+        ? "Telegram session rejected"
         : result.error === "initData expired"
           ? "Session expired — close and reopen Sabacos"
           : "Malformed Telegram session";

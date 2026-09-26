@@ -5,8 +5,7 @@ import { api } from "../lib/api.js";
 import { useAuth } from "../auth.js";
 import { useToast } from "../components/toast.js";
 import { Skeleton } from "../components/ui.js";
-
-const etbToHalala = (etb: string) => Math.round((Number(etb) || 0) * 100);
+import { etbToHalala } from "../lib/money.js";
 
 export const AI_VISION_MODELS = [
   "gemini-3.6-flash",
@@ -66,10 +65,17 @@ export function SettingsPage() {
     }
 
     setBusy(true); setSaved(false); setError(null);
+    const deliveryFeeHalala = etbToHalala(form.deliveryFee);
+    const freeThresholdHalala = etbToHalala(form.freeDeliveryThreshold);
+    if (deliveryFeeHalala === null || freeThresholdHalala === null) {
+      setError("Delivery fee and free-delivery threshold must be non-negative numbers.");
+      setBusy(false);
+      return;
+    }
     try {
       await api.put("/admin/settings", {
-        delivery_fee_halala: etbToHalala(form.deliveryFee),
-        free_delivery_threshold_halala: etbToHalala(form.freeDeliveryThreshold),
+        delivery_fee_halala: deliveryFeeHalala,
+        free_delivery_threshold_halala: freeThresholdHalala,
         shop_name_en: form.shopNameEn.trim(),
         shop_name_am: form.shopNameAm.trim(),
         shop_phone: form.shopPhone.trim(),

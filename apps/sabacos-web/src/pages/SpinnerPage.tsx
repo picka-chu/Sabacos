@@ -56,6 +56,7 @@ export function SpinnerPage() {
   } | null>(null);
   const [claimCopied, setClaimCopied] = useState(false);
   const [prizes, setPrizes] = useState<Prize[]>([]);
+  const [prizesFailed, setPrizesFailed] = useState(false);
   const wheelOuterRef = useRef<HTMLDivElement>(null);
   const rotationRef = useRef(0);
 
@@ -71,10 +72,11 @@ export function SpinnerPage() {
   }, []);
 
   const loadPrizes = useCallback(() => {
+    setPrizesFailed(false);
     api
       .get<{ prizes: Prize[] }>("/referral/spinner/prizes")
       .then((res) => setPrizes(res.prizes.length > 0 ? res.prizes : []))
-      .catch(() => {});
+      .catch(() => setPrizesFailed(true));
   }, []);
 
   useEffect(() => {
@@ -220,6 +222,15 @@ export function SpinnerPage() {
             : t("spinnerSpinsAvailablePlural", { count: availableSpins })
           : t("spinnerNoSpinsHint")}
       </p>
+
+      {prizesFailed && (
+        <div className="card" style={{ padding: 12, textAlign: "center", marginBottom: 12 }}>
+          <p className="muted" style={{ margin: "0 0 10px", fontSize: 13 }}>{t("spinnerLoadFailed")}</p>
+          <button className="btn btn-secondary btn-sm" onClick={() => { loadPrizes(); }}>
+            {t("retry")}
+          </button>
+        </div>
+      )}
 
       {/* ── Casino-style wheel ─────────────────────────────── */}
       <div style={{ position: "relative", width: 320, height: 320, margin: "34px auto 28px" }}>

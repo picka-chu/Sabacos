@@ -80,13 +80,22 @@ export function buildShareInlineResult(product: ShareProduct, url: string): Inli
   const imageUrl = product.imageUrls[0];
   if (imageUrl) {
     const tail = `\n\n${url}`;
-    const head = rawCaption.slice(0, Math.max(0, SHARE_PHOTO_CAPTION_LIMIT - tail.length));
+    // Escape FIRST, then truncate the head to what fits: escaping expands
+    // (& → &amp;), so truncating raw text first can still exceed the limit
+    // and get the whole caption rejected. The attributed URL tail is never cut.
+    const escTail = escapeHtml(tail);
+    const escHead = escapeHtml(rawCaption);
+    const room = Math.max(0, SHARE_PHOTO_CAPTION_LIMIT - escTail.length);
+    const cut =
+      escHead.length > room
+        ? escHead.slice(0, room).replace(/&[\w#]*$/, "")
+        : escHead;
     return {
       type: "photo",
       id: resultId,
       photo_url: imageUrl,
       thumbnail_url: imageUrl,
-      caption: escapeHtml(`${head}${tail}`),
+      caption: `${cut}${escTail}`,
       parse_mode: "HTML",
       reply_markup: buyButton,
     };

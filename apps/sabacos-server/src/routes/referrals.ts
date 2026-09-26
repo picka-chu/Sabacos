@@ -32,10 +32,12 @@ import {
 } from "../db/referral-rewards.js";
 import { getChapaBanks, PAYOUT_METHODS_FALLBACK } from "../services/chapa.js";
 import { getProfileById, getProfileByTelegramId } from "../db/profiles.js";
-import type { UserContext } from "../auth/telegram.js";
+import { requireUser, type UserContext } from "../auth/telegram.js";
 import { referralDeepLink } from "@sabacos/core";
 
 export const referralRoutes = new Hono<{ Bindings: AppEnv } & UserContext>();
+
+referralRoutes.use("*", requireUser);
 
 // ──────────────────────────────────────────────────────────────────────
 // Referral info

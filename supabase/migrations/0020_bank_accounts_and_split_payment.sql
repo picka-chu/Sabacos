@@ -109,8 +109,10 @@ grant execute on function public.finalize_bank_split_deposit(uuid, uuid) to serv
 -- 4. Public read access for bank_accounts (anon + authenticated can list active accounts)
 alter table public.bank_accounts enable row level security;
 
+drop policy if exists "bank_accounts_select_active" on public.bank_accounts;
 create policy "bank_accounts_select_active" on public.bank_accounts
   for select using (is_active = true);
 
+drop policy if exists "bank_accounts_all_admin" on public.bank_accounts;
 create policy "bank_accounts_all_admin" on public.bank_accounts
   for all using (auth.role() = 'service_role');

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Plus, Search, Package, Tag } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Search, Package, Tag } from "lucide-react";
 import { formatETB, type Category, type Product } from "@sabacos/core";
 import { api } from "../lib/api.js";
 import { useAuth } from "../auth.js";
@@ -19,11 +19,14 @@ export function ProductsPage() {
   const [data, setData] = useState<ProductPageData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
 
-  const load = () => {
+  const load = (nextPage = page) => {
     const params = new URLSearchParams();
     if (search.trim()) params.set("q", search.trim());
+    params.set("page", String(nextPage));
+    params.set("pageSize", "24");
     api
       .get<{ categories: Category[] }>("/admin/categories", token ?? undefined)
       .then((res) => setCategories(res.categories))
@@ -34,7 +37,7 @@ export function ProductsPage() {
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load products"));
   };
 
-  useEffect(load, [token]);
+  useEffect(() => { load(page); }, [token, page]);
 
   return (
     <>
@@ -66,7 +69,7 @@ export function ProductsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") load();
+              if (e.key === "Enter") { setPage(1); load(1); }
             }}
           />
         </div>
@@ -174,6 +177,22 @@ export function ProductsPage() {
             </table>
           </div>
         )}
+        {(() => {
+          const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+          return data && data.items.length > 0 && totalPages > 1 ? (
+            <div className="spread" style={{ padding: "14px 20px", borderTop: "1px solid var(--border-light)" }}>
+              <span className="muted" style={{ fontSize: 13 }}>{data.total} product(s) · Page {page} of {totalPages}</span>
+              <div className="row">
+                <button className="btn btn-outline btn-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                  <ChevronLeft size={14} />
+                </button>
+                <button className="btn btn-outline btn-sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          ) : null;
+        })()}
       </div>
     </>
   );

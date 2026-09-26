@@ -80,6 +80,10 @@ export async function getActiveDiscounts(db: Db): Promise<Discount[]> {
     .from("discounts")
     .select("*")
     .eq("is_active", true)
+    // Two separate `or` params are ANDed by PostgREST:
+    // (no start OR started) AND (no end OR not ended). Do NOT merge them
+    // into a single or() — that would OR the groups and admit expired or
+    // not-yet-started promos.
     .or(`starts_at.is.null,starts_at.lte.${now}`)
     .or(`ends_at.is.null,ends_at.gte.${now}`)
     .order("created_at", { ascending: false });

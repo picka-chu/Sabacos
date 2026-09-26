@@ -152,7 +152,9 @@ export async function listUsers(db: Db, filters: ListUsersFilters = {}): Promise
     query = query.eq("role", filters.role);
   }
   if (filters.search) {
-    const term = `%${filters.search}%`;
+    // Escape LIKE wildcards so a search term can't broaden into a table dump.
+    const escaped = filters.search.replace(/[\\%_]/g, (m) => `\\${m}`);
+    const term = `%${escaped}%`;
     query = query.or(`username.ilike.${term},first_name.ilike.${term},last_name.ilike.${term},phone.ilike.${term}`);
   }
 

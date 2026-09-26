@@ -89,6 +89,12 @@ userManagementRoutes.patch("/:id/role", async (c) => {
   const body = await c.req.json().catch(() => null);
   const input = safeParse(updateRoleSchema, body);
 
+  // Don't allow demoting yourself into lockout (delete-self is already blocked).
+  const caller = c.get("profile");
+  if (caller.id === c.req.param("id") && input.role !== "admin") {
+    return c.json({ error: { code: "bad_request", message: "Cannot change your own admin role" } }, 400);
+  }
+
   const profile = await updateUserRole(db, c.req.param("id"), input.role as ProfileRole);
   return c.json({ profile });
 });

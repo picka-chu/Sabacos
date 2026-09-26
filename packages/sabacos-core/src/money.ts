@@ -41,3 +41,12 @@ export function assertHalala(v: number): void {
 export function clampQty(qty: number): number {
   return Math.max(1, Math.min(99, Math.floor(qty)));
 }
+
+/**
+ * Canonical 50% deposit split (round half up, min 1 halala). Use this
+ * everywhere a half is computed — invoices, messages, checkout — so all of
+ * them agree with the SQL finalizers, which compute (total + 1) / 2.
+ */
+export function halfHalala(totalHalala: number): number {
+  return Math.max(1, Math.round(totalHalala / 2));
+}

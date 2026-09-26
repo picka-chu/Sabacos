@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Power, Percent } from "lucide-react";
 import { formatETB } from "@sabacos/core";
+import { etbToHalala } from "../lib/money.js";
 import { api } from "../lib/api.js";
 import { useAuth } from "../auth.js";
 import { useToast } from "../components/toast.js";
@@ -111,13 +112,19 @@ export function DiscountsPage() {
     if (form.scope === "category" && !form.categoryId) { setError("Pick a category"); return; }
     if (form.scope === "products" && form.productIds.length === 0) { setError("Pick at least one product"); return; }
     if (form.startsAt && form.endsAt && new Date(form.startsAt) > new Date(form.endsAt)) { setError("Start date must be before the end date"); return; }
+    if (!Number.isFinite(form.discountValue)) { setError("Discount value must be a number"); return; }
+    let minSubtotalHalala: number | null = null;
+    if (form.minSubtotal.trim()) {
+      minSubtotalHalala = etbToHalala(form.minSubtotal);
+      if (minSubtotalHalala === null) { setError("Minimum subtotal must be a non-negative number"); return; }
+    }
 
     const payload = {
       name: form.name.trim(), description: form.description.trim(),
       discountType: form.discountType, discountValue: Number(form.discountValue),
       scope: form.scope, categoryId: form.scope === "category" ? form.categoryId : null,
       productIds: form.scope === "products" ? form.productIds : [],
-      minSubtotalHalala: form.minSubtotal ? Math.round(Number(form.minSubtotal) * 100) : null,
+      minSubtotalHalala,
       startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
       endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
       isActive: form.isActive,

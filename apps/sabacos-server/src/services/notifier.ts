@@ -1,5 +1,6 @@
 import type { Bot } from "grammy";
 import { z } from "zod";
+import { formatETB } from "@sabacos/core";
 import type { AppEnv } from "../env.js";
 import { getDb, type Db } from "../db/client.js";
 import {
@@ -21,7 +22,9 @@ const STATE_KEY = "marketing_sweep";
 const SweepState = z.object({ lastRun: z.string().datetime() });
 
 function formatHalala(halala: number): string {
-  return (halala / 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
+  // Canonical money format (2 decimals) — the old toLocaleString(max 2)
+  // rendered 1,234.5 vs 1,234.50 inconsistently across messages.
+  return formatETB(halala);
 }
 
 export function discountMessage(
@@ -48,13 +51,14 @@ export function discountMessage(
   };
 }
 
-/** AI-drafted notification text, cached per product for 24h. */
+/** AI-drafted notification text, cached per product per language for 24h. */
 async function notifyText(
   db: Db,
   env: AppEnv,
   product: DiscountCandidate,
+  lang: "en" | "am",
 ): Promise<{ text: string; ai: boolean }> {
-  const key = `notify:${product.id}:${discountPct(product) ?? 0}`;
+  const key = `notify:${product.id}:${discountPct(product) ?? 0}:${lang}`;
   const { data } = await db
     .from("ad_copy_cache")
     .select("payload")
@@ -63,9 +67,10 @@ async function notifyText(
     .maybeSingle();
   if (data?.payload != null) return { text: (data.payload as { text: string }).text, ai: true };
 
-  const fallback = discountMessage(product);
+  const fallback = discountMessage(product, lang);
   let text = fallback.text;
-  if (aiEnabled(env)) {
+  // AI drafts English only; Amharic users get the localized template.
+  if (lang === "en" && aiEnabled(env)) {
     const ai = await llamaNotifyText(
       env,
       {
@@ -98,8 +103,11 @@ async function notifyText(
 export async function runMarketingSweep(db: Db, bot: Bot, env: AppEnv): Promise<number> {
   const raw = await getJobState(db, STATE_KEY);
   const state = SweepState.safeParse(raw);
+  // 7-day lookback, not just "since last run": discounted products stay
+  // eligible for a week, so late category followers still get notified. The
+  // 30-day per-(profile, product) exclusion below prevents re-notifying.
   const since = state.success
-    ? state.data.lastRun
+    ? new Date(Math.min(new Date(state.data.lastRun).getTime(), Date.now() - 7 * 24 * 86_400_000)).toISOString()
     : new Date(Date.now() - 24 * 86_400_000).toISOString();
 
   const fresh = await discountedProducts(db, { since, limit: 10 });
@@ -124,15 +132,42 @@ export async function runMarketingSweep(db: Db, bot: Bot, env: AppEnv): Promise<
     }
 
     if (targets.length === 0) continue;
-    const { text } = await notifyText(db, env, product);
+
+    // Per-target language (one batched lookup per product, text cached per
+    // language so Amharic users get Amharic promos).
+    const langByProfile = new Map<string, "en" | "am">();
+    try {
+      const { data: profs } = await db
+        .from("profiles")
+        .select("id, language")
+        .in(
+          "id",
+          targets.map((t) => t.profileId),
+        );
+      for (const p of ((profs ?? []) as Array<{ id: string; language?: string | null }>)) {
+        langByProfile.set(p.id, p.language === "am" ? "am" : "en");
+      }
+    } catch {
+      /* default English */
+    }
+    const textCache = new Map<string, string>();
+    const textFor = async (lang: "en" | "am"): Promise<string> => {
+      const hit = textCache.get(lang);
+      if (hit) return hit;
+      const { text } = await notifyText(db, env, product, lang);
+      textCache.set(lang, text);
+      return text;
+    };
     const urlPath = `/product/${product.id}`;
 
     for (const target of targets.slice(0, 100)) {
       try {
+        const lang = langByProfile.get(target.profileId) ?? "en";
+        const text = await textFor(lang);
         await bot.api.sendMessage(target.telegramId, text, {
           reply_markup: {
             inline_keyboard: [
-              [{ text: "Shop now 🛒", web_app: { url: `${env.WEBAPP_URL.replace(/\/$/, "")}${urlPath}` } }],
+              [{ text: lang === "am" ? "አሁን ይግዙ 🛒" : "Shop now 🛒", web_app: { url: `${env.WEBAPP_URL.replace(/\/$/, "")}${urlPath}` } }],
             ],
           },
         });

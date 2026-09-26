@@ -249,7 +249,7 @@ export function WaitlistPage() {
         </h2>
         <p className="muted" style={{ fontSize: 14, lineHeight: 1.5, margin: 0 }}>
           {lang === "am"
-            ? "ፕሬሚየም ቆስметিকስ እየመጡ ነው — በመጀመሪያ እጩዎች ብልጭታ ያላቸው ቅናሽ ያግኙ!"
+            ? "ፕሪሚየም ኮስሜቲክስ እየመጡ ነው — በመጀመሪያ እጩዎች ብልጭታ ያላቸው ቅናሽ ያግኙ!"
             : "Premium cosmetics are coming — join the waitlist for exclusive early-bird discounts!"}
         </p>
       </div>

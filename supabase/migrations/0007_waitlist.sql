@@ -55,8 +55,10 @@ alter table public.orders add column if not exists discount_halala integer not n
 alter table public.orders add column if not exists discount_percent integer not null default 0;
 
 -- -------------------------------------------------------------- updated_at
+drop trigger if exists trg_waitlist_config_updated on public.waitlist_config;
 create trigger trg_waitlist_config_updated before update on public.waitlist_config
   for each row execute function public.set_updated_at();
+drop trigger if exists trg_waitlist_entries_updated on public.waitlist_entries;
 create trigger trg_waitlist_entries_updated before update on public.waitlist_entries
   for each row execute function public.set_updated_at();
 

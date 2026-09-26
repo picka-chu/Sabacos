@@ -3,6 +3,7 @@ import {
   MIN_ORDER_SUBTOTAL_HALALA,
   computeDeliveryFee,
   formatETB,
+  halfHalala,
   mergeDeliveryConfig,
   quoteDelivery,
   type DeliveryBreakdown,
@@ -17,7 +18,7 @@ import { createOrder } from "../db/orders.js";
 import { getTotalDiscountForProfile } from "../db/waitlist.js";
 import { getReferredDiscountPercent } from "../db/referrals.js";
 import { computePromotionOrderDiscount, getActiveDiscounts } from "../db/discounts.js";
-import { checkSpinnerCouponForCheckout, useSpinnerCoupon } from "../db/spinner.js";
+import { checkSpinnerCouponForCheckout, consumeOrderCoupon } from "../db/spinner.js";
 import { getWalletBalance } from "../db/wallet.js";
 
 export interface InvoicePriceLine {
@@ -145,6 +146,11 @@ export async function checkout(
       profileDiscountHalala = Math.round((subtotalHalala * referredPercent) / 100);
       profileDiscountLabel = `Referral discount (${referredPercent}%)`;
     } else {
+      // Waitlist percent: only when no referred discount applies. Summed
+      // across unexpired rows, but bounded: join-time caps referral-bonus
+      // totals at maxReferralDiscount, and the total is hard-capped at 100%.
+      // NOTE (audit): these apply to every order until expiry (not
+      // single-use). If single-use is ever wanted, add consumption marking.
       const waitlistPercent = Math.min(await getTotalDiscountForProfile(db, profileId), 100);
       if (waitlistPercent > 0) {
         profileDiscountPercent = waitlistPercent;
@@ -246,6 +252,8 @@ export async function checkout(
     fragile,
     paymentMethod: input.paymentMethod ?? "telegram",
     attributedToProfileId,
+    // Recorded now, consumed at payment-finalize time (never before money moves).
+    couponCode: coupon?.coupon.code ?? null,
     items: cart.map((i) => ({
       productId: i.productId,
       nameEn: i.product.nameEn,
@@ -259,7 +267,8 @@ export async function checkout(
 
   if (input.paymentMethod === "wallet") {
     const result = await finalizeWithWallet(db, order, totalHalala, delivery);
-    if (coupon?.coupon) await useSpinnerCoupon(db, coupon.coupon.id, order.id);
+    // Wallet payment is atomic and already final — consume the coupon now.
+    if (coupon?.coupon) await consumeOrderCoupon(db, order.id, profileId);
     await clearCart(db, profileId);
     return result;
   }
@@ -267,9 +276,9 @@ export async function checkout(
   if (input.paymentMethod === "bank_split") {
     // Chapa half-pay: create order, then generate Chapa invoice for 50%
     if (input.splitPayVia === "chapa") {
-      if (coupon?.coupon) await useSpinnerCoupon(db, coupon.coupon.id, order.id);
-      // Don't finalize yet — generate invoice for 50% first
-      const depositHalala = Math.round(totalHalala / 2);
+      // Don't finalize yet — generate invoice for 50% first. The coupon is
+      // recorded on the order and consumed when the deposit actually pays.
+      const depositHalala = halfHalala(totalHalala);
       const halfPrices: InvoicePriceLine[] = [
         { label: `${settings.shopNameEn ?? "Sabacos"} — Order ${order.orderNo} (50% deposit)`, amount: depositHalala },
       ];
@@ -293,9 +302,9 @@ export async function checkout(
       return { order, invoiceUrl, delivery };
     }
 
-    // Bank transfer half-pay: finalize with bank account
+    // Bank transfer half-pay: finalize with bank account. The coupon is
+    // recorded on the order and consumed at receipt-approval time (money in).
     const result = await finalizeBankSplitCheckout(db, order, totalHalala, delivery, input.bankAccountId);
-    if (coupon?.coupon) await useSpinnerCoupon(db, coupon.coupon.id, order.id);
     await clearCart(db, profileId);
     return result;
   }
@@ -350,10 +359,10 @@ export async function checkout(
     throw new CartValidationError("Could not create payment link. Please try again.", "min_order");
   }
 
-  // The payment link now exists, so this checkout has been accepted.  Keep
-  // the cart and coupon intact when invoice creation fails so a retry cannot
-  // lose customer value.
-  if (coupon?.coupon) await useSpinnerCoupon(db, coupon.coupon.id, order.id);
+  // The payment link now exists, so this checkout has been accepted. Keep
+  // the cart intact when invoice creation fails so a retry cannot lose
+  // customer value. The coupon is recorded on the order and consumed only
+  // when the payment actually finalizes (never burns on unpaid invoices).
   await clearCart(db, profileId);
 
   return { order, invoiceUrl, delivery };

@@ -43,7 +43,14 @@ export function OrderDetailPage() {
   useEffect(load, [load]);
 
   const transition = async (to: OrderStatus) => {
-    if (!order) return;
+    if (!order || busy) return;
+    if (to === "cancelled") {
+      if (!window.confirm(`Cancel order ${order.orderNo}? This is irreversible and releases nothing automatically — collect the balance first if owed.`)) {
+        return;
+      }
+    } else if (!window.confirm(`Move order ${order.orderNo} to ${translateStatus("en", to)}?`)) {
+      return;
+    }
     setBusy(true);
     setError(null);
     try {

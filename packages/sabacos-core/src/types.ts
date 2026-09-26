@@ -178,6 +178,8 @@ export interface Order {
   paymentProofRejectionReason: string | null;
   /** Referrer profile that drove this order via a product share link (Track 2). Null = unattributed. */
   attributedToProfileId: string | null;
+  /** Spinner coupon code applied to this order (consumed at payment-finalize time). */
+  couponCode: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -72,3 +72,12 @@ export function consumeShareClick(): ShareClick | null {
     return null;
   }
 }
+
+/** Mark the stamped click consumed — call only after the server confirms. */
+export function markShareClickConsumed(): void {
+  try {
+    sessionStorage.setItem(CONSUMED_KEY, "1");
+  } catch {
+    /* storage unavailable */
+  }
+}

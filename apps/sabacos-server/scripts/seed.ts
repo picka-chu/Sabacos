@@ -200,12 +200,22 @@ const PRODUCTS: Array<{
 ];
 
 async function upsertSettings(): Promise<void> {
+  // Merge, never overwrite: existing values win, seed only fills keys that
+  // are missing. A rerun must not wipe channels, AI model, delivery zones,
+  // or role permissions an admin configured afterwards.
+  const { data: existing } = await client
+    .from("settings")
+    .select("value")
+    .eq("key", "store")
+    .maybeSingle();
+  const current =
+    (existing as { value?: Record<string, unknown> } | null)?.value ?? {};
   const { error } = await client.from("settings").upsert(
-    { key: "store", value: SETTINGS },
+    { key: "store", value: { ...SETTINGS, ...current } },
     { onConflict: "key" },
   );
   if (error) throw new Error(`settings: ${error.message}`);
-  console.log("✓ settings");
+  console.log("✓ settings (merged)");
 }
 
 async function seedCategories(): Promise<Record<string, string>> {

@@ -173,6 +173,7 @@ export const orderRowSchema = z
     payment_proof_status: z.enum(["none", "pending", "approved", "rejected"]).default("none"),
     payment_proof_rejection_reason: z.string().nullable().default(null),
     attributed_to_profile_id: uuidSchema.nullable().default(null),
+    coupon_code: z.string().nullable().default(null),
     created_at: z.string(),
     updated_at: z.string(),
   })
@@ -208,6 +209,7 @@ export const orderRowSchema = z
       paymentProofStatus: r.payment_proof_status ?? "none",
       paymentProofRejectionReason: r.payment_proof_rejection_reason ?? null,
       attributedToProfileId: r.attributed_to_profile_id ?? null,
+      couponCode: r.coupon_code ?? null,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }),

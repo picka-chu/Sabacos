@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { Info } from "lucide-react";
 import { api } from "./api.js";
-import { parseSharePayload, stampShareClick, consumeShareClick } from "./shareAttribution.js";
+import { parseSharePayload, stampShareClick, readShareClick, markShareClickConsumed } from "./shareAttribution.js";
 import { TERMS_VERSION, uuidSchema } from "@sabacos/core";
 import { I18nProvider, useI18n, hasUserChosenLang } from "./i18n.js";
 import {
@@ -39,6 +39,77 @@ import { SpinnerPage } from "./pages/SpinnerPage.js";
 import { ReferralPage } from "./pages/ReferralPage.js";
 import { TermsPage } from "./pages/TermsPage.js";
 import { OnboardingGate } from "./components/Onboarding.js";
+
+function AuthErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div
+      style={{
+        margin: "0 16px",
+        marginTop: "calc(var(--safe-top) + 12px)",
+        padding: "10px 14px",
+        borderRadius: 14,
+        background: "rgba(220, 38, 38, 0.12)",
+        color: "#b91c1c",
+        fontSize: 13,
+        fontWeight: 500,
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+        flexWrap: "wrap",
+      }}
+    >
+      <Info size={16} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 140 }}>
+        <span style={{ display: "block" }}>{message}</span>
+        <span style={{ display: "block", fontSize: 11, opacity: 0.75, marginTop: 2 }}>
+          {getLaunchDiagnostics()}
+        </span>
+      </span>
+      {isTelegramClient() && !getInitData() && canSendData() && (
+        <button
+          type="button"
+          onClick={() => {
+            haptic("medium");
+            // Success closes the app; the bot replies in the chat with a
+            // one-tap Shop button that re-opens with a full session.
+            if (!sendLoginRequest()) {
+              toast(t("verifyFailed"));
+            }
+          }}
+          style={{
+            border: "1px solid #b91c1c",
+            borderRadius: 10,
+            padding: "6px 12px",
+            background: "#fff",
+            color: "#b91c1c",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          {t("verifyViaBot")}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onRetry}
+        style={{
+          border: "none",
+          borderRadius: 10,
+          padding: "6px 12px",
+          background: "var(--accent-strong, #b91c1c)",
+          color: "#fff",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+        }}
+      >
+        {t("retry")}
+      </button>
+    </div>
+  );
+}
 
 function Shell() {
   const setProfile = useShopStore((s) => s.setProfile);
@@ -169,13 +240,16 @@ function Shell() {
 
   // After auth, register an attributed arrival once per click: genuinely new
   // buyers get their pending referral row (unlocks the automatic 5% friend
-  // discount); existing customers are simply ignored server-side.
+  // discount); existing customers are simply ignored server-side. The click
+  // is marked consumed only after the server confirms, so an offline/401
+  // failure retries instead of losing attribution forever.
   useEffect(() => {
     if (!profile) return;
-    const click = consumeShareClick();
+    const click = readShareClick();
     if (!click) return;
     api
       .post("/referral/attribute", { sharerTelegramId: click.sharerTelegramId })
+      .then(() => markShareClickConsumed())
       .catch(() => undefined);
   }, [profile]);
 
@@ -227,6 +301,16 @@ function Shell() {
   if (waitlistActive) {
     return (
       <>
+        {profileStatus === "error" && authError && (
+          <AuthErrorBanner
+            message={authError}
+            onRetry={() => {
+              setAuthError(null);
+              setProfileStatus("loading");
+              setAuthNonce((n) => n + 1);
+            }}
+          />
+        )}
         <WaitlistPage />
         <ToastHost />
       </>
@@ -237,75 +321,14 @@ function Shell() {
   return (
     <>
       {profileStatus === "error" && authError && (
-        <div
-          style={{
-            margin: "0 16px",
-            marginTop: "calc(var(--safe-top) + 12px)",
-            padding: "10px 14px",
-            borderRadius: 14,
-            background: "rgba(220, 38, 38, 0.12)",
-            color: "#b91c1c",
-            fontSize: 13,
-            fontWeight: 500,
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            flexWrap: "wrap",
+        <AuthErrorBanner
+          message={authError}
+          onRetry={() => {
+            setAuthError(null);
+            setProfileStatus("loading");
+            setAuthNonce((n) => n + 1);
           }}
-        >
-          <Info size={16} style={{ flexShrink: 0 }} />
-          <span style={{ flex: 1, minWidth: 140 }}>
-            <span style={{ display: "block" }}>{authError}</span>
-            <span style={{ display: "block", fontSize: 11, opacity: 0.75, marginTop: 2 }}>
-              {getLaunchDiagnostics()}
-            </span>
-          </span>
-          {isTelegramClient() && !getInitData() && canSendData() && (
-            <button
-              type="button"
-              onClick={() => {
-                haptic("medium");
-                // Success closes the app; the bot replies in the chat with a
-                // one-tap Shop button that re-opens with a full session.
-                if (!sendLoginRequest()) {
-                  toast(t("verifyFailed"));
-                }
-              }}
-              style={{
-                border: "1px solid #b91c1c",
-                borderRadius: 10,
-                padding: "6px 12px",
-                background: "#fff",
-                color: "#b91c1c",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              {t("verifyViaBot")}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              setAuthError(null);
-              setProfileStatus("loading");
-              setAuthNonce((n) => n + 1);
-            }}
-            style={{
-              border: "none",
-              borderRadius: 10,
-              padding: "6px 12px",
-              background: "var(--accent-strong, #b91c1c)",
-              color: "#fff",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            {t("retry")}
-          </button>
-        </div>
+        />
       )}
       {!inTelegram && (
         <div

@@ -57,7 +57,7 @@ Payments: `pending → success | failed | refunded`.
 
 ### 1. Supabase
 
-Apply `supabase/migrations/0001_init.sql` (schema, RLS, `next_order_seq()`, `finalize_order_payment()`, `product-images` storage bucket).
+Apply **all** files in `supabase/migrations/` in numeric order (schema, RLS, `next_order_seq()`, payment/stock RPCs, referral + wallet tables, `product-images` storage bucket). Applying only `0001_init.sql` leaves ~30 migrations unapplied and the server will fail.
 
 ### 2. Server env
 
@@ -67,13 +67,19 @@ See `apps/sabacos-server/.env.example`:
 | --- | --- |
 | `BOT_TOKEN` | Telegram bot token |
 | `CHAPA_PROVIDER_TOKEN` | Chapa provider token from BotFather (starts with `284685063:TEST:...`) |
+| `CHAPA_SECRET_KEY` | Chapa secret (CHASECK-...) — required for weekly referral payouts |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service-role key (bypasses RLS; server only) |
+| `SUPABASE_ANON_KEY` | Anon key (admin login validation) |
 | `WEBAPP_URL` | URL of the deployed Mini App |
 | `ADMIN_DASHBOARD_URL` | URL of the deployed admin dashboard |
 | `WEBHOOK_URL` | (prod) HTTPS callback URL → `/webhook` |
 | `WEBHOOK_SECRET` | Required in production; shared secret for Telegram webhook authentication |
 | `ADMIN_CHANNEL_ID` | optional Telegram channel/chat to notify on orders |
+| `POST_CHANNEL_ID` | optional channel for product posts |
+| `ADMIN_TELEGRAM_IDS` | comma-separated Telegram IDs auto-promoted to admin |
+| `MARKETING_SWEEP` | `on`/`off` for the hourly promo notifier |
+| `TRUSTED_PROXY_IPS` | reverse-proxy IPs allowed to supply X-Forwarded-For (rate limiting) |
 | `PORT` | default `8788` |
 
 ### 3. Seed

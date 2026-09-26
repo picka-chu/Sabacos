@@ -7,8 +7,7 @@ import { useAuth } from "../auth.js";
 import { useToast } from "../components/toast.js";
 import { AiStatusIndicator, type AiFileStatus } from "../components/AiStatusIndicator.js";
 import { Skeleton } from "../components/ui.js";
-
-const etbToHalala = (etb: string) => Math.round((Number(etb) || 0) * 100);
+import { etbToHalala } from "../lib/money.js";
 
 export function ProductEditPage() {
   const params = useParams<{ id?: string }>();
@@ -77,6 +76,26 @@ export function ProductEditPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    const priceHalala = etbToHalala(form.price);
+    if (priceHalala === null || priceHalala <= 0) {
+      setError("Price must be a number greater than 0.");
+      return;
+    }
+    const costHalala = form.cost.trim() ? etbToHalala(form.cost) : 0;
+    if (costHalala === null || costHalala < 0) {
+      setError("Cost must be a non-negative number.");
+      return;
+    }
+    const compareAtHalala = form.compareAt.trim() ? etbToHalala(form.compareAt) : null;
+    if (compareAtHalala === null) {
+      setError("Compare-at price must be a non-negative number.");
+      return;
+    }
+    const stock = Number(form.stock);
+    if (!Number.isInteger(stock) || stock < 0) {
+      setError("Stock must be a whole number of 0 or more.");
+      return;
+    }
     setBusy(true);
     setError(null);
     const body = {
@@ -86,10 +105,10 @@ export function ProductEditPage() {
       nameAm: form.nameAm.trim(),
       descriptionEn: form.descriptionEn.trim(),
       descriptionAm: form.descriptionAm.trim(),
-      priceHalala: etbToHalala(form.price),
-      costHalala: form.cost.trim() ? etbToHalala(form.cost) : 0,
-      compareAtHalala: form.compareAt.trim() ? etbToHalala(form.compareAt) : null,
-      stock: Number(form.stock) || 0,
+      priceHalala,
+      costHalala,
+      compareAtHalala,
+      stock,
       imageUrls: images,
       isActive: form.isActive,
       isFeatured: form.isFeatured,

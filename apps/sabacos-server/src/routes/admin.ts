@@ -732,6 +732,12 @@ adminRoutes.get("/orders/:id", async (c) => {
 });
 
 adminRoutes.patch("/orders/:id/status", async (c) => {
+  const caller = c.get("profile");
+  // Couriers confirm delivery from the bot button; the dashboard API is
+  // admin/staff only so no courier can cancel or advance arbitrary orders.
+  if (caller.role !== "admin" && caller.role !== "staff") {
+    return c.json({ error: { code: "forbidden", message: "Insufficient permissions" } }, 403);
+  }
   const db = getDb(getAppEnv());
   const id = c.req.param("id");
   if (!uuidSchema.safeParse(id).success) throw badRequest("Invalid order ID");
@@ -866,6 +872,7 @@ adminRoutes.post("/broadcast", async (c) => {
 
   let sent = 0;
   let failed = 0;
+  const failedSamples: string[] = [];
   const PAGE = 200;
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await db
@@ -888,15 +895,23 @@ adminRoutes.post("/broadcast", async (c) => {
           });
         }
         sent += 1;
-      } catch {
+      } catch (err) {
         failed += 1;
+        // Keep a small sample of failure reasons (blocked users, bad image
+        // URLs, ...) instead of a bare count — capped to avoid log spam.
+        if (failedSamples.length < 5) {
+          failedSamples.push(err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200));
+        }
       }
       // Stay well under Telegram's ~30 msg/sec global limit.
       await new Promise((r) => setTimeout(r, 50));
     }
     if (data.length < PAGE) break;
   }
-  return c.json({ sent, failed, audienceSize: audienceSize ?? 0 });
+  if (failedSamples.length > 0) {
+    console.error(`[broadcast] ${failed}/${sent + failed} failed. Samples: ${failedSamples.join(" | ")}`);
+  }
+  return c.json({ sent, failed, failedSamples, audienceSize: audienceSize ?? 0 });
 });
 
 // --------------------------------------------------------------- ai product draft
@@ -1037,6 +1052,14 @@ adminRoutes.patch("/orders/:id/verify-payment", async (c) => {
   // Update payment proof status
   await verifyPaymentProof(db, orderId, body.action, body.rejectionReason);
 
+  if (body.action === "rejected") {
+    // The reservation dies with the rejection — free the stock.
+    const { releaseOrderStock } = await import("../db/orders.js");
+    await releaseOrderStock(db, orderId).catch((err) =>
+      console.error(`[admin/verify-payment] stock release failed for order ${orderId}:`, err),
+    );
+  }
+
   if (body.action === "approved" && order.bankAccountId) {
     // Deposit already recorded (and stock reserved) at checkout — approving
     // only advances the order to paid. Never re-run the deposit RPC here
@@ -1060,6 +1083,9 @@ adminRoutes.patch("/orders/:id/verify-payment", async (c) => {
         409,
       );
     }
+    // Receipt money confirmed — consume the order's coupon now.
+    const { consumeOrderCoupon } = await import("../db/spinner.js");
+    await consumeOrderCoupon(db, orderId, order.profileId);
   }
 
   // Notify user via Telegram

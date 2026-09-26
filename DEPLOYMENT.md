@@ -65,12 +65,12 @@ For external uptime monitors such as UptimeRobot, monitor either the server root
    - `sabacos-web` → `VITE_API_URL=https://sabacos-server.onrender.com/api/v1`
    - `sabacos-server` → `WEBHOOK_URL=https://sabacos-server.onrender.com`
    - `sabacos-server` → `WEBAPP_URL=https://sabacos-web.onrender.com`
-5. **Redeploy** `sabacos-web` so the build inlines the new `VITE_API_URL`.
+5. **Redeploy** `sabacos-web` so the build inlines the new `VITE_API_URL` (Vite bakes `VITE_*` vars in at build time — changing one always needs a rebuild, never just an env save; same for the admin's `VITE_API_URL`/`VITE_SUPABASE_*`).
 
 Notes:
 - The webhook is registered automatically at startup (when `WEBHOOK_URL` is set), so no manual `setWebhook` is needed.
 - The free plan sleeps after ~15 min idle; the bot will be unresponsive until Render wakes the service, and the first request after waking can be slow. Upgrade to a paid plan for always-on.
-- After the server is up: apply `supabase/migrations/0001_init.sql`, create the `product-images` bucket, and run the seed on Render (Shell tab) with `npm run seed -w @sabacos/server`.
+- After the server is up: apply **all** files in `supabase/migrations/` in numeric order (not just 0001), create the `product-images` bucket, and run the seed on Render (Shell tab) with `npm run seed -w @sabacos/server`.
 
 ## Local dev
 

@@ -4,7 +4,7 @@ import { formatETB, type Order, type OrderStatus } from "@sabacos/core";
 import { api } from "../lib/api.js";
 import { useAuth } from "../auth.js";
 import { SkeletonTable, EmptyState } from "../components/ui.js";
-import { ClipboardList } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardList } from "lucide-react";
 
 interface OrderPageData {
   items: Order[];
@@ -39,18 +39,23 @@ export function OrdersPage() {
   const [, navigate] = useLocation();
   const [data, setData] = useState<OrderPageData | null>(null);
   const [status, setStatus] = useState<OrderStatus | "">("");
+  const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
+    params.set("page", String(page));
+    params.set("pageSize", "24");
     api
       .get<OrderPageData>(`/admin/orders?${params.toString()}`, token ?? undefined)
       .then(setData)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load orders"));
-  }, [token, status]);
+  }, [token, status, page]);
 
   useEffect(load, [load]);
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (
     <>
@@ -60,7 +65,7 @@ export function OrdersPage() {
           className="select"
           style={{ width: 200 }}
           value={status}
-          onChange={(e) => setStatus(e.target.value as OrderStatus | "")}
+          onChange={(e) => { setStatus(e.target.value as OrderStatus | ""); setPage(1); }}
         >
           {STATUSES.map((s) => (
             <option key={s.value || "all"} value={s.value}>{s.label}</option>
@@ -140,6 +145,19 @@ export function OrdersPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {data && data.items.length > 0 && totalPages > 1 && (
+          <div className="spread" style={{ padding: "14px 20px", borderTop: "1px solid var(--border-light)" }}>
+            <span className="muted" style={{ fontSize: 13 }}>{data.total} order(s) · Page {page} of {totalPages}</span>
+            <div className="row">
+              <button className="btn btn-outline btn-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                <ChevronLeft size={14} />
+              </button>
+              <button className="btn btn-outline btn-sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                <ChevronRight size={14} />
+              </button>
+            </div>
           </div>
         )}
       </div>

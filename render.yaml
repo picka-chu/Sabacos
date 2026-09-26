@@ -54,6 +54,14 @@ services:
         sync: false
       - key: MARKETING_SWEEP
         sync: false
+      - key: CHAPA_SECRET_KEY
+        sync: false
+      - key: ADMIN_TELEGRAM_IDS
+        sync: false
+      - key: POST_CHANNEL_ID
+        sync: false
+      - key: TRUSTED_PROXY_IPS
+        sync: false
       # Public URLs of the two static sites, e.g. https://sabacos-web.onrender.com
       - key: WEBAPP_URL
         sync: false

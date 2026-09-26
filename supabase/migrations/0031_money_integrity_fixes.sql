@@ -1,5 +1,13 @@
 -- 0031: Money-integrity fixes (audit batch 1).
 --
+-- F18. Concurrent payout runs (overlapping cron/manual) can double-insert
+-- for one referrer: the same-week guard is check-then-insert. This partial
+-- unique index makes duplicates impossible at the DB level (Monday weeks,
+-- matching startOfWeekUtc; failed rows excluded so retries stay possible).
+create unique index if not exists uq_referral_payouts_referrer_week
+  on public.referral_payouts (referrer_id, date_trunc('week', created_at))
+  where status in ('pending', 'processing', 'sent');
+
 -- C7. orders.payment_method CHECK: 0019 created it with
 -- ('telegram','wallet','cod'); 0020's ADD COLUMN IF NOT EXISTS then no-opped
 -- on migrated DBs, so every bank_split insert violates the old CHECK.
@@ -8,6 +16,58 @@ alter table public.orders drop constraint if exists orders_payment_method_check;
 alter table public.orders
   add constraint orders_payment_method_check
   check (payment_method in ('telegram', 'wallet', 'cod', 'bank_split'));
+
+-- Coupons (audit F7): record which coupon an order used so it can be
+-- consumed at payment-finalize time instead of invoice-creation time
+-- (unpaid invoices used to burn coupons permanently).
+alter table public.orders add column if not exists coupon_code text;
+
+create or replace function public.create_order(p_order jsonb)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_order public.orders%rowtype;
+  v_seq integer;
+begin
+  if jsonb_typeof(p_order->'items') <> 'array' or jsonb_array_length(p_order->'items') = 0 then
+    raise exception 'order must contain at least one item';
+  end if;
+
+  v_seq := public.next_order_seq();
+  insert into public.orders (
+    order_no, profile_id, status, payment_status,
+    subtotal_halala, discount_halala, discount_percent, delivery_fee_halala,
+    total_halala, customer_name, phone, address, note, latitude, longitude,
+    zone, delivery_type, fragile, invoice_payload, payment_method,
+    attributed_to_profile_id, coupon_code
+  ) values (
+    'SB-' || lpad(v_seq::text, 6, 0), (p_order->>'profile_id')::uuid, 'pending_payment', 'pending',
+    (p_order->>'subtotal_halala')::integer, coalesce((p_order->>'discount_halala')::integer, 0),
+    coalesce((p_order->>'discount_percent')::integer, 0), (p_order->>'delivery_fee_halala')::integer,
+    (p_order->>'total_halala')::integer, p_order->>'customer_name', p_order->>'phone',
+    p_order->>'address', p_order->>'note', (p_order->>'latitude')::numeric,
+    (p_order->>'longitude')::numeric, (p_order->>'zone')::integer,
+    coalesce(p_order->>'delivery_type', 'standard'), coalesce((p_order->>'fragile')::boolean, false), '',
+    coalesce(p_order->>'payment_method', 'telegram'),
+    case when p_order->>'attributed_to_profile_id' ~ '^[0-9a-fA-F-]{36}$'
+      then (p_order->>'attributed_to_profile_id')::uuid
+      else null end,
+    nullif(p_order->>'coupon_code', '')
+  ) returning * into v_order;
+
+  insert into public.order_items (
+    order_id, product_id, name_en, name_am, sku, price_halala, qty, subtotal_halala
+  )
+  select v_order.id, (item->>'product_id')::uuid, item->>'name_en', item->>'name_am', item->>'sku',
+    (item->>'price_halala')::integer, (item->>'qty')::integer, (item->>'subtotal_halala')::integer
+  from jsonb_array_elements(p_order->'items') as item;
+
+  update public.orders set invoice_payload = v_order.id where id = v_order.id
+    returning * into v_order;
+  return to_jsonb(v_order);
+end;
+$$;
 
 -- C1b. Chapa split deposit is real money in: mark the order paid so admin
 -- buttons can advance it (pending_payment -> paid) and the delivered hook —
@@ -32,7 +92,7 @@ begin
   if v_payment_status = 'success' then return 'already_processed'; end if;
   if v_order_status <> 'pending_payment' then return 'invalid_status'; end if;
 
-  v_deposit := greatest(1, v_total / 2);
+  v_deposit := greatest(1, (v_total + 1) / 2);
 
   -- Lock each product row individually.
   for v_rec in
@@ -105,7 +165,7 @@ begin
     from public.orders where id = p_order_id;
   if v_recorded_deposit is not null then return 'already_processed'; end if;
 
-  v_deposit := greatest(1, v_total / 2);
+  v_deposit := greatest(1, (v_total + 1) / 2);
 
   -- Lock each product row individually.
   for v_rec in

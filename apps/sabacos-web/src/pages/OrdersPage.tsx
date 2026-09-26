@@ -13,23 +13,35 @@ export function OrdersPage() {
   const { t, lang } = useI18n();
   const [, navigate] = useLocation();
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setLoadError(null);
     api
       .get<{ orders: Order[] }>("/orders")
       .then((res) => setOrders(res.orders))
       .catch((err) => {
-        setOrders([]);
+        setLoadError(apiErrorMessage(err));
         toast(apiErrorMessage(err));
       });
-  }, []);
+  };
+
+  useEffect(load, []);
 
   return (
     <div className="screen">
       <PageTitle title={t("myOrders")} />
-      {orders === null ? (
+      {loadError && (
+        <div className="card" style={{ padding: 20, textAlign: "center", marginBottom: 12 }}>
+          <p className="muted" style={{ margin: "0 0 12px", fontSize: 14 }}>{loadError}</p>
+          <button className="btn btn-secondary" onClick={load}>
+            {t("retry")}
+          </button>
+        </div>
+      )}
+      {orders === null && !loadError ? (
         <div className="card" style={{ padding: 24 }}>{t("loading")}</div>
-      ) : orders.length === 0 ? (
+      ) : (orders ?? []).length === 0 ? (
         <div className="empty-state" style={{ paddingTop: 80 }}>
           <Package size={44} strokeWidth={1.25} style={{ color: "var(--muted)", marginBottom: 12 }} />
           <h3>{t("noOrders")}</h3>
@@ -40,7 +52,7 @@ export function OrdersPage() {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {orders.map((order) => (
+          {(orders ?? []).map((order) => (
             <button
               key={order.id}
               className="card order-card"

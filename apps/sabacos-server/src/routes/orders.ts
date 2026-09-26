@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { badRequest, safeParse } from "../errors.js";
-import { checkoutSchema } from "@sabacos/core";
+import { escapeHtml } from "../bot/bot.js";
+import { checkoutSchema, halfHalala } from "@sabacos/core";
 import { getAppEnv, type AppEnv } from "../env.js";
 import { requireUser, type UserContext } from "../auth/telegram.js";
 import { getDb } from "../db/client.js";
@@ -211,11 +212,11 @@ orderRoutes.post("/orders/:id/payment-proof", async (c) => {
   await submitPaymentProof(db, orderId, proofUrl);
 
   // Notify admin channel with approve/reject buttons
-  const deposit = order.depositHalala ?? Math.round(order.totalHalala / 2);
+  const deposit = order.depositHalala ?? halfHalala(order.totalHalala);
   const bankLabel = order.bankAccountId ? `Bank: ${order.bankAccountId.slice(0, 8)}...` : "";
   const alertText = [
-    `💰 <b>Payment Receipt — Order ${order.orderNo}</b>`,
-    `Customer: ${order.customerName}`,
+    `💰 <b>Payment Receipt — Order ${escapeHtml(order.orderNo)}</b>`,
+    `Customer: ${escapeHtml(order.customerName)}`,
     `Deposit: ${deposit} ETB`,
     bankLabel,
     `<a href="${proofUrl}">View Receipt</a>`,

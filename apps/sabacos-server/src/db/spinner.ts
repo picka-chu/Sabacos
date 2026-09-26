@@ -360,22 +360,63 @@ export async function getValidCoupons(
   return (data ?? []).map((r) => spinnerCouponRowSchema.parse(r));
 }
 
-/** Mark a coupon as used. */
+/**
+ * Mark a coupon as used. Conditional on (owner, still-unused) so concurrent
+ * claims fail closed — exactly one claimer wins, the loser gets an error
+ * instead of double-spending the coupon.
+ */
 export async function useSpinnerCoupon(
   db: Db,
   couponId: string,
   orderId: string,
+  profileId: string,
 ): Promise<void> {
-  const { error } = await db
+  const { data, error } = await db
     .from("spinner_coupons")
     .update({
       is_used: true,
       used_at: new Date().toISOString(),
       order_id: orderId,
     })
-    .eq("id", couponId);
+    .eq("id", couponId)
+    .eq("profile_id", profileId)
+    .eq("is_used", false)
+    .select("id")
+    .single();
 
-  if (error) throw new Error(`useSpinnerCoupon: ${error.message}`);
+  if (error || !data) throw new Error("Coupon already used or unavailable");
+}
+
+/**
+ * Consume the coupon recorded on an order. Called at payment-finalize time
+ * (money moved) — never at invoice-creation time, so unpaid invoices can't
+ * burn coupons. Best-effort: logs and returns false instead of throwing, so
+ * a coupon hiccup never breaks a paid order.
+ */
+export async function consumeOrderCoupon(
+  db: Db,
+  orderId: string,
+  profileId: string,
+): Promise<boolean> {
+  try {
+    const { data: order } = await db
+      .from("orders")
+      .select("coupon_code")
+      .eq("id", orderId)
+      .maybeSingle();
+    const code = (order as { coupon_code?: unknown } | null)?.coupon_code;
+    if (typeof code !== "string" || !code) return true;
+    const coupon = await getSpinnerCouponByCode(db, code);
+    if (!coupon || coupon.profileId !== profileId) {
+      console.error(`consumeOrderCoupon: coupon ${code} not owned by buyer of order ${orderId}`);
+      return false;
+    }
+    await useSpinnerCoupon(db, coupon.id, orderId, profileId);
+    return true;
+  } catch (err) {
+    console.error(`consumeOrderCoupon failed for order ${orderId}:`, err);
+    return false;
+  }
 }
 
 /** Check if user has already used a spinner coupon on this order. */

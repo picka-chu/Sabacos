@@ -18,4 +18,8 @@ update public.referral_settings
       monthly_cap_halala = 800000,
       referred_discount_percent = 5,
       updated_at = now()
-  where id = '00000000-0000-0000-0000-000000000001';
+  where id = '00000000-0000-0000-0000-000000000001'
+    -- Repair-safe: only upgrade rows still holding the previous terms,
+    -- never clobber admin-customized values on rerun.
+    and first_purchase_percent = 5
+    and monthly_cap_halala = 500000;
