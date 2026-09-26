@@ -1,11 +1,18 @@
 -- 0031: Money-integrity fixes (audit batch 1).
 --
 -- F18. Concurrent payout runs (overlapping cron/manual) can double-insert
--- for one referrer: the same-week guard is check-then-insert. This partial
--- unique index makes duplicates impossible at the DB level (Monday weeks,
--- matching startOfWeekUtc; failed rows excluded so retries stay possible).
+-- for one referrer: the same-week guard is check-then-insert. A stored week
+-- bucket + partial unique index makes duplicates impossible at the DB level
+-- (Monday weeks, matching startOfWeekUtc in TS; failed rows excluded so
+-- retries stay possible). NOTE: this must be a STORED column, not an
+-- expression index — date_trunc is STABLE and Postgres rejects it in index
+-- expressions (42P17).
+alter table public.referral_payouts add column if not exists payout_week_start date;
+update public.referral_payouts
+  set payout_week_start = (date_trunc('week', created_at))::date
+  where payout_week_start is null;
 create unique index if not exists uq_referral_payouts_referrer_week
-  on public.referral_payouts (referrer_id, date_trunc('week', created_at))
+  on public.referral_payouts (referrer_id, payout_week_start)
   where status in ('pending', 'processing', 'sent');
 
 -- C7. orders.payment_method CHECK: 0019 created it with

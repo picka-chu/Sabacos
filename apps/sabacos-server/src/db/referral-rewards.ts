@@ -947,6 +947,8 @@ export async function runWeeklyPayouts(
   };
   const todayDow = now.getUTCDay();
   const weekStart = startOfWeekUtc(now).toISOString();
+  // Stored week bucket for the F18 dedupe index (Monday, matches SQL).
+  const weekDate = weekStart.slice(0, 10);
 
   // Referrers with any commission history.
   const { data: rewardRows, error: rewardErr } = await db
@@ -1069,6 +1071,7 @@ export async function runWeeklyPayouts(
         chapa_reference: uuid(),
         payout_account_id: account.id,
         commission_reward_ids: payIds,
+        payout_week_start: weekDate,
         failed_reason: "CHAPA_SECRET_KEY not configured",
       });
       await notifyAdminChannel(
@@ -1111,6 +1114,7 @@ export async function runWeeklyPayouts(
         chapa_reference: chapaReference,
         payout_account_id: account.id,
         commission_reward_ids: payIds,
+        payout_week_start: weekDate,
       })
       .select("*")
       .single();
