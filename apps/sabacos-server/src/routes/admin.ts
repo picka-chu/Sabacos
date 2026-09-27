@@ -21,7 +21,7 @@ import {
   type Product,
 } from "@sabacos/core";
 import { getAppEnv, type AppEnv } from "../env.js";
-import { buildBroadcastKeyboard } from "../services/broadcast.js";
+import { executeBroadcast } from "../services/broadcast.js";
 import type { AdminContext } from "../auth/admin.js";
 import { getDb } from "../db/client.js";
 import { listProducts, getProductById } from "../db/catalog.js";
@@ -867,50 +867,7 @@ adminRoutes.post("/broadcast", async (c) => {
     });
   }
 
-  const bot = createBot(env);
-  const replyMarkup = buildBroadcastKeyboard(env.WEBAPP_URL, input);
-
-  let sent = 0;
-  let failed = 0;
-  const failedSamples: string[] = [];
-  const PAGE = 200;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await db
-      .from("profiles")
-      .select("telegram_id")
-      .not("telegram_id", "is", null)
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`broadcast fetch: ${error.message}`);
-    if (!data || data.length === 0) break;
-    for (const row of data) {
-      try {
-        if (input.imageUrl) {
-          await bot.api.sendPhoto(row.telegram_id as string, input.imageUrl, {
-            caption: input.text.slice(0, 1024),
-            ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-          });
-        } else {
-          await bot.api.sendMessage(row.telegram_id as string, input.text, {
-            ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-          });
-        }
-        sent += 1;
-      } catch (err) {
-        failed += 1;
-        // Keep a small sample of failure reasons (blocked users, bad image
-        // URLs, ...) instead of a bare count — capped to avoid log spam.
-        if (failedSamples.length < 5) {
-          failedSamples.push(err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200));
-        }
-      }
-      // Stay well under Telegram's ~30 msg/sec global limit.
-      await new Promise((r) => setTimeout(r, 50));
-    }
-    if (data.length < PAGE) break;
-  }
-  if (failedSamples.length > 0) {
-    console.error(`[broadcast] ${failed}/${sent + failed} failed. Samples: ${failedSamples.join(" | ")}`);
-  }
+  const { sent, failed, failedSamples } = await executeBroadcast(db, env, input);
   return c.json({ sent, failed, failedSamples, audienceSize: audienceSize ?? 0 });
 });
 

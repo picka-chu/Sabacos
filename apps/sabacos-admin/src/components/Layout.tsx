@@ -3,7 +3,7 @@ import type { ProfileRole } from "@sabacos/core";
 import {
   LayoutDashboard, Package, Tags, ClipboardList, BarChart3,
   ListOrdered, Megaphone, Settings, LogOut, Percent, Users,
-  Menu, X, Gift, Trophy, Building2,
+  Menu, X, Gift, Trophy, Building2, Sparkles,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "../auth.js";
@@ -25,6 +25,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Overview",
     items: [
       { path: "/", label: "Dashboard", icon: LayoutDashboard },
+      { path: "/ai-agent", label: "AI Assistant", icon: Sparkles },
     ],
   },
   {

@@ -14,6 +14,7 @@ const ROLE_BADGE_CLASS: Record<ProfileRole, string> = { admin: "badge-danger", s
 
 const PAGE_LABELS: Record<string, string> = {
   "/": "Dashboard",
+  "/ai-agent": "AI Assistant",
   "/products": "Products",
   "/categories": "Categories",
   "/discounts": "Discounts",

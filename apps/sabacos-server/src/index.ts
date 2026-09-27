@@ -22,6 +22,7 @@ import { shareRoutes } from "./routes/share.js";
 import { requireUser } from "./auth/telegram.js";
 import { requireAdmin, requireFullAdmin, adminMeHandler } from "./auth/admin.js";
 import { requirePermission } from "./auth/admin.js";
+import { aiAgentRoutes } from "./routes/ai-agent.js";
 import { sendError, notFound } from "./errors.js";
 import { log } from "./log.js";
 import { rateLimit } from "./rate-limit.js";
@@ -233,6 +234,12 @@ app.use("/api/v1/admin/analytics", requirePermission("/analytics"));
 app.route("/api/v1/admin", adminRoutes);
 app.route("/api/v1/admin/waitlist", waitlistAdminRoutes);
 app.route("/api/v1/admin/discounts", discountAdminRoutes);
+app.use("/api/v1/admin/ai-agent/*", requirePermission("/ai-agent"));
+app.use(
+  "/api/v1/admin/ai-agent",
+  rateLimit(db, { windowMs: 3_600_000, limit: 60, keyGenerator: ipKey }),
+);
+app.route("/api/v1/admin/ai-agent", aiAgentRoutes);
 app.use("/api/v1/admin/users/*", requireFullAdmin);
 app.route("/api/v1/admin/users", userManagementRoutes);
 app.route("/api/v1/admin/referrals", adminReferralRoutes);

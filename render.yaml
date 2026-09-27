@@ -54,6 +54,10 @@ services:
         sync: false
       - key: MARKETING_SWEEP
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        sync: false
       - key: CHAPA_SECRET_KEY
         sync: false
       - key: ADMIN_TELEGRAM_IDS

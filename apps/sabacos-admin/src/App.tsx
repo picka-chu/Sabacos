@@ -22,6 +22,7 @@ import { UsersPage } from "./pages/UsersPage.js";
 import { ReferralsPage } from "./pages/ReferralsPage.js";
 import { SpinnerPrizesPage } from "./pages/SpinnerPrizesPage.js";
 import { BanksPage } from "./pages/BanksPage.js";
+import { AiAgentPage } from "./pages/AiAgentPage.js";
 
 function RoleGate({ children, path }: { children: React.ReactNode; path: string }) {
   const role = useAuth((s) => s.profile?.role) as ProfileRole | undefined;
@@ -129,6 +130,9 @@ export default function App() {
         </Route>
         <Route path="/">
           <Gate><RoleGate path="/"><DashboardPage /></RoleGate></Gate>
+        </Route>
+        <Route path="/ai-agent">
+          <Gate><RoleGate path="/ai-agent"><AiAgentPage /></RoleGate></Gate>
         </Route>
         <Route path="/products">
           <Gate><RoleGate path="/products"><ProductsPage /></RoleGate></Gate>

@@ -68,6 +68,8 @@ See `apps/sabacos-server/.env.example`:
 | `BOT_TOKEN` | Telegram bot token |
 | `CHAPA_PROVIDER_TOKEN` | Chapa provider token from BotFather (starts with `284685063:TEST:...`) |
 | `CHAPA_SECRET_KEY` | Chapa secret (CHASECK-...) — required for weekly referral payouts |
+| `GEMINI_API_KEY` | Google Gemini key — powers the admin AI assistant (optional) |
+| `GEMINI_MODEL` | Gemini model override (default in code) |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service-role key (bypasses RLS; server only) |
 | `SUPABASE_ANON_KEY` | Anon key (admin login validation) |

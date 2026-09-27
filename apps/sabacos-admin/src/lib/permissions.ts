@@ -5,6 +5,7 @@ import { api } from "./api.js";
 /** All page paths in the admin dashboard. */
 export const ALL_PAGE_PATHS = [
   "/",
+  "/ai-agent",
   "/products",
   "/categories",
   "/discounts",
