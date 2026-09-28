@@ -66,6 +66,10 @@ export interface Profile {
   /** Terms version the user accepted (see TERMS_VERSION). */
   termsVersion: string | null;
   role: ProfileRole;
+  /** Suspended users are blocked from the mini app and admin access. */
+  isSuspended: boolean;
+  suspendedReason: string | null;
+  suspendedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

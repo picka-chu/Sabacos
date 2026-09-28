@@ -261,6 +261,15 @@ export function createBot(env: AppEnv): Bot {
       if (currentProfile) {
         // Promotion side effect only — no reply keyboard anymore.
         await ensureAdminRole(db, adminIds, currentProfile);
+        if (currentProfile.isSuspended) {
+          const settings = await getShopSettings(env);
+          const phone = settings?.shopPhone ? `\nContact us: ${escapeHtml(settings.shopPhone)}` : "";
+          await ctx.reply(
+            `⛔ Your Sabacos account is suspended.${currentProfile.suspendedReason ? `\nReason: ${escapeHtml(currentProfile.suspendedReason)}` : ""}${phone}`,
+            { parse_mode: "HTML" },
+          ).catch(() => {});
+          return;
+        }
       } else {
         // DB failure: nothing downstream (language gate, attribution) can
         // work — say so instead of sending a broken welcome.
@@ -965,7 +974,7 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
 
     // Only admin and staff can use these buttons; delivery can only mark "delivered"
     const allowedRoles = ["admin", "staff"];
-    if (!profile || (!allowedRoles.includes(profile.role) && !(profile.role === "delivery" && newStatus === "delivered"))) {
+    if (!profile || profile.isSuspended || (!allowedRoles.includes(profile.role) && !(profile.role === "delivery" && newStatus === "delivered"))) {
       await ctx.answerCallbackQuery({ text: "Not authorized", show_alert: true });
       return;
     }
@@ -1021,7 +1030,7 @@ const waitlistConfig = await getWaitlistConfig(db).catch(() => null);
     const profile = await getProfileByTelegramId(db, from.id).catch(() => null);
 
     const allowedRoles = ["admin", "staff"];
-    if (!profile || !allowedRoles.includes(profile.role)) {
+    if (!profile || profile.isSuspended || !allowedRoles.includes(profile.role)) {
       await ctx.answerCallbackQuery({ text: "Not authorized", show_alert: true });
       return;
     }

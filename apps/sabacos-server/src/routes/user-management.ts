@@ -11,6 +11,7 @@ import {
   inviteUserByTelegramId,
   deleteUser,
   getProfileById,
+  setSuspended,
 } from "../db/profiles.js";
 
 export const userManagementRoutes = new Hono<{ Bindings: AppEnv } & AdminContext>();
@@ -96,6 +97,33 @@ userManagementRoutes.patch("/:id/role", async (c) => {
   }
 
   const profile = await updateUserRole(db, c.req.param("id"), input.role as ProfileRole);
+  return c.json({ profile });
+});
+
+const suspendSchema = z.object({
+  suspended: z.boolean(),
+  reason: z.string().trim().max(280).optional(),
+});
+
+// Suspend / unsuspend a user. Suspended users are blocked from the mini app
+// and admin access; unsuspending fully restores them.
+userManagementRoutes.patch("/:id/suspend", async (c) => {
+  const db = getDb(getAppEnv());
+  const body = await c.req.json().catch(() => null);
+  const input = safeParse(suspendSchema, body);
+
+  const target = await getProfileById(db, c.req.param("id"));
+  if (!target) {
+    return c.json({ error: { code: "not_found", message: "User not found" } }, 404);
+  }
+
+  // Don't allow suspending yourself
+  const caller = c.get("profile");
+  if (caller.id === target.id) {
+    return c.json({ error: { code: "bad_request", message: "Cannot suspend yourself" } }, 400);
+  }
+
+  const profile = await setSuspended(db, target.id, input.suspended, input.reason);
   return c.json({ profile });
 });
 

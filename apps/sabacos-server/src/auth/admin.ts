@@ -49,12 +49,13 @@ export const requireAdmin: MiddlewareHandler<{ Bindings: AppEnv } & AdminContext
   if (initData) {
     const result = await validateInitData(initData, env.BOT_TOKEN);
     if (result.valid && result.payload) {
-      const db = getDb(env);
-      const profile = await getProfileByTelegramId(db, result.payload.userId);
-      if (profile && (ADMIN_ACCESS_ROLES as readonly string[]).includes(profile.role)) {
-        c.set("profile", profile);
-        return next();
-      }
+  const db = getDb(env);
+  const profile = await getProfileByTelegramId(db, result.payload.userId);
+  if (profile && (ADMIN_ACCESS_ROLES as readonly string[]).includes(profile.role)) {
+    if (profile.isSuspended) throw forbidden("Account suspended");
+    c.set("profile", profile);
+    return next();
+  }
     }
     // initData present but invalid or not admin — fall through to Bearer check
   }
@@ -75,6 +76,7 @@ export const requireAdmin: MiddlewareHandler<{ Bindings: AppEnv } & AdminContext
   if (!(ADMIN_ACCESS_ROLES as readonly string[]).includes(profile.role)) {
     throw forbidden("Admin access required");
   }
+  if (profile.isSuspended) throw forbidden("Account suspended");
 
   c.set("profile", profile);
   await next();
@@ -94,7 +96,7 @@ export const adminMeHandler: MiddlewareHandler<{ Bindings: AppEnv } & AdminConte
     const result = await validateInitData(initData, env.BOT_TOKEN);
     if (result.valid && result.payload) {
       const profile = await getProfileByTelegramId(db, result.payload.userId);
-      if (profile && (ADMIN_ACCESS_ROLES as readonly string[]).includes(profile.role)) {
+      if (profile && !profile.isSuspended && (ADMIN_ACCESS_ROLES as readonly string[]).includes(profile.role)) {
         return c.json({
           profile: {
             id: profile.id,
@@ -115,7 +117,7 @@ export const adminMeHandler: MiddlewareHandler<{ Bindings: AppEnv } & AdminConte
     const { data, error } = await authDb.auth.getUser(token);
     if (!error && data.user) {
       const profile = await getProfileByAuthId(db, data.user.id);
-      if (profile && (ADMIN_ACCESS_ROLES as readonly string[]).includes(profile.role)) {
+      if (profile && !profile.isSuspended && (ADMIN_ACCESS_ROLES as readonly string[]).includes(profile.role)) {
         return c.json({
           profile: {
             id: profile.id,

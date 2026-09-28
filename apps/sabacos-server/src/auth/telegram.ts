@@ -3,7 +3,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import { getAppEnv, type AppEnv } from "../env.js";
 import { getDb } from "../db/client.js";
 import { upsertTelegramProfile } from "../db/profiles.js";
-import { unauthorized } from "../errors.js";
+import { forbidden, unauthorized } from "../errors.js";
 
 export type UserContext = {
   Variables: {
@@ -46,6 +46,10 @@ export const requireUser: MiddlewareHandler<{ Bindings: AppEnv } & UserContext> 
     username: result.payload.username,
     photoUrl: result.payload.photoUrl,
   });
+
+  if (profile.isSuspended) {
+    throw forbidden("Account suspended — contact support");
+  }
 
   c.set("profile", profile);
   await next();

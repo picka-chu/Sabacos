@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Users, Search, Plus, Trash2, ChevronLeft, ChevronRight, Shield, Save, ChevronDown, ChevronUp } from "lucide-react";
+import { Users, Search, Plus, Trash2, ChevronLeft, ChevronRight, Shield, Save, ChevronDown, ChevronUp, Ban, Undo2 } from "lucide-react";
 import { useAuth } from "../auth.js";
 import { api, apiErrorMessage } from "../lib/api.js";
 import { useToast } from "../components/toast.js";
@@ -37,6 +37,7 @@ const DEFAULTS: Record<string, string[]> = {
 
 export function UsersPage() {
   const token = useAuth((s) => s.token);
+  const me = useAuth((s) => s.profile);
   const [users, setUsers] = useState<Profile[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -112,6 +113,26 @@ export function UsersPage() {
       toast("success", "User removed");
       fetchUsers();
     } catch (err) { console.error("Failed to delete user:", err); }
+  }
+
+  async function handleSuspend(u: Profile) {
+    const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.username || u.telegramId || u.id;
+    if (u.isSuspended) {
+      if (!confirm(`Unsuspend ${name}? They regain full access immediately.`)) return;
+      try {
+        await api.patch(`/admin/users/${u.id}/suspend`, { suspended: false }, token ?? undefined);
+        toast("success", "User unsuspended");
+        fetchUsers();
+      } catch (err) { toast("error", apiErrorMessage(err)); }
+      return;
+    }
+    const reason = window.prompt(`Suspend ${name}? They lose mini-app and admin access. Optional reason:`, "");
+    if (reason === null) return; // cancelled
+    try {
+      await api.patch(`/admin/users/${u.id}/suspend`, { suspended: true, reason }, token ?? undefined);
+      toast("success", "User suspended");
+      fetchUsers();
+    } catch (err) { toast("error", apiErrorMessage(err)); }
   }
 
   function togglePerm(role: string, path: string) {
@@ -264,6 +285,11 @@ export function UsersPage() {
                       <td data-label="User">
                         <div>
                           <strong>{[u.firstName, u.lastName].filter(Boolean).join(" ") || "—"}</strong>
+                          {u.isSuspended && (
+                            <span className="badge badge-danger" style={{ marginLeft: 6 }} title={u.suspendedReason || "Suspended"}>
+                              Suspended
+                            </span>
+                          )}
                           {u.username && <div className="muted" style={{ fontSize: 12 }}>@{u.username}</div>}
                         </div>
                       </td>
@@ -289,10 +315,21 @@ export function UsersPage() {
                         </span>
                       </td>
                       <td>
-                        <button className="btn btn-outline btn-sm" onClick={() => handleDelete(u.id)} title="Remove user"
-                          style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>
-                          <Trash2 size={14} />
-                        </button>
+                        <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
+                          <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => handleSuspend(u)}
+                            title={u.isSuspended ? "Unsuspend user" : "Suspend user"}
+                            disabled={me?.id === u.id}
+                            style={u.isSuspended ? {} : { color: "var(--warning, #f57c00)", borderColor: "var(--warning, #f57c00)" }}
+                          >
+                            {u.isSuspended ? <Undo2 size={14} /> : <Ban size={14} />}
+                          </button>
+                          <button className="btn btn-outline btn-sm" onClick={() => handleDelete(u.id)} title="Remove user"
+                            style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

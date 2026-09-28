@@ -115,6 +115,30 @@ export async function acceptTerms(db: Db, id: string): Promise<Profile> {
   return profileRowSchema.parse(data);
 }
 
+/** Suspend or unsuspend a user. Unsuspending clears reason/timestamp. */
+export async function setSuspended(
+  db: Db,
+  id: string,
+  suspended: boolean,
+  reason?: string | null,
+): Promise<Profile> {
+  const patch: Record<string, unknown> = suspended
+    ? {
+        is_suspended: true,
+        suspended_reason: reason?.trim()?.slice(0, 280) || null,
+        suspended_at: new Date().toISOString(),
+      }
+    : { is_suspended: false, suspended_reason: null, suspended_at: null };
+  const { data, error } = await db
+    .from("profiles")
+    .update(patch)
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw new Error(`setSuspended: ${error.message}`);
+  return profileRowSchema.parse(data);
+}
+
 export async function getProfileByAuthId(db: Db, authId: string): Promise<Profile | null> {
   const { data, error } = await db.from("profiles").select("*").eq("auth_id", authId).single();
   if (error) {
