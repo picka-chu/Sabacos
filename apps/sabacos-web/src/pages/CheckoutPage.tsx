@@ -1000,7 +1000,7 @@ export function CheckoutPage() {
             </div>
           )}
 
-          <div className="sticky-summary">
+          <div className="sticky-summary" style={{ position: "static", marginBottom: 24 }}>
             <div className="flex" style={{ justifyContent: "space-between" }}>
               <span className="muted">{t("total")}</span>
               <span className="price" style={{ fontSize: 20 }}>{formatETB(grandTotal)}</span>
