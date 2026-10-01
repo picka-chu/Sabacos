@@ -49,7 +49,7 @@ begin
     zone, delivery_type, fragile, invoice_payload, payment_method,
     attributed_to_profile_id, coupon_code
   ) values (
-    'SB-' || lpad(v_seq::text, 6, 0), (p_order->>'profile_id')::uuid, 'pending_payment', 'pending',
+    'SB-' || lpad(v_seq::text, 6, '0'), (p_order->>'profile_id')::uuid, 'pending_payment', 'pending',
     (p_order->>'subtotal_halala')::integer, coalesce((p_order->>'discount_halala')::integer, 0),
     coalesce((p_order->>'discount_percent')::integer, 0), (p_order->>'delivery_fee_halala')::integer,
     (p_order->>'total_halala')::integer, p_order->>'customer_name', p_order->>'phone',
