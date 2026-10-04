@@ -27,6 +27,7 @@ import { sendError, notFound } from "./errors.js";
 import { log } from "./log.js";
 import { rateLimit } from "./rate-limit.js";
 import { startMarketingSweeper, stopMarketingSweeper } from "./services/notifier.js";
+import { startMarketingAgent, stopMarketingAgent } from "./services/marketing-agent.js";
 import { startAdaptiveCron, stopAdaptiveCron } from "./cron/adaptive.js";
 
 const env = loadEnv();
@@ -286,6 +287,9 @@ async function start(): Promise<void> {
   startMarketingSweeper(bot, env);
   log.info(`Marketing sweeper ${env.MARKETING_SWEEP === "off" ? "disabled" : "running (hourly)"}`);
 
+  startMarketingAgent(bot, env);
+  log.info(`Marketing agent ${env.MARKETING_AGENT === "off" ? "disabled" : "running (hourly ticks)"}`);
+
   startAdaptiveCron(env);
   log.info("Adaptive referral cron scheduler started");
   const listener = getRequestListener(app.fetch);
@@ -313,6 +317,7 @@ async function start(): Promise<void> {
 function shutdown(signal: string): void {
   log.info(`${signal} received — shutting down`);
   stopMarketingSweeper();
+  stopMarketingAgent();
   stopAdaptiveCron();
   server?.close(() => {
     log.info("HTTP server closed");

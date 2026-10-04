@@ -171,6 +171,59 @@ export async function logNotification(
   if (error) throw new Error(`logNotification: ${error.message}`);
 }
 
+/**
+ * Agent-wide frequency cap: has this profile received ANY automated
+ * marketing message in the last `days` days (agent log)? Both the new
+ * marketing agent and the legacy sweep consult this so users never get
+ * double-pinged.
+ */
+export async function recentlyMessagedAny(
+  db: Db,
+  profileId: string,
+  days = 3,
+): Promise<boolean> {
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const { data, error } = await db
+    .from("agent_message_log")
+    .select("id")
+    .eq("profile_id", profileId)
+    .gte("sent_at", since)
+    .limit(1);
+  if (error) {
+    // Table missing (migration 0033 pending) — fail open, the per-job
+    // cooldowns below still apply.
+    return false;
+  }
+  return ((data ?? []) as unknown[]).length > 0;
+}
+
+export async function logAgentMessage(
+  db: Db,
+  profileId: string,
+  job: string,
+  refId?: string,
+): Promise<void> {
+  const { error } = await db.from("agent_message_log").insert({
+    profile_id: profileId,
+    job,
+    ref_id: refId ?? null,
+  });
+  if (error) throw new Error(`logAgentMessage: ${error.message}`);
+}
+
+/** Last time a job ran (per-job cursors for the marketing agent). */
+export async function getAgentJobCursor(db: Db, job: string): Promise<string | null> {
+  const state = await getJobState<Record<string, string>>(db, "marketing_agent_jobs").catch(() => null);
+  return state?.[job] ?? null;
+}
+
+export async function setAgentJobCursor(db: Db, job: string, iso: string): Promise<void> {
+  const state =
+    (await getJobState<Record<string, string>>(db, "marketing_agent_jobs").catch(() => null)) ?? {};
+  state[job] = iso;
+  await setJobState(db, "marketing_agent_jobs", state).catch(() => undefined);
+}
+
 export async function getJobState<T>(db: Db, key: string): Promise<T | null> {
   const { data, error } = await db.from("job_state").select("value").eq("key", key).maybeSingle();
   if (error) throw new Error(`getJobState: ${error.message}`);

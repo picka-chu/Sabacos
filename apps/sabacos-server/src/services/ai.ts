@@ -72,6 +72,46 @@ async function cfRun<T>(env: { CLOUDFLARE_ACCOUNT_ID?: string; CLOUDFLARE_API_TO
 // Gemini REST API (no SDK needed)
 // ---------------------------------------------------------------------------
 
+/**
+ * Plain Gemini text completion. Returns null when unconfigured or on any
+ * failure — callers must always have a template fallback (marketing copy
+ * must never depend on the network).
+ */
+export async function geminiText(
+  env: aiEnv,
+  prompt: string,
+  opts: { maxOutputTokens?: number; timeoutMs?: number; temperature?: number } = {},
+): Promise<string | null> {
+  if (!geminiEnabled(env)) return null;
+  const url = `${GEMINI_BASE}/models/${geminiModel(env)}:generateContent?key=${env.GEMINI_API_KEY}`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: opts.temperature ?? 0.7,
+          maxOutputTokens: opts.maxOutputTokens ?? 150,
+        },
+      }),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 20_000),
+    });
+    if (!res.ok) {
+      console.error(`[ai/gemini-text] HTTP ${res.status}`);
+      return null;
+    }
+    const json = (await res.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim();
+    return text || null;
+  } catch (err) {
+    console.error("[ai/gemini-text] threw:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 async function geminiGenerate(
   env: aiEnv,
   model: string,

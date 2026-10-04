@@ -35,6 +35,7 @@ const baseSchema = z.object({
   R2_BUCKET: z.string().trim().optional(),
   R2_PUBLIC_BASE: z.string().trim().url().optional(),
   MARKETING_SWEEP: z.enum(["on", "off"]).default("on"),
+  MARKETING_AGENT: z.enum(["on", "off"]).default("on"),
 });
 
 // In production, WEBHOOK_SECRET is required to prevent forged updates.

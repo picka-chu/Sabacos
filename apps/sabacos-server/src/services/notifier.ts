@@ -163,6 +163,10 @@ export async function runMarketingSweep(db: Db, bot: Bot, env: AppEnv): Promise<
     for (const target of targets.slice(0, 100)) {
       try {
         const lang = langByProfile.get(target.profileId) ?? "en";
+        // Respect the marketing agent's global cooldown so users never get
+        // double-pinged when both systems are on.
+        const { recentlyMessagedAny } = await import("../db/marketing.js");
+        if (await recentlyMessagedAny(db, target.profileId, 3).catch(() => false)) continue;
         const text = await textFor(lang);
         await bot.api.sendMessage(target.telegramId, text, {
           reply_markup: {
