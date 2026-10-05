@@ -89,12 +89,60 @@ async function promoCopy(
   try {
     const text = await geminiText(
       env,
-      `${prompt}\nRules: max 40 words, plain text, one emoji max, no links, no hashtags, no prices you were not given.`,
-      { maxOutputTokens: 120, timeoutMs: 20_000 },
+      `${prompt}\nRules: exactly 1-2 short sentences, max 35 words. Start with a hook, name the product and its real price or offer, end with a complete sentence. Plain text only: no markdown, no quotes around it, no hashtags, no links, no placeholders like [name], no greeting, no sign-off. Never use these words: unleash, elevate, game-changer, delve, embark, tapestry.`,
+      { maxOutputTokens: 200, timeoutMs: 20_000 },
     );
-    if (text) return text.slice(0, 500);
-  } catch { /* fall through */ }
+    const cleaned = cleanCopy(text);
+    if (cleaned) return cleaned;
+  } catch { /* fall through to template */ }
   return fallbackEn;
+}
+
+/**
+ * Post-process raw model output into something safe to send to a customer.
+ * Returns null when the output is unusable (caller uses the template).
+ * Guards: markdown/quotes/options-lists stripped, mid-sentence truncation
+ * repaired at a word boundary, generic slop and links rejected.
+ */
+export function cleanCopy(text: string | null): string | null {
+  if (!text) return null;
+  let out = text.trim();
+  // Strip wrapping quotes.
+  if ((out.startsWith('"') && out.endsWith('"')) || (out.startsWith("'") && out.endsWith("'"))) {
+    out = out.slice(1, -1).trim();
+  }
+  // Drop markdown dressing and quote markers.
+  out = out.replace(/^[#>]\s*/gm, "").replace(/\*\*/g, "").replace(/__([^_]+)__/g, "$1");
+  // Collapse whitespace; keep at most two short paragraphs.
+  out = out
+    .split(/\n+/)
+    .map((l) => l.trim().replace(/\s+/g, " "))
+    .filter(Boolean)
+    .slice(0, 3)
+    .join("\n");
+  // Reject multi-option dumps, subjects, links, placeholders.
+  if (/^(option|subject|title)\s*\d*\s*:/i.test(out)) return null;
+  if (/https?:\/\/|\[.*?\]|\(.*?\)|{[^{}]*}/.test(out)) return null;
+  if (out.length < 20) return null;
+  // Cap length at a word boundary so nothing goes out half-written.
+  const MAX = 300;
+  if (out.length > MAX) {
+    const cut = out.slice(0, MAX);
+    const lastSpace = cut.lastIndexOf(" ");
+    out = (lastSpace > 100 ? cut.slice(0, lastSpace) : cut).trim();
+  }
+  // Must end finished — not a dangling fragment. A complete thought closed
+  // with emoji is fine; otherwise salvage the last full sentence or give up
+  // (caller sends the hand-written template instead).
+  const noEmojiTail = out.replace(/[\p{Emoji}\uFE0F\u200D\s]+$/u, "");
+  const strippedEmoji = noEmojiTail.length !== out.length;
+  if (/[.!?…)\]"'”’]$/.test(noEmojiTail)) return out;
+  if (strippedEmoji && noEmojiTail.length >= 20) return out;
+  const m = out.match(/^(.*[.!?…])/s);
+  if (!m?.[1]) return null;
+  out = m[1].trim();
+  // A salvaged complete sentence may be short ("Back tomorrow.") — accept it.
+  return out.length >= 12 ? out : null;
 }
 
 async function sendPromo(
