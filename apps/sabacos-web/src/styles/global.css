@@ -217,6 +217,22 @@ img {
   color: var(--accent);
 }
 
+.btn-outline {
+  background: transparent;
+  color: var(--ink);
+  border: 1.5px solid var(--line);
+}
+
+.btn-outline:active {
+  background: var(--surface-2);
+}
+
+.btn-sm {
+  padding: 8px 14px;
+  font-size: 13px;
+  gap: 6px;
+}
+
 .btn-block {
   width: 100%;
 }

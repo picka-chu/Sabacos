@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cleanCopy, isQuietHours, jobDue } from "../src/services/marketing-agent.js";
+import { formatETB } from "@sabacos/core";
+import { cleanCopy, isQuietHours, jobDue, priceLineFor, promoText } from "../src/services/marketing-agent.js";
 
 describe("isQuietHours (Africa/Addis_Ababa, 21:00-08:00)", () => {
   it("is quiet late at night Addis time", () => {
@@ -66,8 +67,46 @@ describe("cleanCopy", () => {
     const long = `${"Great serum for daily glow. ".repeat(20)}tail`;
     const out = cleanCopy(long);
     expect(out).not.toBeNull();
-    expect(out!.length).toBeLessThanOrEqual(300);
+    expect(out!.length).toBeLessThanOrEqual(420);
     expect(out).toMatch(/[.!?…]$/);
+  });
+});
+
+describe("promoText", () => {
+  it("builds a complete EN promo with trust bullets", () => {
+    const text = promoText("en", "🔥 35% off · Glow Serum", "Now 1,275 ETB · was 1,950 ETB", "Your glow routine just got an upgrade.");
+    expect(text).toContain("🔥 35% off · Glow Serum");
+    expect(text).toContain("Now 1,275 ETB");
+    expect(text).toContain("Your glow routine");
+    expect(text).toContain("✓ 100% original");
+    expect(text).toContain("Pay half now");
+  });
+
+  it("builds an Amharic promo with trust bullets", () => {
+    const text = promoText("am", "🔥 35% ቅናሽ · Glow Serum", "አሁን 1,275 ETB · ነበር 1,950 ETB", "የጤናዎ ቅርፃ ወደ ተሻለ ደረጃ።");
+    expect(text).toContain("ኦርጅናል");
+    expect(text).toContain("ግማሽ አሁን");
+  });
+
+  it("omits trust bullets when asked", () => {
+    const text = promoText("en", "📣 Referral reminder", "3 friends pending", "Nudge them today.", { trust: false });
+    expect(text).not.toContain("✓");
+    expect(text).toContain("Nudge them today.");
+  });
+});
+
+describe("priceLineFor", () => {
+  it("shows was-price and now-price when discounted", () => {
+    const now = formatETB(127500);
+    const was = formatETB(195000);
+    expect(priceLineFor("en", 127500, 195000)).toBe(`Now ${now} · was ${was}`);
+    expect(priceLineFor("am", 127500, 195000)).toBe(`አሁን ${now} · ነበር ${was}`);
+  });
+
+  it("shows a single price without discount", () => {
+    const price = formatETB(150000);
+    expect(priceLineFor("en", 150000)).toBe(price);
+    expect(priceLineFor("am", 150000, null)).toBe(price);
   });
 });
 

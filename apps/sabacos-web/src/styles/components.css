@@ -233,13 +233,15 @@
 }
 
 .gallery img {
-  scroll-snap-align: start;
+  scroll-snap-align: center;
   width: 84%;
   aspect-ratio: 1;
   object-fit: cover;
   border-radius: var(--radius-lg);
   flex-shrink: 0;
   background: var(--surface-2);
+  /* Centers a single image; resolves to 0 when the row overflows (scroll). */
+  margin-inline: auto;
 }
 
 .gallery-placeholder {
@@ -253,6 +255,7 @@
   justify-content: center;
   color: var(--muted);
   font-size: 14px;
+  margin-inline: auto;
 }
 
 .gallery-dots {

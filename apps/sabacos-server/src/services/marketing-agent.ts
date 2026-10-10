@@ -26,7 +26,6 @@ import {
   recentlyMessagedAny,
   recentlyNotifiedProfileIds,
   setAgentJobCursor,
-  type DiscountCandidate,
   type NotifyTarget,
 } from "../db/marketing.js";
 import { log } from "../log.js";
@@ -80,7 +79,7 @@ async function cooledDown(db: Db, targets: Target[], days = AGENT_COOLDOWN_DAYS)
   return out;
 }
 
-/** Gemini EN line with template fallback; Amharic always from template. */
+/** Gemini EN body with template fallback; Amharic always from template. */
 async function promoCopy(
   env: AppEnv,
   prompt: string,
@@ -89,13 +88,48 @@ async function promoCopy(
   try {
     const text = await geminiText(
       env,
-      `${prompt}\nRules: exactly 1-2 short sentences, max 35 words. Start with a hook, name the product and its real price or offer, end with a complete sentence. Plain text only: no markdown, no quotes around it, no hashtags, no links, no placeholders like [name], no greeting, no sign-off. Never use these words: unleash, elevate, game-changer, delve, embark, tapestry.`,
-      { maxOutputTokens: 200, timeoutMs: 20_000 },
+      `${prompt}\nRules: 2-3 flowing sentences, 40-55 words. Open with a warm hook, mention one concrete benefit, close with a light call to shop. Do NOT repeat the price or brand sign-off (added automatically). Plain text only: no markdown, no quotes, no hashtags, no links, no placeholders like [name], no greeting. Never use these words: unleash, elevate, game-changer, delve, embark, tapestry.`,
+      { maxOutputTokens: 280, timeoutMs: 20_000 },
     );
     const cleaned = cleanCopy(text);
     if (cleaned) return cleaned;
   } catch { /* fall through to template */ }
   return fallbackEn;
+}
+
+/** Localized "Now X · was Y" line (formatETB already appends ETB). */
+export function priceLineFor(
+  lang: "en" | "am",
+  priceHalala: number,
+  compareAtHalala?: number | null,
+): string {
+  const price = formatETB(priceHalala);
+  if (compareAtHalala != null && compareAtHalala > priceHalala) {
+    return lang === "am"
+      ? `አሁን ${price} · ነበር ${formatETB(compareAtHalala)}`
+      : `Now ${price} · was ${formatETB(compareAtHalala)}`;
+  }
+  return price;
+}
+
+/**
+ * Rich multi-line promo body: headline, sub-line, AI/template copy, and
+ * trust bullets (pay-half + originality) so every message reads complete.
+ */
+export function promoText(
+  lang: "en" | "am",
+  head: string,
+  subLine: string,
+  body: string,
+  opts: { trust?: boolean } = {},
+): string {
+  const trust =
+    lang === "am"
+      ? "✓ 100% ኦርጅናል ምርት\n✓ ግማሽ አሁን ብቻ — ቀሪው በመላኪያ"
+      : "✓ 100% original\n✓ Pay half now, half on delivery";
+  const parts = [`${head}\n${subLine}`, body];
+  if (opts.trust !== false) parts.push(trust);
+  return parts.join("\n\n");
 }
 
 /**
@@ -125,7 +159,7 @@ export function cleanCopy(text: string | null): string | null {
   if (/https?:\/\/|\[.*?\]|\(.*?\)|{[^{}]*}/.test(out)) return null;
   if (out.length < 20) return null;
   // Cap length at a word boundary so nothing goes out half-written.
-  const MAX = 300;
+  const MAX = 420;
   if (out.length > MAX) {
     const cut = out.slice(0, MAX);
     const lastSpace = cut.lastIndexOf(" ");
@@ -156,24 +190,35 @@ async function sendPromo(
   job: string,
   refId?: string,
   productId?: string,
+  photo?: string | null,
 ): Promise<void> {
-  await bot.api.sendMessage(target.telegramId, text, {
+  const markup = {
     reply_markup: {
       inline_keyboard: [
         [{ text: buttonText, web_app: { url: `${env.WEBAPP_URL.replace(/\/$/, "")}${urlPath}` } }],
       ],
     },
-  });
+  };
+  // Product photos make promos look like a real shop ad, not a text bot.
+  if (photo) {
+    try {
+      await bot.api.sendPhoto(target.telegramId, photo, {
+        caption: text.slice(0, 1024),
+        ...markup,
+      });
+    } catch {
+      // Photo fetch/size failed — never lose the message over the image.
+      await bot.api.sendMessage(target.telegramId, text, markup);
+    }
+  } else {
+    await bot.api.sendMessage(target.telegramId, text, markup);
+  }
   await logAgentMessage(db, target.profileId, job, refId).catch((err) =>
     console.error(`[agent] log failed for ${target.profileId}:`, err),
   );
   if (productId) {
     await logNotification(db, target.profileId, productId, job).catch(() => undefined);
   }
-}
-
-function productLine(p: DiscountCandidate): string {
-  return `${p.nameEn} — ${formatETB(p.priceHalala)}`;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -203,13 +248,22 @@ async function jobPriceDrops(db: Db, bot: Bot, env: AppEnv, sinceIso: string | n
     const pct = p.compareAtHalala ? Math.round((1 - p.priceHalala / p.compareAtHalala) * 100) : 0;
     const en = await promoCopy(
       env,
-      `Write a short promo for a cosmetics sale: ${productLine(p)}${pct > 0 ? `, ${pct}% off` : ""}. Beauty shop in Addis Ababa, pay half now.`,
-      `🔥 ${pct > 0 ? `${pct}% off! ` : ""}${p.nameEn} now ${formatETB(p.priceHalala)} at Sabacos — 100% original, pay half now.`,
+      `Write a short cosmetics sale promo about ${p.nameEn}: open with the price-drop excitement, mention it is 100% original with fast Addis Ababa delivery, and invite them to grab it before it sells out.`,
+      `This is your chance: the ${p.nameEn} just dropped to ${formatETB(p.priceHalala)} ETB. Original formula, fast delivery in Addis, and you only pay half today — the rest when it arrives.`,
     );
     for (const t of targets.slice(0, 60)) {
-      const text = t.language === "am" ? `🔥 ቅናሽ! ${p.nameAm || p.nameEn} አሁን ${formatETB(p.priceHalala)} — ሳባኮስ, 100% ኦርጅናል, ግማሽ አሁን።` : en;
+      const name = t.language === "am" && p.nameAm ? p.nameAm : p.nameEn;
+      const head =
+        t.language === "am"
+          ? `${pct > 0 ? `🔥 ${pct}% ቅናሽ · ` : "✨ "}${name}`
+          : `${pct > 0 ? `🔥 ${pct}% off · ` : "✨ "}${name}`;
+      const body =
+        t.language === "am"
+          ? `ይህ ዕድል ነው። ${name} ዋጋው ወርዷል — ኦርጅናል ምርት፣ በአዲስ አበባ ፍጥነት ይደርሳል። ግማሽ አሁን ብቻ ይክፈሉ።`
+          : en;
+      const text = promoText(t.language, head, priceLineFor(t.language, p.priceHalala, p.compareAtHalala), body);
       try {
-        await sendPromo(db, bot, env, t, text, `/product/${p.id}`, t.language === "am" ? "አሁን ይግዙ 🛒" : "Shop now 🛒", "price_drops", p.id, p.id);
+        await sendPromo(db, bot, env, t, text, `/product/${p.id}`, t.language === "am" ? "አሁን ይግዙ 🛒" : "Shop now 🛒", "price_drops", p.id, p.id, p.imageUrl);
         sent += 1;
       } catch (err) {
         console.error(`[agent:price_drops] send failed for ${t.telegramId}:`, err);
@@ -223,7 +277,7 @@ async function jobNewArrivals(db: Db, bot: Bot, env: AppEnv, sinceIso: string | 
   const since = sinceIso ?? new Date(Date.now() - 3 * 86_400_000).toISOString();
   const { data, error } = await db
     .from("products")
-    .select("id, name_en, name_am, price_halala, category_id")
+    .select("id, name_en, name_am, price_halala, category_id, image_urls")
     .eq("is_active", true)
     .gte("created_at", since)
     .order("created_at", { ascending: false })
@@ -235,6 +289,7 @@ async function jobNewArrivals(db: Db, bot: Bot, env: AppEnv, sinceIso: string | 
     nameAm: (r.name_am as string) ?? "",
     priceHalala: r.price_halala as number,
     categoryId: (r.category_id as string | null) ?? null,
+    imageUrl: (Array.isArray(r.image_urls) ? (r.image_urls as string[])[0] : null) ?? null,
   }));
   let sent = 0;
   let skipped = 0;
@@ -250,13 +305,20 @@ async function jobNewArrivals(db: Db, bot: Bot, env: AppEnv, sinceIso: string | 
     }
     const en = await promoCopy(
       env,
-      `Announce a new arrival at a cosmetics shop in Addis Ababa: ${p.nameEn}, ${formatETB(p.priceHalala)}. Invite them to be first to try it.`,
-      `✨ New in at Sabacos: ${p.nameEn} (${formatETB(p.priceHalala)}). Be first to try it — 100% original.`,
+      `Announce a fresh cosmetics arrival, ${p.nameEn}, now at Sabacos in Addis Ababa. Build excitement about being first to try it; mention original products and half-now payment.`,
+      `${p.nameEn} just landed at Sabacos. Fresh stock, first-come — try it before it sells through, and pay half now, half on delivery.`,
     );
     for (const t of targets.slice(0, 80)) {
-      const text = t.language === "am" ? `✨ አዲስ በሳባኮስ: ${p.nameAm || p.nameEn} (${formatETB(p.priceHalala)}). አስቀድመው ይሞክሩት።` : en;
+      const name = t.language === "am" && p.nameAm ? p.nameAm : p.nameEn;
+      const head =
+        t.language === "am" ? `✨ አዲስ ደርሷል · ${name}` : `✨ Just landed · ${name}`;
+      const body =
+        t.language === "am"
+          ? `ይህ ${name} አዲስ ወጥቷል። ከመጀመሪያው በፊት ይሞክሩት — ቅርፃው በፍጥነት ይሞላል።`
+          : en;
+      const text = promoText(t.language, head, priceLineFor(t.language, p.priceHalala), body);
       try {
-        await sendPromo(db, bot, env, t, text, `/product/${p.id}`, t.language === "am" ? "ይመልከቱ 👀" : "Take a look 👀", "new_arrivals", p.id, p.id);
+        await sendPromo(db, bot, env, t, text, `/product/${p.id}`, t.language === "am" ? "ይመልከቱ 👀" : "Take a look 👀", "new_arrivals", p.id, p.id, p.imageUrl);
         sent += 1;
       } catch (err) {
         console.error(`[agent:new_arrivals] send failed for ${t.telegramId}:`, err);
@@ -270,7 +332,7 @@ async function jobRestock(db: Db, bot: Bot, env: AppEnv, sinceIso: string | null
   const since = sinceIso ?? new Date(Date.now() - 3 * 86_400_000).toISOString();
   const { data, error } = await db
     .from("products")
-    .select("id, name_en, name_am, price_halala")
+    .select("id, name_en, name_am, price_halala, image_urls")
     .eq("is_active", true)
     .gt("stock", 0)
     .gte("updated_at", since)
@@ -282,6 +344,7 @@ async function jobRestock(db: Db, bot: Bot, env: AppEnv, sinceIso: string | null
     nameEn: r.name_en as string,
     nameAm: (r.name_am as string) ?? "",
     priceHalala: r.price_halala as number,
+    imageUrl: (Array.isArray(r.image_urls) ? (r.image_urls as string[])[0] : null) ?? null,
   }));
   let sent = 0;
   let skipped = 0;
@@ -308,13 +371,20 @@ async function jobRestock(db: Db, bot: Bot, env: AppEnv, sinceIso: string | null
     }
     const en = await promoCopy(
       env,
-      `Tell a shopper their viewed item is back in stock: ${p.nameEn}, ${formatETB(p.priceHalala)}. Urgent but friendly, it sells out fast.`,
-      `📦 Back in stock: ${p.nameEn} (${formatETB(p.priceHalala)}). It sells out fast — grab yours at Sabacos.`,
+      `A shopper previously viewed ${p.nameEn} and it is now back in stock at Sabacos. Friendly urgency — it sells out fast — invite them to grab it today.`,
+      `Good news: the ${p.nameEn} you viewed is back in stock. It moves fast, so grab yours while it lasts — pay half now, half on delivery.`,
     );
     for (const t of targets.slice(0, 60)) {
-      const text = t.language === "am" ? `📦 እንደገና ገብቷል: ${p.nameAm || p.nameEn} (${formatETB(p.priceHalala)}). በፍጥነት ያልቃል — ዛሬ ይዘዙ።` : en;
+      const name = t.language === "am" && p.nameAm ? p.nameAm : p.nameEn;
+      const head =
+        t.language === "am" ? `📦 እንደገና ገብቷል · ${name}` : `📦 Back in stock · ${name}`;
+      const body =
+        t.language === "am"
+          ? `የእርስዎ ተወዳጅ ${name} እንደገና ተመልቷል። በፍጥነት ያልቃል — አሁን ያስወስዱ።`
+          : en;
+      const text = promoText(t.language, head, priceLineFor(t.language, p.priceHalala), body);
       try {
-        await sendPromo(db, bot, env, t, text, `/product/${p.id}`, t.language === "am" ? "አሁን ይግዙ 🛒" : "Grab it 🛒", "restock", p.id, p.id);
+        await sendPromo(db, bot, env, t, text, `/product/${p.id}`, t.language === "am" ? "አሁን ይግዙ 🛒" : "Grab it 🛒", "restock", p.id, p.id, p.imageUrl);
         sent += 1;
       } catch (err) {
         console.error(`[agent:restock] send failed for ${t.telegramId}:`, err);
@@ -324,22 +394,49 @@ async function jobRestock(db: Db, bot: Bot, env: AppEnv, sinceIso: string | null
   return { sent, skipped };
 }
 
+interface CartProduct {
+  name_en: string;
+  name_am: string | null;
+  image_urls: string[] | null;
+}
+
+interface CartRow {
+  profile_id: string;
+  qty: number;
+  product_id: string;
+  // PostgREST may type the to-one FK join as either object or 1-length array.
+  products: CartProduct | CartProduct[] | null;
+}
+
+function cartProductOf(row: CartRow): CartProduct | null {
+  if (Array.isArray(row.products)) return row.products[0] ?? null;
+  return row.products;
+}
+
 async function jobAbandonedCart(db: Db, bot: Bot, env: AppEnv): Promise<JobResult> {
   const cutoff = new Date(Date.now() - 4 * 3_600_000).toISOString();
   const dayAgo = new Date(Date.now() - 24 * 3_600_000).toISOString();
   const { data: rows, error } = await db
     .from("cart_items")
-    .select("profile_id, qty, updated_at")
+    .select("profile_id, qty, updated_at, product_id, products(name_en, name_am, image_urls)")
     .lt("updated_at", cutoff)
     .limit(400);
   if (error) throw new Error(`abandoned_cart: ${error.message}`);
-  const byProfile = new Map<string, number>();
-  for (const r of ((rows ?? []) as Array<{ profile_id: string; qty: number }>)) {
-    byProfile.set(r.profile_id, (byProfile.get(r.profile_id) ?? 0) + (r.qty ?? 0));
+  const byProfile = new Map<string, { count: number; firstName: string | null; photo: string | null }>();
+  for (const r of ((rows ?? []) as CartRow[])) {
+    const cur = byProfile.get(r.profile_id) ?? { count: 0, firstName: null, photo: null };
+    cur.count += r.qty ?? 0;
+    // First item with a photo becomes the message thumbnail.
+    const prod = cartProductOf(r);
+    if (!cur.firstName && prod?.name_en) cur.firstName = prod.name_am || prod.name_en;
+    const imgs = prod?.image_urls;
+    if (!cur.photo && Array.isArray(imgs) && imgs[0]) cur.photo = imgs[0];
+    byProfile.set(r.profile_id, cur);
   }
   let sent = 0;
   let skipped = 0;
-  for (const [profileId, itemCount] of [...byProfile.entries()].slice(0, 50)) {
+  for (const [profileId, cart] of [...byProfile.entries()].slice(0, 50)) {
+    const itemCount = cart.count;
     // Ordered in the last 24h? Then the cart is stale, not abandoned.
     const { data: recent } = await db
       .from("orders")
@@ -373,15 +470,29 @@ async function jobAbandonedCart(db: Db, bot: Bot, env: AppEnv): Promise<JobResul
     }
     const en = await promoCopy(
       env,
-      `Remind a shopper they left ${itemCount} item(s) in their cart at a cosmetics shop. Mention they can pay half now, half on delivery. Warm, short, no guilt-tripping.`,
-      `🛒 Your cart misses you (${itemCount} item${itemCount === 1 ? "" : "s"} waiting). Checkout takes a minute — and you only pay half now at Sabacos.`,
+      `A cosmetics shopper left ${itemCount} item(s) in their cart at Sabacos. Warm reminder: checkout takes a minute, half now and half on delivery. No guilt-tripping.`,
+      `Still thinking it over? Your cart is saved and waiting — checkout takes a minute, and you only pay half now, half when it arrives.`,
     );
     const text =
       target.language === "am"
-        ? `🛒 ጋሪሽን ረስተዋል (${itemCount} ዕቃ ይጠብቃል)። መክፈል ግማሽ አሁን ብቻ — ሳባኮስ።`
-        : en;
+        ? promoText(
+            "am",
+            "🛒 ጋሪሽይጠብቃል",
+            cart.firstName
+              ? `${itemCount} ዕቃ · ${cart.firstName}`
+              : `${itemCount} ዕቃ በጋሪሽ`,
+            `ግዢዎ እየጠበቀነው። መክፈል ደቂቃዎች ብቻ ይወስዳል — ግማሽ አሁን ብቻ፣ ቀሪው ሲደርስ።`,
+          )
+        : promoText(
+            "en",
+            "🛒 Your cart is waiting",
+            cart.firstName
+              ? `${itemCount} item${itemCount === 1 ? "" : "s"} · ${cart.firstName}`
+              : `${itemCount} item${itemCount === 1 ? "" : "s"} in your cart`,
+            en,
+          );
     try {
-      await sendPromo(db, bot, env, target, text, "/cart", target.language === "am" ? "ጋሪን ክፈት 🛒" : "Open cart 🛒", "abandoned_cart", profileId);
+      await sendPromo(db, bot, env, target, text, "/cart", target.language === "am" ? "ጋሪን ክፈት 🛒" : "Open cart 🛒", "abandoned_cart", profileId, undefined, cart.photo);
       // 7-day per-user cooldown marker lives in the agent log itself.
       sent += 1;
     } catch (err) {
@@ -432,13 +543,18 @@ async function jobWinback(db: Db, bot: Bot, env: AppEnv): Promise<JobResult> {
     }
     const en = await promoCopy(
       env,
-      `Win back a cosmetics customer absent 30+ days. Mention new arrivals and the prize wheel (spins for referrals). Warm, no discounts promised.`,
-      `💛 We miss you at Sabacos! New arrivals landed, and your referrals can win you prize-wheel spins. Come take a look.`,
+      `Win back a cosmetics customer who has not ordered in 30+ days from Sabacos. Mention the fresh new arrivals and that referring friends earns prize-wheel spins. Warm and inviting, no discounts promised.`,
+      `It has been a while. Fresh arrivals just dropped at Sabacos, and every friend you refer earns prize-wheel spins. Come see what is new.`,
     );
     const text =
       target.language === "am"
-        ? `💛 ሳባኮስ ናፍቆሻል! አዳዲስ ምርቶች ገብተዋል — ሪፈራልሽ የማሽከርከር ዕድሎችን ያስገኛል።`
-        : en;
+        ? promoText(
+            "am",
+            "💛 ሳባኮስ ናፍቆሻል!",
+            "አዲስ ምርቶች ·የማሽከርከር ዕድል",
+            `በ30 ቀን በላይ አይተዉንም። አዲስ ምርቶች ገብተዋል — ሪፈራልሽም የማሽከርከር ዕድል ያስገኛል። ተመልሰው ይመልከቱ።`,
+          )
+        : promoText("en", "💛 We miss you at Sabacos!", "New arrivals · spins to win", en);
     try {
       await sendPromo(db, bot, env, target, text, "/shop", target.language === "am" ? "ሱቁን ክፈት ✨" : "Come back ✨", "winback", profileId);
       sent += 1;
@@ -488,13 +604,25 @@ async function jobReferralNudge(db: Db, bot: Bot, env: AppEnv): Promise<JobResul
     }
     const en = await promoCopy(
       env,
-      `Nudge a referrer: ${n} friend(s) joined via their link but haven't ordered yet. Tell them a reminder earns 10% commission per order. Short and motivating.`,
-      `📣 ${n} friend${n === 1 ? "" : "s"} joined with your link but ${n === 1 ? "hasn't" : "haven't"} ordered yet — send a reminder and earn 10% on every order!`,
+      `Nudge a referrer: ${n} friend(s) joined via their Sabacos link but have not ordered yet. A quick reminder can turn each into 10% commission for them. Motivating, not pushy.`,
+      `Your friends joined with your link but have not ordered yet. A quick reminder can turn each into 10% commission for you — check your referrals and nudge them.`,
     );
     const text =
       target.language === "am"
-        ? `📣 ${n} ጓደኛ በሊንክሽ ተቀላቅሏል ግን ገና አላዘዘም — አስታውሽ, በየትዕዛዙ 10% ታገኛለሽ!`
-        : en;
+        ? promoText(
+            "am",
+            "📣 ሪፈራል ማስታወሻ",
+            `${n} ጓደኛ${n === 1 ? "" : "ና"} ገና አልዘዙም`,
+            `በሊንክሽ ተቀላቅለው ግን አልዘዙም። አስታውሸው — በየትዕዛዙ 10% ታገኛለሽ።`,
+            { trust: false },
+          )
+        : promoText(
+            "en",
+            "📣 Referral reminder",
+            `${n} friend${n === 1 ? "" : "s"} pending an order`,
+            en,
+            { trust: false },
+          );
     try {
       await sendPromo(db, bot, env, target, text, "/referral", target.language === "am" ? "ሪፈራሎቼ 🎁" : "My referrals 🎁", "referral_nudge", referrerId);
       sent += 1;

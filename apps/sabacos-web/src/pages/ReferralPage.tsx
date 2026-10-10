@@ -452,7 +452,12 @@ function InviteCodeCard({ onLinked }: { onLinked: () => void }) {
           autoCorrect="off"
           style={{ flex: 1 }}
         />
-        <button className="btn btn-primary" disabled={busy || !code.trim()} onClick={apply}>
+        <button
+          className="btn btn-primary"
+          disabled={busy || !code.trim()}
+          onClick={apply}
+          style={{ flexShrink: 0 }}
+        >
           {t("inviteCodeApply")}
         </button>
       </div>
